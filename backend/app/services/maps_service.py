@@ -1,8 +1,9 @@
 import httpx
 import math
+import os
 from app.core.config import settings
 
-GOOGLE_MAPS_KEY = "AIzaSyBcwbVhe0iIpkjmPJS94kc6JhZP2v16TsY"  # o agrégala al .env
+GOOGLE_MAPS_KEY = settings.GOOGLE_MAPS_KEY  # o agrégala al .env
 
 async def get_distance_and_duration(
     origin_lat: float, origin_lng: float,

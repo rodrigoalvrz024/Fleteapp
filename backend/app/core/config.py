@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     TRANSBANK_API_KEY: str = ""
     TRANSBANK_ENVIRONMENT: str = "integration"
     FIREBASE_SERVER_KEY: str = ""
+    GOOGLE_MAPS_KEY: str = ""
 
     class Config:
         env_file = ".env"
