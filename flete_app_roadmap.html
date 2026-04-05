@@ -1,0 +1,371 @@
+
+<style>
+  :root { --phase-gap: 18px; }
+  .roadmap { padding: 1rem 0; font-size: 14px; }
+  .phase { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); margin-bottom: var(--phase-gap); overflow: hidden; }
+  .phase-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--color-background-secondary); cursor: pointer; user-select: none; }
+  .phase-badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .phase-title { font-weight: 500; font-size: 14px; color: var(--color-text-primary); flex: 1; }
+  .phase-toggle { font-size: 12px; color: var(--color-text-secondary); transition: transform 0.2s; }
+  .phase-toggle.open { transform: rotate(180deg); }
+  .phase-body { padding: 0 16px; max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.2s; }
+  .phase-body.open { max-height: 2000px; padding: 12px 16px 16px; }
+  .step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+  .step:last-child { margin-bottom: 0; }
+  .step-num { min-width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0; margin-top: 1px; }
+  .step-content { flex: 1; }
+  .step-title { font-weight: 500; color: var(--color-text-primary); margin-bottom: 3px; line-height: 1.4; }
+  .step-desc { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+  .step-where { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-top: 5px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); color: var(--color-text-secondary); font-family: var(--font-mono); }
+  .tag-blue { background: var(--color-background-info); color: var(--color-text-info); border: 0.5px solid var(--color-border-info); }
+  .tag-green { background: var(--color-background-success); color: var(--color-text-success); border: 0.5px solid var(--color-border-success); }
+  .tag-amber { background: var(--color-background-warning); color: var(--color-text-warning); border: 0.5px solid var(--color-border-warning); }
+  .tag-red { background: var(--color-background-danger); color: var(--color-text-danger); border: 0.5px solid var(--color-border-danger); }
+  .num-blue { background: var(--color-background-info); color: var(--color-text-info); }
+  .num-green { background: var(--color-background-success); color: var(--color-text-success); }
+  .num-amber { background: var(--color-background-warning); color: var(--color-text-warning); }
+  .num-red { background: var(--color-background-danger); color: var(--color-text-danger); }
+  .progress-bar { height: 4px; background: var(--color-border-tertiary); border-radius: 2px; margin: 0 16px 0; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 2px; }
+  .summary-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .summary-card { flex: 1; min-width: 100px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 10px 12px; text-align: center; }
+  .summary-num { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+  .summary-label { font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; }
+</style>
+<div class="roadmap">
+  <div class="summary-row">
+    <div class="summary-card"><div class="summary-num">5</div><div class="summary-label">Fases</div></div>
+    <div class="summary-card"><div class="summary-num">28</div><div class="summary-label">Pasos</div></div>
+    <div class="summary-card"><div class="summary-num">3</div><div class="summary-label">Stacks</div></div>
+    <div class="summary-card"><div class="summary-num">~3m</div><div class="summary-label">Estimado</div></div>
+  </div>
+
+  <!-- FASE 1 -->
+  <div class="phase">
+    <div class="phase-header" onclick="toggle(this)">
+      <span class="phase-badge tag-blue">Fase 1</span>
+      <span class="phase-title">Entorno y estructura base</span>
+      <span style="font-size:11px;color:var(--color-text-secondary);">~1-2 días</span>
+      <span class="phase-toggle">▼</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--color-text-info)"></div></div>
+    <div class="phase-body open">
+
+      <div class="step">
+        <div class="step-num num-blue">1</div>
+        <div class="step-content">
+          <div class="step-title">Instalar herramientas en tu PC</div>
+          <div class="step-desc">Python 3.11+, Flutter SDK, Node.js, PostgreSQL local, VS Code, Git, Docker (opcional)</div>
+          <span class="step-where">Tu computador — instalador oficial de cada tool</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-blue">2</div>
+        <div class="step-content">
+          <div class="step-title">Crear repositorio Git</div>
+          <div class="step-desc">Un repo con dos carpetas raíz: <code>/backend</code> y <code>/mobile</code>. Crea en GitHub o GitLab.</div>
+          <span class="step-where">GitHub.com → New repository</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-blue">3</div>
+        <div class="step-content">
+          <div class="step-title">Crear base de datos PostgreSQL local</div>
+          <div class="step-desc">Instala PostgreSQL, crea la BD <code>fleteapp_db</code> y usuario <code>fleteapp_user</code>.</div>
+          <span class="step-where">Terminal local → psql</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-blue">4</div>
+        <div class="step-content">
+          <div class="step-title">Crear proyecto FastAPI</div>
+          <div class="step-desc">Dentro de <code>/backend</code>: crea virtualenv, instala FastAPI, SQLAlchemy, Alembic, Pydantic, python-jose, passlib, httpx.</div>
+          <span class="step-where">/backend → terminal</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-blue">5</div>
+        <div class="step-content">
+          <div class="step-title">Crear proyecto Flutter</div>
+          <div class="step-desc">Dentro de <code>/mobile</code>: <code>flutter create flete_app</code>. Agrega dependencias: dio, provider o riverpod, google_maps_flutter, geolocator, firebase_messaging.</div>
+          <span class="step-where">/mobile → terminal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FASE 2 -->
+  <div class="phase">
+    <div class="phase-header" onclick="toggle(this)">
+      <span class="phase-badge tag-green">Fase 2</span>
+      <span class="phase-title">Backend — Modelos, Auth y CRUD base</span>
+      <span style="font-size:11px;color:var(--color-text-secondary);">~3-5 días</span>
+      <span class="phase-toggle">▼</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--color-text-success)"></div></div>
+    <div class="phase-body open">
+
+      <div class="step">
+        <div class="step-num num-green">6</div>
+        <div class="step-content">
+          <div class="step-title">Crear estructura de carpetas del backend</div>
+          <div class="step-desc"><code>app/models</code>, <code>app/schemas</code>, <code>app/routers</code>, <code>app/services</code>, <code>app/core</code>. Crear <code>main.py</code>, <code>database.py</code>, <code>.env</code>.</div>
+          <span class="step-where">/backend/app → VS Code</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">7</div>
+        <div class="step-content">
+          <div class="step-title">Definir modelos SQLAlchemy</div>
+          <div class="step-desc">Tablas: <code>users</code>, <code>drivers</code>, <code>vehicles</code>, <code>freight_requests</code>, <code>trip_status_history</code>, <code>payments</code>, <code>ratings</code>, <code>notifications</code>.</div>
+          <span class="step-where">/backend/app/models/</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">8</div>
+        <div class="step-content">
+          <div class="step-title">Configurar Alembic y migrar BD</div>
+          <div class="step-desc">Inicializar Alembic, crear migración inicial, correr <code>alembic upgrade head</code>.</div>
+          <span class="step-where">/backend → terminal</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">9</div>
+        <div class="step-content">
+          <div class="step-title">Implementar autenticación JWT</div>
+          <div class="step-desc">Hash de contraseñas con bcrypt, generación y validación de tokens, dependencia <code>get_current_user</code>, roles (cliente, conductor, admin).</div>
+          <span class="step-where">/backend/app/core/security.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">10</div>
+        <div class="step-content">
+          <div class="step-title">Crear endpoints de auth y usuarios</div>
+          <div class="step-desc">POST /auth/register, POST /auth/login, GET /users/me, PUT /users/me, GET /users/{id} (admin).</div>
+          <span class="step-where">/backend/app/routers/auth.py, users.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">11</div>
+        <div class="step-content">
+          <div class="step-title">Crear endpoints de conductores</div>
+          <div class="step-desc">POST /drivers/register, GET /drivers/me, PUT /drivers/me, POST /drivers/vehicle, GET /drivers/available.</div>
+          <span class="step-where">/backend/app/routers/drivers.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">12</div>
+        <div class="step-content">
+          <div class="step-title">Crear endpoints de fletes</div>
+          <div class="step-desc">POST /freights, GET /freights, GET /freights/{id}, PUT /freights/{id}/accept, PUT /freights/{id}/status, GET /freights/{id}/history.</div>
+          <span class="step-where">/backend/app/routers/freights.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">13</div>
+        <div class="step-content">
+          <div class="step-title">Lógica de negocio: tarifas y estados</div>
+          <div class="step-desc">Servicio de estimación de precio (distancia × tarifa base + peso). Máquina de estados: PENDING → ACCEPTED → IN_PROGRESS → COMPLETED / CANCELLED.</div>
+          <span class="step-where">/backend/app/services/freight_service.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">14</div>
+        <div class="step-content">
+          <div class="step-title">Endpoints de pagos y calificaciones</div>
+          <div class="step-desc">POST /payments/initiate, POST /payments/callback, GET /payments/{id}, POST /ratings, GET /ratings/driver/{id}.</div>
+          <span class="step-where">/backend/app/routers/payments.py, ratings.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">15</div>
+        <div class="step-content">
+          <div class="step-title">Probar con Postman o Swagger</div>
+          <div class="step-desc">FastAPI genera docs en /docs automáticamente. Prueba todos los endpoints antes de pasar al frontend.</div>
+          <span class="step-where">Navegador → http://localhost:8000/docs</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FASE 3 -->
+  <div class="phase">
+    <div class="phase-header" onclick="toggle(this)">
+      <span class="phase-badge tag-amber">Fase 3</span>
+      <span class="phase-title">App Flutter — Pantallas y navegación</span>
+      <span style="font-size:11px;color:var(--color-text-secondary);">~5-8 días</span>
+      <span class="phase-toggle">▼</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--color-text-warning)"></div></div>
+    <div class="phase-body open">
+
+      <div class="step">
+        <div class="step-num num-amber">16</div>
+        <div class="step-content">
+          <div class="step-title">Estructura de carpetas Flutter</div>
+          <div class="step-desc"><code>lib/screens</code>, <code>lib/widgets</code>, <code>lib/services</code>, <code>lib/models</code>, <code>lib/providers</code>. Configurar Riverpod o Provider.</div>
+          <span class="step-where">/mobile/flete_app/lib/</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-amber">17</div>
+        <div class="step-content">
+          <div class="step-title">Servicio HTTP y manejo de tokens</div>
+          <div class="step-desc">Clase <code>ApiService</code> con Dio, interceptor para adjuntar JWT, manejo de errores 401/403, guardar token en secure storage.</div>
+          <span class="step-where">/lib/services/api_service.dart</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-amber">18</div>
+        <div class="step-content">
+          <div class="step-title">Pantallas de auth: Login y Registro</div>
+          <div class="step-desc">Formularios validados, selector de rol (cliente / conductor), llamada a API, redirección según rol.</div>
+          <span class="step-where">/lib/screens/auth/</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-amber">19</div>
+        <div class="step-content">
+          <div class="step-title">Pantallas del cliente</div>
+          <div class="step-desc">HomeCliente, CrearFlete (con mapa), ListaFletes, DetalleFlete, Historial, Perfil, Calificación.</div>
+          <span class="step-where">/lib/screens/client/</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-amber">20</div>
+        <div class="step-content">
+          <div class="step-title">Pantallas del conductor</div>
+          <div class="step-desc">HomeConductor, FleteDisponible, AceptarFlete, ActualizarEstado, HistorialViajes, Perfil, DatosVehiculo.</div>
+          <span class="step-where">/lib/screens/driver/</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-amber">21</div>
+        <div class="step-content">
+          <div class="step-title">Integrar Google Maps</div>
+          <div class="step-desc">Obtener API key en Google Cloud Console, configurar en AndroidManifest y Info.plist, widget de mapa, selección de origen/destino, cálculo de ruta con Directions API.</div>
+          <span class="step-where">console.cloud.google.com + AndroidManifest.xml</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-amber">22</div>
+        <div class="step-content">
+          <div class="step-title">Configurar Firebase Cloud Messaging</div>
+          <div class="step-desc">Crear proyecto en Firebase Console, descargar <code>google-services.json</code> (Android) y <code>GoogleService-Info.plist</code> (iOS), integrar <code>firebase_messaging</code>.</div>
+          <span class="step-where">console.firebase.google.com + /android/app/</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FASE 4 -->
+  <div class="phase">
+    <div class="phase-header" onclick="toggle(this)">
+      <span class="phase-badge tag-red">Fase 4</span>
+      <span class="phase-title">Pagos, Admin y Seguridad</span>
+      <span style="font-size:11px;color:var(--color-text-secondary);">~3-4 días</span>
+      <span class="phase-toggle">▼</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--color-text-danger)"></div></div>
+    <div class="phase-body open">
+
+      <div class="step">
+        <div class="step-num num-red">23</div>
+        <div class="step-content">
+          <div class="step-title">Integrar Webpay (Transbank) en sandbox</div>
+          <div class="step-desc">Instalar SDK <code>transbank-sdk</code>, configurar credenciales sandbox, endpoint de inicio de pago y callback, manejar respuesta de Transbank.</div>
+          <span class="step-where">/backend/app/services/payment_service.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-red">24</div>
+        <div class="step-content">
+          <div class="step-title">Panel admin — endpoints o web simple</div>
+          <div class="step-desc">GET /admin/users, GET /admin/drivers, PUT /admin/users/{id}/suspend, GET /admin/trips, GET /admin/payments, GET /admin/metrics. Protegidos por rol admin.</div>
+          <span class="step-where">/backend/app/routers/admin.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-red">25</div>
+        <div class="step-content">
+          <div class="step-title">Validación de inputs y seguridad</div>
+          <div class="step-desc">Validadores Pydantic en todos los schemas, rate limiting con <code>slowapi</code>, CORS configurado, variables de entorno con <code>python-decouple</code>.</div>
+          <span class="step-where">/backend/app/core/</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FASE 5 -->
+  <div class="phase">
+    <div class="phase-header" onclick="toggle(this)">
+      <span class="phase-badge tag-green">Fase 5</span>
+      <span class="phase-title">Despliegue y producción</span>
+      <span style="font-size:11px;color:var(--color-text-secondary);">~2-3 días</span>
+      <span class="phase-toggle">▼</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--color-text-success)"></div></div>
+    <div class="phase-body open">
+
+      <div class="step">
+        <div class="step-num num-green">26</div>
+        <div class="step-content">
+          <div class="step-title">Desplegar backend en Railway o Render</div>
+          <div class="step-desc">Crear cuenta en Railway.app o Render.com, conectar repo GitHub, agregar PostgreSQL como servicio, configurar variables de entorno, deploy automático.</div>
+          <span class="step-where">railway.app o render.com</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">27</div>
+        <div class="step-content">
+          <div class="step-title">Subir imágenes/documentos a Cloudinary o S3</div>
+          <div class="step-desc">Cuenta gratuita en Cloudinary para fotos de perfil, vehículos y documentos. Integrar en el backend con <code>cloudinary</code> Python SDK.</div>
+          <span class="step-where">cloudinary.com + /backend/app/services/storage_service.py</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num num-green">28</div>
+        <div class="step-content">
+          <div class="step-title">Build y distribución de app Flutter</div>
+          <div class="step-desc">Actualizar URL base de API al backend en producción. <code>flutter build apk</code> para Android. Para iOS necesitas Mac + cuenta Apple Developer ($99/año). Distribuir con Firebase App Distribution para pruebas.</div>
+          <span class="step-where">/mobile → terminal + Firebase Console</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;padding:12px 14px;border-radius:var(--border-radius-md);background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);font-size:12px;color:var(--color-text-secondary);line-height:1.6;">
+    Haz clic en cada fase para expandir o colapsar. Toca cualquier paso para pedir más detalles.
+  </div>
+</div>
+<script>
+function toggle(header) {
+  const body = header.nextElementSibling.nextElementSibling;
+  const arrow = header.querySelector('.phase-toggle');
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+</script>
