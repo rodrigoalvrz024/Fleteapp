@@ -1,7 +1,14 @@
 class ApiConstants {
-  static const String baseUrl = 'http://10.0.2.2:8000'; // Android emulator
-  // Para dispositivo real: usa tu IP local, ej: 'http://192.168.1.100:8000'
-  // Para producción: 'https://tu-dominio.com'
+  // Elige UNA opción según cómo vayas a probar:
+
+  // Opción A — Emulador Android
+  //static const String baseUrl = 'http://10.0.2.2:8000';
+
+  // Opción B — Navegador Chrome (más fácil para probar rápido)
+  static const String baseUrl = 'http://localhost:8000';
+
+  // Opción C — Dispositivo físico conectado por USB
+  // static const String baseUrl = 'http://192.168.X.X:8000';
 
   static const String register = '/auth/register';
   static const String login = '/auth/login';
