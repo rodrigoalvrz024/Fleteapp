@@ -15,8 +15,15 @@ import asyncio
 router = APIRouter(prefix="/freights", tags=["Fletes"])
 
 @router.post("", response_model=FreightResponse, status_code=201)
-def create_freight(data: FreightCreate, db: Session = Depends(get_db), current_user: User = Depends(require_role("client"))):
-    dist = calculate_distance_km(data.origin_lat, data.origin_lng, data.destination_lat, data.destination_lng)
+async def create_freight(
+    data: FreightCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("client"))
+):
+    dist = calculate_distance_km(
+        data.origin_lat, data.origin_lng,
+        data.destination_lat, data.destination_lng
+    )
     price = estimate_price(dist, data.cargo_weight_kg, data.requires_helpers)
 
     freight = FreightRequest(
@@ -29,9 +36,23 @@ def create_freight(data: FreightCreate, db: Session = Depends(get_db), current_u
     db.commit()
     db.refresh(freight)
 
-    history = TripStatusHistory(freight_id=freight.id, status=FreightStatus.pending, note="Solicitud creada")
+    history = TripStatusHistory(
+        freight_id=freight.id,
+        status=FreightStatus.pending,
+        note="Solicitud creada"
+    )
     db.add(history)
     db.commit()
+
+    # Notificar a conductores disponibles
+    from app.services.notification_service import send_notification_to_drivers
+    await send_notification_to_drivers(
+        db=db,
+        title="Nuevo flete disponible",
+        body=f"Desde {data.origin_address[:30]}... → {data.destination_address[:30]}...",
+        data={"freight_id": str(freight.id), "type": "new_freight"}
+    )
+
     db.refresh(freight)
     return freight
 
