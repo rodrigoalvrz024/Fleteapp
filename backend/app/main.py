@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.routers import auth, users, drivers, freights, payments, ratings, admin
 
-# Crear tablas
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -14,7 +13,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8000",
+        "http://10.0.2.2:8000",
+        "*",  # Cambiar por tu dominio real después
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,3 +34,7 @@ app.include_router(admin.router)
 @app.get("/")
 def root():
     return {"status": "ok", "message": "FleteApp API funcionando"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
