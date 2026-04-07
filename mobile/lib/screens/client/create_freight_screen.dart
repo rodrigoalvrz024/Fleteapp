@@ -28,7 +28,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen> {
   LatLng? _destLatLng;
   bool _selectingOrigin = true; // true=origen, false=destino
 
-  Set<Marker> _markers = {};
+  final Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
 
   int _helpers = 0;

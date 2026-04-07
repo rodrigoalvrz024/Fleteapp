@@ -88,7 +88,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 decoration: BoxDecoration(
-                    color: f.statusColor.withOpacity(0.12),
+                    color: f.statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(30)),
                 child: Text(f.statusLabel,
                     style: TextStyle(
