@@ -29,24 +29,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => const Scaffold(
         backgroundColor: AppTheme.primary,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.local_shipping, size: 80, color: Colors.white),
-              const SizedBox(height: 16),
-              const Text('FleteApp',
+              Icon(Icons.local_shipping, size: 80, color: Colors.white),
+              SizedBox(height: 16),
+              Text('FleteApp',
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 32,
                       fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text('Fletes en Chile',
+              SizedBox(height: 8),
+              Text('Fletes en Chile',
                   style: TextStyle(color: Colors.white70, fontSize: 16)),
-              const SizedBox(height: 48),
-              const CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 48),
+              CircularProgressIndicator(color: Colors.white),
             ],
           ),
         ),

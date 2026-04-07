@@ -33,4 +33,3 @@ tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
 
-apply(plugin = "com.google.gms.google-services")

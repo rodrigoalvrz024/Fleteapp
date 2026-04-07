@@ -81,22 +81,22 @@ class ClientHomeScreen extends ConsumerWidget {
             const Text('¿Cómo funciona?',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 14),
-            _StepCard(
+            const _StepCard(
                 number: '1',
                 title: 'Solicita tu flete',
                 desc: 'Indica origen, destino y tipo de carga'),
             const SizedBox(height: 10),
-            _StepCard(
+            const _StepCard(
                 number: '2',
                 title: 'Un conductor acepta',
                 desc: 'Recibirás confirmación inmediata'),
             const SizedBox(height: 10),
-            _StepCard(
+            const _StepCard(
                 number: '3',
                 title: 'Sigue tu envío',
                 desc: 'Monitorea el estado en tiempo real'),
             const SizedBox(height: 10),
-            _StepCard(
+            const _StepCard(
                 number: '4',
                 title: 'Paga y califica',
                 desc: 'Pago seguro con Webpay o efectivo'),

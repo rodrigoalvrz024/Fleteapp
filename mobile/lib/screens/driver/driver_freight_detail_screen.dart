@@ -45,15 +45,17 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     try {
       await _service.acceptFreight(widget.freightId);
       await _load();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Flete aceptado'),
             backgroundColor: AppTheme.success));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Error al aceptar'),
             backgroundColor: AppTheme.error));
+      }
     } finally {
       setState(() {
         _actionLoading = false;
@@ -77,11 +79,13 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading)
+    if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_freight == null)
+    }
+    if (_freight == null) {
       return Scaffold(
           appBar: AppBar(), body: const Center(child: Text('No encontrado')));
+    }
 
     final f = _freight!;
     final fmt = NumberFormat('#,##0', 'es_CL');
@@ -98,7 +102,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 decoration: BoxDecoration(
-                    color: f.statusColor.withOpacity(0.12),
+                    color: f.statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(30)),
                 child: Text(f.statusLabel,
                     style: TextStyle(

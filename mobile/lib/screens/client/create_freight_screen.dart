@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:dio/dio.dart';
 import '../../services/freight_service.dart';
 import '../../services/api_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/constants/api_constants.dart';
 import 'package:intl/intl.dart';
 
 class CreateFreightScreen extends StatefulWidget {
@@ -469,7 +467,7 @@ class _MapToggle extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: active ? color : Colors.white.withOpacity(0.9),
+            color: active ? color : Colors.white.withValues(alpha: 0.9),
             borderRadius: BorderRadius.circular(8),
             boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
           ),
@@ -498,7 +496,7 @@ class _CoordField extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: set ? color.withOpacity(0.07) : const Color(0xFFF5F5F5),
+          color: set ? color.withValues(alpha: 0.07) : const Color(0xFFF5F5F5),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: set ? color : const Color(0xFFDDDDDD)),
         ),

@@ -83,8 +83,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   String _parseError(dynamic e) {
-    if (e.toString().contains('400'))
+    if (e.toString().contains('400')) {
       return 'El correo o teléfono ya está registrado';
+    }
     if (e.toString().contains('401')) return 'Credenciales incorrectas';
     if (e.toString().contains('403')) return 'Cuenta suspendida';
     return 'Error de conexión. Intenta de nuevo.';

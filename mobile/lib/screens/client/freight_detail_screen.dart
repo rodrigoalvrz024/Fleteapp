@@ -64,12 +64,14 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading)
+    if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_freight == null)
+    }
+    if (_freight == null) {
       return Scaffold(
           appBar: AppBar(),
           body: const Center(child: Text('Flete no encontrado')));
+    }
     final f = _freight!;
     final fmt = NumberFormat('#,##0', 'es_CL');
 
