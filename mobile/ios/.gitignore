@@ -32,3 +32,11 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# iOS - contiene API keys
+mobile/ios/Runner/AppDelegate.swift
+mobile/ios/Runner/GoogleService-Info.plist
+mobile/ios/Flutter/flutter_export_environment.sh
+
+mobile/ios/Flutter/Debug.xcconfig
+mobile/ios/Flutter/Release.xcconfig
