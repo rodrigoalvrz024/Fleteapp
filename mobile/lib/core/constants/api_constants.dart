@@ -1,14 +1,10 @@
 class ApiConstants {
-  // Elige UNA opción según cómo vayas a probar:
+  // ✅ URL de producción Railway
+  static const String baseUrl = 'https://fleteapp-production.up.railway.app';
 
-  // Opción A — Emulador Android
-  //static const String baseUrl = 'http://10.0.2.2:8000';
-
-  // Opción B — Navegador Chrome (más fácil para probar rápido)
-  static const String baseUrl = 'http://localhost:8000';
-
-  // Opción C — Dispositivo físico conectado por USB
-  // static const String baseUrl = 'http://192.168.X.X:8000';
+  // Locales comentadas
+  // static const String baseUrl = 'http://10.0.2.2:8000';
+  // static const String baseUrl = 'http://localhost:8000';
 
   static const String register = '/auth/register';
   static const String login = '/auth/login';
