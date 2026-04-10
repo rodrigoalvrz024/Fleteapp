@@ -9,3 +9,6 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+firebase-credentials.json
+
+firebase-credentials.json

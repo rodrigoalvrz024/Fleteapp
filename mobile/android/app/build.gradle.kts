@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.fleteapp.flete_app"
+    namespace = "com.fleteapp.fleteapp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -22,7 +22,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.fleteapp.flete_app"
+        applicationId = "com.fleteapp.fleteapp"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

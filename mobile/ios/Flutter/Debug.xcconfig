@@ -1,2 +1,1 @@
-#include "Generated.xcconfig"
-MAPS_API_KEY=AIzaSyDuzECS-dDE1eIiKYLvTYDnxXOypvfe12o
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
