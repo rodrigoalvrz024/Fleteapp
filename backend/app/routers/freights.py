@@ -20,37 +20,59 @@ async def create_freight(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client"))
 ):
-    dist = calculate_distance_km(
+    dist   = calculate_distance_km(
         data.origin_lat, data.origin_lng,
         data.destination_lat, data.destination_lng
     )
-    price = estimate_price(dist, data.cargo_weight_kg, data.requires_helpers)
+    prices = estimate_price(
+        distance_km  = dist,
+        weight_kg    = data.cargo_weight_kg,
+        helpers      = data.requires_helpers,
+        is_urgent    = data.is_urgent,
+        scheduled_at = data.scheduled_at,
+    )
 
     freight = FreightRequest(
-        client_id=current_user.id,
-        distance_km=round(dist, 2),
-        estimated_price=price,
-        **data.model_dump()
+        client_id        = current_user.id,
+        distance_km      = round(dist, 2),
+        is_urgent        = data.is_urgent,
+        mode             = prices["mode"],
+        base_price       = prices["base_price"],
+        client_pays      = prices["client_pays"],
+        driver_receives  = prices["driver_receives"],
+        platform_fee     = prices["platform_fee"],
+        helpers_cost     = prices["helpers_cost"],
+        estimated_price  = prices["client_pays"],  # compatibilidad
+        origin_address      = data.origin_address,
+        origin_lat          = data.origin_lat,
+        origin_lng          = data.origin_lng,
+        destination_address = data.destination_address,
+        destination_lat     = data.destination_lat,
+        destination_lng     = data.destination_lng,
+        cargo_description   = data.cargo_description,
+        cargo_weight_kg     = data.cargo_weight_kg,
+        cargo_volume_m3     = data.cargo_volume_m3,
+        requires_helpers    = data.requires_helpers,
+        scheduled_at        = data.scheduled_at,
     )
     db.add(freight)
     db.commit()
     db.refresh(freight)
 
     history = TripStatusHistory(
-        freight_id=freight.id,
-        status=FreightStatus.pending,
-        note="Solicitud creada"
+        freight_id = freight.id,
+        status     = FreightStatus.pending,
+        note       = f"Solicitud creada - Modo: {prices['mode']}"
     )
     db.add(history)
     db.commit()
 
-    # Notificar a conductores disponibles
     from app.services.notification_service import send_notification_to_drivers
     await send_notification_to_drivers(
-        db=db,
-        title="Nuevo flete disponible",
-        body=f"Desde {data.origin_address[:30]}... → {data.destination_address[:30]}...",
-        data={"freight_id": str(freight.id), "type": "new_freight"}
+        db    = db,
+        title = "🚛 Nuevo flete disponible",
+        body  = f"{'⚡ URGENTE' if data.is_urgent else '📅 Programado'} - ${prices['client_pays']:,.0f} CLP",
+        data  = {"freight_id": str(freight.id), "type": "new_freight", "mode": prices["mode"]}
     )
 
     db.refresh(freight)
@@ -128,21 +150,40 @@ from app.services.freight_service import estimate_price
 
 @router.post("/estimate")
 async def estimate_freight(
-    origin_lat: float,
-    origin_lng: float,
-    destination_lat: float,
-    destination_lng: float,
-    cargo_weight_kg: float,
+    origin_lat:       float,
+    origin_lng:       float,
+    destination_lat:  float,
+    destination_lng:  float,
+    cargo_weight_kg:  float,
     requires_helpers: int = 0,
-    current_user=Depends(get_current_user)
+    is_urgent:        bool = False,
+    scheduled_at:     Optional[datetime] = None,
+    current_user = Depends(get_current_user)
 ):
-    """Estima precio antes de crear el flete."""
-    data = await get_distance_and_duration(origin_lat, origin_lng, destination_lat, destination_lng)
-    price = estimate_price(data["distance_km"], cargo_weight_kg, requires_helpers)
+    from app.services.maps_service import get_distance_and_duration
+    from datetime import datetime as dt
+
+    map_data = await get_distance_and_duration(
+        origin_lat, origin_lng, destination_lat, destination_lng
+    )
+    prices = estimate_price(
+        distance_km  = map_data["distance_km"],
+        weight_kg    = cargo_weight_kg,
+        helpers      = requires_helpers,
+        is_urgent    = is_urgent,
+        scheduled_at = scheduled_at or dt.utcnow(),
+    )
+
     return {
-        "distance_km": round(data["distance_km"], 2),
-        "duration_minutes": data["duration_minutes"],
-        "distance_text": data.get("distance_text"),
-        "duration_text": data.get("duration_text"),
-        "estimated_price_clp": price,
+        "distance_km":      round(map_data["distance_km"], 2),
+        "duration_minutes": map_data["duration_minutes"],
+        "distance_text":    map_data.get("distance_text"),
+        "duration_text":    map_data.get("duration_text"),
+        "mode":             prices["mode"],
+        "base_price":       prices["base_price"],
+        "client_pays":      prices["client_pays"],
+        "driver_receives":  prices["driver_receives"],
+        "platform_fee":     prices["platform_fee"],
+        "helpers_cost":     prices["helpers_cost"],
+        "minimum_applied":  prices["minimum_applied"],
     }

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -32,6 +32,14 @@ class FreightRequest(Base):
     requires_helpers = Column(Integer, default=0)
 
     estimated_price = Column(Float, nullable=True)
+        # Después de estimated_price:
+    is_urgent        = Column(Boolean, default=False)
+    base_price       = Column(Float, nullable=True)
+    client_pays      = Column(Float, nullable=True)   # estimated_price va aquí
+    driver_receives  = Column(Float, nullable=True)
+    platform_fee     = Column(Float, nullable=True)
+    helpers_cost     = Column(Float, nullable=True)
+    mode             = Column(String, default="scheduled")  # scheduled / urgent
     final_price = Column(Float, nullable=True)
     status = Column(Enum(FreightStatus), default=FreightStatus.pending)
 
