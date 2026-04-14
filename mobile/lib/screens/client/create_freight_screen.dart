@@ -24,8 +24,8 @@ class _CreateFreightScreenState extends State<CreateFreightScreen> {
   final _weightCtrl = TextEditingController();
 
   GoogleMapController? _mapController;
-  LatLng? _originLatLng;
-  LatLng? _destLatLng;
+  LatLng? _originLatLng = const LatLng(-33.4489, -70.6693);
+  LatLng? _destLatLng   = const LatLng(-33.4700, -70.6500);
   bool _selectingOrigin = true; // true=origen, false=destino
 
   final Set<Marker> _markers = {};
