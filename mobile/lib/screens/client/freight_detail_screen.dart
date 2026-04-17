@@ -137,7 +137,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                   color: AppTheme.accent,
                   label: 'Peso',
                   value: '${f.cargoWeightKg} kg'),
-              if (f.requiresHelpers > 0) ...[
+              if ((f.requiresHelpers ?? 0) > 0) ...[
                 const SizedBox(height: 8),
                 _InfoRow(
                     icon: Icons.people_outline,
