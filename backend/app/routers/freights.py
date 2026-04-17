@@ -11,6 +11,8 @@ from app.core.security import get_current_user, require_role
 from app.services.freight_service import calculate_distance_km, estimate_price, can_transition
 from app.services.notification_service import send_push_notification
 import asyncio
+from typing import Optional, List
+from datetime import datetime
 
 router = APIRouter(prefix="/freights", tags=["Fletes"])
 
