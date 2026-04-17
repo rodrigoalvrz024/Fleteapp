@@ -5,30 +5,35 @@ import '../core/constants/api_constants.dart';
 class FreightService {
   final _api = ApiService();
 
-  Future<FreightModel> createFreight({
-    required String originAddress,
-    required double originLat,
-    required double originLng,
-    required String destinationAddress,
-    required double destinationLat,
-    required double destinationLng,
-    required String cargoDescription,
-    required double cargoWeightKg,
-    int requiresHelpers = 0,
-  }) async {
-    final res = await _api.post(ApiConstants.freights, {
-      'origin_address': originAddress,
-      'origin_lat': originLat,
-      'origin_lng': originLng,
-      'destination_address': destinationAddress,
-      'destination_lat': destinationLat,
-      'destination_lng': destinationLng,
-      'cargo_description': cargoDescription,
-      'cargo_weight_kg': cargoWeightKg,
-      'requires_helpers': requiresHelpers,
-    });
-    return FreightModel.fromJson(res.data);
-  }
+Future<FreightModel> createFreight({
+  required String originAddress,
+  required double originLat,
+  required double originLng,
+  required String destinationAddress,
+  required double destinationLat,
+  required double destinationLng,
+  required String cargoDescription,
+  required double cargoWeightKg,
+  int requiresHelpers = 0,
+  bool isUrgent = false,
+  DateTime? scheduledAt,
+}) async {
+  final res = await _api.post(ApiConstants.freights, {
+    'origin_address':      originAddress,
+    'origin_lat':          originLat,
+    'origin_lng':          originLng,
+    'destination_address': destinationAddress,
+    'destination_lat':     destinationLat,
+    'destination_lng':     destinationLng,
+    'cargo_description':   cargoDescription,
+    'cargo_weight_kg':     cargoWeightKg,
+    'requires_helpers':    requiresHelpers,
+    'is_urgent':           isUrgent,
+    if (scheduledAt != null)
+      'scheduled_at': scheduledAt.toIso8601String(),
+  });
+  return FreightModel.fromJson(res.data);
+}
 
   Future<List<FreightModel>> listFreights({String? status}) async {
     final res = await _api.get(ApiConstants.freights,
