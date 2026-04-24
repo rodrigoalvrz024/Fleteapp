@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FleteApp Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,sans-serif}
+body{background:#F8FAFC;color:#0F172A;min-height:100vh}
+.sidebar{position:fixed;top:0;left:0;width:220px;height:100vh;background:#fff;border-right:1px solid #E2E8F0;padding:20px 0;display:flex;flex-direction:column;gap:4px}
+.logo{padding:0 20px 20px;font-size:15px;font-weight:600;color:#0F172A;border-bottom:1px solid #E2E8F0;margin-bottom:8px}
+.nav-item{padding:10px 20px;font-size:14px;color:#94A3B8;cursor:pointer;border-radius:0;display:flex;align-items:center;gap:10px}
+.nav-item.active,.nav-item:hover{color:#0F172A;background:#F1F5F9}
+.main{margin-left:220px;padding:32px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.title{font-size:20px;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px}
+.stat-val{font-size:24px;font-weight:700;margin-bottom:2px}
+.stat-lbl{font-size:12px;color:#94A3B8}
+.card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden}
+.card-header{padding:16px 20px;border-bottom:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:center}
+.card-title{font-size:14px;font-weight:600}
+.filters{display:flex;gap:8px}
+.filter-btn{padding:6px 14px;border-radius:20px;border:1px solid #E2E8F0;background:#fff;font-size:12px;cursor:pointer;color:#94A3B8}
+.filter-btn.active{background:#3B82F6;color:#fff;border-color:#3B82F6}
+table{width:100%;border-collapse:collapse}
+th{padding:12px 16px;text-align:left;font-size:11px;font-weight:600;color:#94A3B8;letter-spacing:.5px;border-bottom:1px solid #E2E8F0;background:#F8FAFC}
+td{padding:14px 16px;font-size:13px;border-bottom:1px solid #F1F5F9;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#F8FAFC}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.badge.pending{background:#FFF7ED;color:#C2410C}
+.badge.review{background:#EFF6FF;color:#1D4ED8}
+.badge.approved{background:#F0FDF4;color:#15803D}
+.badge.rejected{background:#FFF1F2;color:#BE123C}
+.btn{padding:6px 14px;border-radius:8px;border:none;font-size:12px;font-weight:500;cursor:pointer}
+.btn-approve{background:#10B981;color:#fff}
+.btn-reject{background:#EF4444;color:#fff}
+.btn-view{background:#F1F5F9;color:#0F172A}
+.btn:hover{opacity:.85}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:100;display:none}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:24px;width:520px;max-height:80vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:16px}
+.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.doc-box{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px;text-align:center}
+.doc-box img{width:100%;height:80px;object-fit:cover;border-radius:6px;background:#E2E8F0}
+.doc-label{font-size:11px;color:#94A3B8;margin-top:6px}
+.vehicle-row{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px}
+.reject-textarea{width:100%;border:1px solid #E2E8F0;border-radius:8px;padding:10px;font-size:13px;resize:vertical;min-height:80px;font-family:inherit;margin-top:8px}
+.modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F8FAFC}
+.login-box{background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:32px;width:360px}
+.login-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.login-sub{font-size:13px;color:#94A3B8;margin-bottom:24px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;font-weight:600;color:#94A3B8;margin-bottom:4px;letter-spacing:.4px}
+.field input{width:100%;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px;font-size:14px;outline:none}
+.field input:focus{border-color:#3B82F6}
+.btn-full{width:100%;padding:12px;border-radius:10px;border:none;background:#3B82F6;color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.avatar{width:36px;height:36px;border-radius:50%;background:#DBEAFE;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#1D4ED8;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-page" class="login-bg">
+  <div class="login-box">
+    <div class="login-title">FleteApp Admin</div>
+    <div class="login-sub">Acceso solo para administradores</div>
+    <div class="field">
+      <label>CORREO</label>
+      <input id="email" type="email" placeholder="admin@fleteapp.cl" value="admin@fleteapp.cl">
+    </div>
+    <div class="field">
+      <label>CONTRASEÑA</label>
+      <input id="pass" type="password" placeholder="••••••••" value="admin123">
+    </div>
+    <div id="login-err" style="color:#EF4444;font-size:12px;margin-bottom:10px;display:none"></div>
+    <button class="btn-full" onclick="doLogin()">Iniciar sesión</button>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard" style="display:none">
+  <div class="sidebar">
+    <div class="logo">🚛 FleteApp Admin</div>
+    <div class="nav-item active">Conductores</div>
+    <div class="nav-item">Fletes</div>
+    <div class="nav-item">Usuarios</div>
+    <div style="flex:1"></div>
+    <div class="nav-item" onclick="doLogout()" style="color:#EF4444">Cerrar sesión</div>
+  </div>
+
+  <div class="main">
+    <div class="header">
+      <div class="title">Conductores</div>
+      <div style="font-size:13px;color:#94A3B8">Panel de administración</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-val" id="s-total">0</div>
+        <div class="stat-lbl">Total conductores</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="s-pending" style="color:#C2410C">0</div>
+        <div class="stat-lbl">Pendientes</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="s-approved" style="color:#15803D">0</div>
+        <div class="stat-lbl">Aprobados</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="s-rejected" style="color:#BE123C">0</div>
+        <div class="stat-lbl">Rechazados</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Lista de conductores</div>
+        <div class="filters">
+          <button class="filter-btn active" onclick="setFilter('all',this)">Todos</button>
+          <button class="filter-btn" onclick="setFilter('pending',this)">Pendientes</button>
+          <button class="filter-btn" onclick="setFilter('under_review',this)">En revisión</button>
+          <button class="filter-btn" onclick="setFilter('approved',this)">Aprobados</button>
+          <button class="filter-btn" onclick="setFilter('rejected',this)">Rechazados</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Conductor</th>
+            <th>Estado</th>
+            <th>Registro</th>
+            <th>Vehículos</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="driver-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal detalle -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const BASE = 'https://fleteapp-production.up.railway.app';
+let token = '';
+let drivers = [];
+let currentFilter = 'all';
+let selectedDriver = null;
+
+async function doLogin() {
+  const email = document.getElementById('email').value;
+  const pass  = document.getElementById('pass').value;
+  try {
+    const res = await fetch(`${BASE}/auth/login`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, password: pass})
+    });
+    if (!res.ok) throw new Error('Credenciales incorrectas');
+    const data = await res.json();
+    if (data.user?.role !== 'admin' && data.user?.role !== 'super_admin') {
+      throw new Error('No tienes acceso de administrador');
+    }
+    token = data.access_token;
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    loadDrivers();
+  } catch(e) {
+    const err = document.getElementById('login-err');
+    err.textContent = e.message;
+    err.style.display = 'block';
+  }
+}
+
+function doLogout() {
+  token = '';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-page').style.display = 'flex';
+}
+
+async function loadDrivers() {
+  try {
+    const res = await fetch(`${BASE}/admin/drivers`, {
+      headers: {'Authorization': `Bearer ${token}`}
+    });
+    drivers = await res.json();
+    updateStats();
+    renderTable();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function updateStats() {
+  document.getElementById('s-total').textContent    = drivers.length;
+  document.getElementById('s-pending').textContent  =
+    drivers.filter(d => d.status==='pending'||d.status==='under_review').length;
+  document.getElementById('s-approved').textContent =
+    drivers.filter(d => d.status==='approved').length;
+  document.getElementById('s-rejected').textContent =
+    drivers.filter(d => d.status==='rejected').length;
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b =>
+    b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+function badgeHtml(status) {
+  const map = {
+    pending: ['pending','Pendiente'],
+    under_review: ['review','En revisión'],
+    approved: ['approved','Aprobado'],
+    rejected: ['rejected','Rechazado'],
+  };
+  const [cls, lbl] = map[status] || ['pending', status];
+  return `<span class="badge ${cls}">${lbl}</span>`;
+}
+
+function initials(name) {
+  return (name||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+}
+
+function renderTable() {
+  const filtered = currentFilter === 'all'
+    ? drivers
+    : drivers.filter(d => d.status === currentFilter);
+
+  const tbody = document.getElementById('driver-table');
+  tbody.innerHTML = filtered.map(d => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar">${initials(d.full_name)}</div>
+          <div>
+            <div style="font-weight:500">${d.full_name||'—'}</div>
+            <div style="font-size:12px;color:#94A3B8">${d.email}</div>
+          </div>
+        </div>
+      </td>
+      <td>${badgeHtml(d.status)}</td>
+      <td style="color:#94A3B8">${new Date(d.created_at).toLocaleDateString('es-CL')}</td>
+      <td>${(d.vehicles||[]).length} vehículo(s)</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-view" onclick='viewDriver(${JSON.stringify(d).replace(/'/g,"&#39;")})'>Ver</button>
+          ${d.status==='under_review'||d.status==='pending' ? `
+            <button class="btn btn-approve" onclick="approveDriver(${d.driver_id||d.id})">Aprobar</button>
+            <button class="btn btn-reject" onclick="openReject(${d.driver_id||d.id})">Rechazar</button>
+          ` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function viewDriver(d) {
+  selectedDriver = d;
+  const vehicles = (d.vehicles||[]).map(v =>
+    `<div class="vehicle-row">${v.brand} ${v.model} ${v.year} · ${v.plate} · ${v.color}</div>`
+  ).join('') || '<div style="color:#94A3B8;font-size:13px">Sin vehículos</div>';
+
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">Detalle del conductor</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div class="avatar" style="width:48px;height:48px;font-size:16px">${initials(d.full_name)}</div>
+      <div>
+        <div style="font-weight:600;font-size:15px">${d.full_name||'—'}</div>
+        <div style="font-size:12px;color:#94A3B8">${d.email} · ${d.phone||''}</div>
+        <div style="margin-top:4px">${badgeHtml(d.status)}</div>
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:#94A3B8;letter-spacing:.4px;margin-bottom:8px">DOCUMENTOS</div>
+    <div class="doc-grid">
+      <div class="doc-box">
+        <img src="${d.profile_image_url||''}" onerror="this.style.display='none'" alt="foto">
+        <div class="doc-label">Foto de perfil</div>
+      </div>
+      <div class="doc-box">
+        <img src="${d.license_image_url||''}" onerror="this.style.display='none'" alt="licencia">
+        <div class="doc-label">Licencia</div>
+      </div>
+      <div class="doc-box">
+        <img src="${d.vehicle_doc_url||''}" onerror="this.style.display='none'" alt="padron">
+        <div class="doc-label">Padrón</div>
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:#94A3B8;letter-spacing:.4px;margin:12px 0 8px">VEHÍCULOS</div>
+    ${vehicles}
+    ${d.rejection_reason ? `
+      <div style="margin-top:12px;background:#FFF1F2;border:1px solid #FECDD3;border-radius:8px;padding:10px;font-size:13px;color:#BE123C">
+        Motivo de rechazo: ${d.rejection_reason}
+      </div>
+    ` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-view" onclick="closeModal()">Cerrar</button>
+      ${d.status==='under_review'||d.status==='pending' ? `
+        <button class="btn btn-approve" onclick="approveDriver(${d.driver_id||d.id});closeModal()">Aprobar</button>
+        <button class="btn btn-reject" onclick="closeModal();openReject(${d.driver_id||d.id})">Rechazar</button>
+      ` : ''}
+    </div>
+  `;
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+function openReject(driverId) {
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">Rechazar conductor</div>
+    <div style="font-size:14px;color:#94A3B8;margin-bottom:8px">
+      Escribe el motivo del rechazo. El conductor lo verá en la app.
+    </div>
+    <textarea class="reject-textarea" id="reject-reason"
+      placeholder="Ej: La licencia está vencida, por favor sube una vigente."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-view" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-reject" onclick="rejectDriver(${driverId})">Confirmar rechazo</button>
+    </div>
+  `;
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+async function approveDriver(driverId) {
+  try {
+    await fetch(`${BASE}/admin/drivers/${driverId}/approve`, {
+      method: 'PUT',
+      headers: {'Authorization': `Bearer ${token}`}
+    });
+    await loadDrivers();
+  } catch(e) { console.error(e); }
+}
+
+async function rejectDriver(driverId) {
+  const reason = document.getElementById('reject-reason').value;
+  if (!reason.trim()) return;
+  try {
+    await fetch(`${BASE}/admin/drivers/${driverId}/reject`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({reason})
+    });
+    closeModal();
+    await loadDrivers();
+  } catch(e) { console.error(e); }
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-bg')) return;
+  document.getElementById('modal-bg').classList.remove('open');
+}
+</script>
+</body>
+</html>

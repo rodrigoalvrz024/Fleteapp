@@ -30,6 +30,8 @@ app.include_router(freights.router)
 app.include_router(payments.router)
 app.include_router(ratings.router)
 app.include_router(admin.router)
+from .routers import admin
+app.include_router(admin.router)
 
 @app.get("/")
 def root():

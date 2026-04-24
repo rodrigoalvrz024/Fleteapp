@@ -13,9 +13,10 @@ class AuthState {
 
   AuthState copyWith({UserModel? user, bool? isLoading, String? error}) =>
       AuthState(
-          user: user ?? this.user,
-          isLoading: isLoading ?? this.isLoading,
-          error: error);
+        user:      user      ?? this.user,
+        isLoading: isLoading ?? this.isLoading,
+        error:     error,
+      );
 
   bool get isAuthenticated => user != null;
 }
@@ -39,58 +40,68 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> login(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final data = await _service.login(email: email, password: password);
+      final data = await _service.login(
+          email: email, password: password);
       final user = UserModel.fromJson(data['user']);
-
-      //  Setear usuario
       state = AuthState(user: user);
 
-      // NUEVO: enviar token FCM al backend
+      // Registrar token FCM
       NotificationService.registerTokenOnBackend((token) async {
         await ApiService().put('/users/me', {'fcm_token': token});
       });
 
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: _parseError(e));
+      state = state.copyWith(
+          isLoading: false, error: _parseError(e));
       return false;
     }
   }
 
-  Future<bool> register(String email, String phone, String name,
-      String password, String role) async {
+  Future<bool> register(
+    String email,
+    String phone,
+    String name,
+    String password,
+    String role,
+  ) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final data = await _service.register(
-        email: email,
-        phone: phone,
+        email:    email,
+        phone:    phone,
         fullName: name,
         password: password,
-        role: role,
+        role:     role,
       );
       final user = UserModel.fromJson(data['user']);
       state = AuthState(user: user);
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: _parseError(e));
+      state = state.copyWith(
+          isLoading: false, error: _parseError(e));
       return false;
     }
   }
 
   Future<void> logout() async {
     await _service.logout();
+    // Limpiar estado completamente — el router detecta
+    // isAuthenticated=false y redirige a /login sin splash
     state = const AuthState();
   }
 
   String _parseError(dynamic e) {
-    if (e.toString().contains('400')) {
+    final msg = e.toString();
+    if (msg.contains('400')) {
       return 'El correo o teléfono ya está registrado';
     }
-    if (e.toString().contains('401')) return 'Credenciales incorrectas';
-    if (e.toString().contains('403')) return 'Cuenta suspendida';
+    if (msg.contains('401')) return 'Credenciales incorrectas';
+    if (msg.contains('403')) return 'Cuenta suspendida';
     return 'Error de conexión. Intenta de nuevo.';
   }
 }
 
 final authProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier());
+    StateNotifierProvider<AuthNotifier, AuthState>(
+        (ref) => AuthNotifier());

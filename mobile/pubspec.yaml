@@ -39,6 +39,8 @@ dependencies:
 
   google_fonts: ^6.2.1   
 
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

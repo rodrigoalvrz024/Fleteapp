@@ -12,54 +12,84 @@ import '../../screens/driver/available_freights_screen.dart';
 import '../../screens/driver/driver_freight_detail_screen.dart';
 import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
+import '../../screens/driver/driver_onboarding_screen.dart';
 
-final routerProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authProvider);
+// ── Router como singleton — NO recrea en cada rebuild ──────
+final _router = GoRouter(
+  initialLocation: '/splash',
+  routes: [
 
-  return GoRouter(
-    initialLocation: '/splash',
-    redirect: (context, state) {
-      final loggedIn = auth.isAuthenticated;
-      final onAuth = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register' ||
-          state.matchedLocation == '/splash';
+    // ── Auth ───────────────────────────────────────
+    GoRoute(
+      path: '/splash',
+      builder: (_, __) => const SplashScreen(),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (_, __) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (_, __) => const RegisterScreen(),
+    ),
 
-      if (!loggedIn && !onAuth) return '/login';
-      if (loggedIn && state.matchedLocation == '/splash') {
-        return auth.user?.role == 'driver' ? '/driver' : '/client';
-      }
-      return null;
-    },
-    routes: [
-      GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
-
-      // Cliente
-      GoRoute(path: '/client', builder: (_, __) => const ClientHomeScreen()),
-      GoRoute(
-          path: '/client/create-freight',
-          builder: (_, __) => const CreateFreightScreen()),
-      GoRoute(
-          path: '/client/freights',
-          builder: (_, __) => const FreightListScreen()),
-      GoRoute(
-        path: '/client/freights/:id',
-        builder: (_, state) => FreightDetailScreen(
-            freightId: int.parse(state.pathParameters['id']!)),
+    // ── Cliente ────────────────────────────────────
+    GoRoute(
+      path: '/client',
+      builder: (_, __) => const ClientHomeScreen(),
+    ),
+    GoRoute(
+      path: '/client/freights',
+      builder: (_, __) => const FreightListScreen(),
+    ),
+    GoRoute(
+      path: '/client/freights/:id',
+      builder: (_, state) => FreightDetailScreen(
+        freightId: int.parse(state.pathParameters['id']!),
       ),
-      GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+    ),
+    GoRoute(
+      path: '/client/create-freight',
+      builder: (context, state) {
+        final q = state.uri.queryParameters;
+        return CreateFreightScreen(
+          destAddress:   q['dest_address'],
+          destLat:       double.tryParse(q['dest_lat'] ?? ''),
+          destLng:       double.tryParse(q['dest_lng'] ?? ''),
+          originAddress: q['origin_address'],
+          originLat:     double.tryParse(q['origin_lat'] ?? ''),
+          originLng:     double.tryParse(q['origin_lng'] ?? ''),
+        );
+      },
+    ),
 
-      // Conductor
-      GoRoute(path: '/driver', builder: (_, __) => const DriverHomeScreen()),
-      GoRoute(
-          path: '/driver/available',
-          builder: (_, __) => const AvailableFreightsScreen()),
-      GoRoute(
-        path: '/driver/freights/:id',
-        builder: (_, state) => DriverFreightDetailScreen(
-            freightId: int.parse(state.pathParameters['id']!)),
+    // ── Perfil ─────────────────────────────────────
+    GoRoute(
+      path: '/profile',
+      builder: (_, __) => const ProfileScreen(),
+    ),
+
+    // ── Conductor ──────────────────────────────────
+    GoRoute(
+      path: '/driver',
+      builder: (_, __) => const DriverHomeScreen(),
+    ),
+    GoRoute(
+      path: '/driver/available',
+      builder: (_, __) => const AvailableFreightsScreen(),
+    ),
+    GoRoute(
+      path: '/driver/freights/:id',
+      builder: (_, state) => DriverFreightDetailScreen(
+        freightId: int.parse(state.pathParameters['id']!),
       ),
-    ],
-  );
-});
+    ),
+    GoRoute(
+      path: '/driver/onboarding',
+      builder: (_, __) => const DriverOnboardingScreen(),
+    ),
+  ],
+);
+
+// Provider retorna siempre el mismo router
+final routerProvider = Provider<GoRouter>((_) => _router);
