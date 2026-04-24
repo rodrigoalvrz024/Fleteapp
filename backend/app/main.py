@@ -13,11 +13,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8000",
-        "http://10.0.2.2:8000",
-        "*",  # Cambiar por tu dominio real después
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,8 +25,6 @@ app.include_router(drivers.router)
 app.include_router(freights.router)
 app.include_router(payments.router)
 app.include_router(ratings.router)
-app.include_router(admin.router)
-from .routers import admin
 app.include_router(admin.router)
 
 @app.get("/")
