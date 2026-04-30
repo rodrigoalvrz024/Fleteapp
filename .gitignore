@@ -21,3 +21,16 @@ mobile/android/local.properties
 mobile/ios/Runner/AppDelegate.swift
 mobile/ios/Flutter/Debug.xcconfig
 mobile/ios/Flutter/Release.xcconfig
+# Flutter generated
+mobile/ios/Flutter/Debug.xcconfig
+mobile/ios/Flutter/Release.xcconfig
+mobile/ios/Runner.xcodeproj/project.pbxproj
+mobile/ios/Runner.xcworkspace/
+mobile/ios/Runner/AppDelegate.swift
+mobile/ios/Runner/Info.plist
+mobile/ios/Podfile
+mobile/ios/Podfile.lock
+mobile/linux/flutter/
+mobile/macos/Flutter/
+mobile/macos/Podfile
+mobile/windows/flutter/
