@@ -16,6 +16,42 @@ from datetime import datetime
 
 router = APIRouter(prefix="/freights", tags=["Fletes"])
 
+def _get_driver_for_user(db: Session, user: User) -> Driver | None:
+    if user.role != UserRole.driver:
+        return None
+    return db.query(Driver).filter(Driver.user_id == user.id).first()
+
+def _require_freight_view_access(
+    freight: FreightRequest,
+    db: Session,
+    current_user: User,
+) -> None:
+    if current_user.role == UserRole.admin:
+        return
+    if current_user.role == UserRole.client and freight.client_id == current_user.id:
+        return
+    if current_user.role == UserRole.driver:
+        driver = _get_driver_for_user(db, current_user)
+        if driver and freight.driver_id == driver.id:
+            return
+    raise HTTPException(status_code=403, detail="No tienes permiso para ver este flete")
+
+def _require_freight_status_access(
+    freight: FreightRequest,
+    db: Session,
+    current_user: User,
+) -> None:
+    if current_user.role == UserRole.admin:
+        return
+    if current_user.role == UserRole.driver:
+        driver = _get_driver_for_user(db, current_user)
+        if driver and freight.driver_id == driver.id:
+            return
+    raise HTTPException(
+        status_code=403,
+        detail="Solo el conductor asignado o un admin puede actualizar el estado",
+    )
+
 @router.post("", response_model=FreightResponse, status_code=201)
 async def create_freight(
     data: FreightCreate,
@@ -100,6 +136,7 @@ def get_freight(freight_id: int, db: Session = Depends(get_db), current_user: Us
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_freight_view_access(freight, db, current_user)
     return freight
 
 @router.put("/{freight_id}/accept", response_model=FreightResponse)
@@ -127,6 +164,8 @@ def update_status(freight_id: int, data: FreightStatusUpdate, db: Session = Depe
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
+
+    _require_freight_status_access(freight, db, current_user)
 
     if not can_transition(freight.status, data.status):
         raise HTTPException(status_code=400, detail=f"No se puede pasar de {freight.status} a {data.status}")

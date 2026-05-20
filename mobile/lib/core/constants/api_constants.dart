@@ -1,6 +1,9 @@
 class ApiConstants {
-  // ✅ URL de producción Railway
-  static const String baseUrl = 'https://fleteapp-production.up.railway.app';
+  // URL de producción Cloud Run. Puedes sobrescribirla con --dart-define=API_BASE_URL=...
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://fleteapp-api-i3wy5watea-uc.a.run.app',
+  );
 
   // Locales comentadas
   // static const String baseUrl = 'http://10.0.2.2:8000';

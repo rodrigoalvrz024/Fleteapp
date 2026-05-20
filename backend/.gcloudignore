@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+.env
+firebase-credentials.json
+*.log
+uvicorn.out.log
+uvicorn.err.log
+
+.git/
+.gitignore
+dist/
+build/
+*.egg-info/
