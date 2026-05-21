@@ -1,12 +1,12 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/auth_provider.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
 import '../../screens/client/client_home_screen.dart';
 import '../../screens/client/create_freight_screen.dart';
 import '../../screens/client/freight_list_screen.dart';
 import '../../screens/client/freight_detail_screen.dart';
+import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/driver/driver_home_screen.dart';
 import '../../screens/driver/available_freights_screen.dart';
 import '../../screens/driver/driver_freight_detail_screen.dart';
@@ -18,7 +18,6 @@ import '../../screens/driver/driver_onboarding_screen.dart';
 final _router = GoRouter(
   initialLocation: '/splash',
   routes: [
-
     // ── Auth ───────────────────────────────────────
     GoRoute(
       path: '/splash',
@@ -53,12 +52,12 @@ final _router = GoRouter(
       builder: (context, state) {
         final q = state.uri.queryParameters;
         return CreateFreightScreen(
-          destAddress:   q['dest_address'],
-          destLat:       double.tryParse(q['dest_lat'] ?? ''),
-          destLng:       double.tryParse(q['dest_lng'] ?? ''),
+          destAddress: q['dest_address'],
+          destLat: double.tryParse(q['dest_lat'] ?? ''),
+          destLng: double.tryParse(q['dest_lng'] ?? ''),
           originAddress: q['origin_address'],
-          originLat:     double.tryParse(q['origin_lat'] ?? ''),
-          originLng:     double.tryParse(q['origin_lng'] ?? ''),
+          originLat: double.tryParse(q['origin_lat'] ?? ''),
+          originLng: double.tryParse(q['origin_lng'] ?? ''),
         );
       },
     ),
@@ -67,6 +66,10 @@ final _router = GoRouter(
     GoRoute(
       path: '/profile',
       builder: (_, __) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: '/admin',
+      builder: (_, __) => const AdminDashboardScreen(),
     ),
 
     // ── Conductor ──────────────────────────────────

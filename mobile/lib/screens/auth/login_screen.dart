@@ -13,14 +13,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
-
-  final _formKey   = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
-  final _passCtrl  = TextEditingController();
-  bool _obscure    = true;
+  final _passCtrl = TextEditingController();
+  bool _obscure = true;
 
   late AnimationController _btnCtrl;
-  late Animation<double>   _btnScale;
+  late Animation<double> _btnScale;
 
   @override
   void initState() {
@@ -54,7 +53,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (!mounted) return;
     if (ok) {
       final role = ref.read(authProvider).user?.role;
-      context.go(role == 'driver' ? '/driver' : '/client');
+      context.go(switch (role) {
+        'admin' => '/admin',
+        'driver' => '/driver',
+        _ => '/client',
+      });
     }
   }
 
@@ -75,12 +78,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-
                   // ── Logo minimal ──────────────────────────
                   const SizedBox(height: 52),
                   Row(children: [
                     Container(
-                      width: 32, height: 32,
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         color: AppTheme.primary,
                         borderRadius: BorderRadius.circular(8),
@@ -130,13 +133,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1A1A2E).withValues(alpha: 0.06),
+                          color:
+                              const Color(0xFF1A1A2E).withValues(alpha: 0.06),
                           blurRadius: 40,
                           spreadRadius: 0,
                           offset: const Offset(0, 12),
                         ),
                         BoxShadow(
-                          color: const Color(0xFF1A1A2E).withValues(alpha: 0.03),
+                          color:
+                              const Color(0xFF1A1A2E).withValues(alpha: 0.03),
                           blurRadius: 8,
                           spreadRadius: 0,
                           offset: const Offset(0, 2),
@@ -145,7 +150,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                     child: Column(
                       children: [
-
                         // Error banner
                         if (auth.error != null) ...[
                           _ErrorBanner(message: auth.error!),
@@ -154,23 +158,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                         // Email
                         _PremiumField(
-                          controller:   _emailCtrl,
-                          hint:         'Correo electrónico',
-                          icon:         Icons.mail_outline_rounded,
+                          controller: _emailCtrl,
+                          hint: 'Correo electrónico',
+                          icon: Icons.mail_outline_rounded,
                           keyboardType: TextInputType.emailAddress,
-                          validator:    (v) => (v?.contains('@') ?? false)
-                              ? null : 'Correo inválido',
+                          validator: (v) => (v?.contains('@') ?? false)
+                              ? null
+                              : 'Correo inválido',
                         ),
                         const SizedBox(height: 12),
 
                         // Password
                         _PremiumField(
-                          controller:  _passCtrl,
-                          hint:        'Contraseña',
-                          icon:        Icons.lock_outline_rounded,
+                          controller: _passCtrl,
+                          hint: 'Contraseña',
+                          icon: Icons.lock_outline_rounded,
                           obscureText: _obscure,
-                          validator:   (v) => (v?.length ?? 0) >= 8
-                              ? null : 'Mínimo 8 caracteres',
+                          validator: (v) => (v?.length ?? 0) >= 8
+                              ? null
+                              : 'Mínimo 8 caracteres',
                           suffix: GestureDetector(
                             onTap: () => setState(() => _obscure = !_obscure),
                             child: Icon(
@@ -188,9 +194,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         ScaleTransition(
                           scale: _btnScale,
                           child: GestureDetector(
-                            onTapDown:   (_) => _btnCtrl.forward(),
-                            onTapUp:     (_) => _btnCtrl.reverse(),
-                            onTapCancel: ()  => _btnCtrl.reverse(),
+                            onTapDown: (_) => _btnCtrl.forward(),
+                            onTapUp: (_) => _btnCtrl.reverse(),
+                            onTapCancel: () => _btnCtrl.reverse(),
                             child: Container(
                               height: 52,
                               decoration: BoxDecoration(
@@ -208,22 +214,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     ? AppTheme.primary.withValues(alpha: 0.6)
                                     : null,
                                 borderRadius: BorderRadius.circular(14),
-                                boxShadow: auth.isLoading ? [] : [
-                                  BoxShadow(
-                                    color: const Color(0xFF2563EB)
-                                        .withValues(alpha: 0.35),
-                                    blurRadius: 20,
-                                    spreadRadius: 0,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                  BoxShadow(
-                                    color: const Color(0xFF2563EB)
-                                        .withValues(alpha: 0.15),
-                                    blurRadius: 6,
-                                    spreadRadius: 0,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                                boxShadow: auth.isLoading
+                                    ? []
+                                    : [
+                                        BoxShadow(
+                                          color: const Color(0xFF2563EB)
+                                              .withValues(alpha: 0.35),
+                                          blurRadius: 20,
+                                          spreadRadius: 0,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                        BoxShadow(
+                                          color: const Color(0xFF2563EB)
+                                              .withValues(alpha: 0.15),
+                                          blurRadius: 6,
+                                          spreadRadius: 0,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                               ),
                               child: Material(
                                 color: Colors.transparent,
@@ -237,7 +245,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   child: Center(
                                     child: auth.isLoading
                                         ? const SizedBox(
-                                            height: 20, width: 20,
+                                            height: 20,
+                                            width: 20,
                                             child: CircularProgressIndicator(
                                               color: Colors.white,
                                               strokeWidth: 2.5,
@@ -331,12 +340,11 @@ class _PremiumField extends StatefulWidget {
 
 class _PremiumFieldState extends State<_PremiumField>
     with SingleTickerProviderStateMixin {
-
-  bool _focused  = false;
+  bool _focused = false;
   bool _hasError = false;
 
   late AnimationController _ctrl;
-  late Animation<double>   _anim;
+  late Animation<double> _anim;
 
   @override
   void initState() {
@@ -361,87 +369,89 @@ class _PremiumFieldState extends State<_PremiumField>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _anim,
-    builder: (_, __) {
-      final borderColor = _hasError
-          ? AppTheme.error
-          : Color.lerp(
-              const Color(0xFFD1D9E0),
-              AppTheme.primary,
-              _anim.value,
-            )!;
+        animation: _anim,
+        builder: (_, __) {
+          final borderColor = _hasError
+              ? AppTheme.error
+              : Color.lerp(
+                  const Color(0xFFD1D9E0),
+                  AppTheme.primary,
+                  _anim.value,
+                )!;
 
-      final iconColor = _hasError
-          ? AppTheme.error
-          : Color.lerp(
-              AppTheme.slate400,
-              AppTheme.primary,
-              _anim.value,
-            )!;
+          final iconColor = _hasError
+              ? AppTheme.error
+              : Color.lerp(
+                  AppTheme.slate400,
+                  AppTheme.primary,
+                  _anim.value,
+                )!;
 
-      return Focus(
-        onFocusChange: _onFocusChange,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _focused ? Colors.white : const Color(0xFFF4F6F8),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: borderColor,
-              width: _focused ? 1.5 : 0.8,
+          return Focus(
+            onFocusChange: _onFocusChange,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              decoration: BoxDecoration(
+                color: _focused ? Colors.white : const Color(0xFFF4F6F8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: borderColor,
+                  width: _focused ? 1.5 : 0.8,
+                ),
+              ),
+              child: TextFormField(
+                controller: widget.controller,
+                keyboardType: widget.keyboardType,
+                obscureText: widget.obscureText,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: AppTheme.midnight,
+                  fontWeight: FontWeight.w400,
+                ),
+                validator: (v) {
+                  final result = widget.validator?.call(v);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _hasError = result != null);
+                  });
+                  return result;
+                },
+                decoration: InputDecoration(
+                  hintText: widget.hint,
+                  hintStyle: const TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.slate400,
+                  ),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.only(left: 14, right: 10),
+                    child: Icon(widget.icon, size: 18, color: iconColor),
+                  ),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  suffixIcon: widget.suffix != null
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 14),
+                          child: widget.suffix,
+                        )
+                      : null,
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  border: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  errorStyle: const TextStyle(height: 0, fontSize: 0),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                ),
+              ),
             ),
-          ),
-          child: TextFormField(
-            controller:   widget.controller,
-            keyboardType: widget.keyboardType,
-            obscureText:  widget.obscureText,
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppTheme.midnight,
-              fontWeight: FontWeight.w400,
-            ),
-            validator: (v) {
-              final result = widget.validator?.call(v);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) setState(() => _hasError = result != null);
-              });
-              return result;
-            },
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              hintStyle: const TextStyle(
-                fontSize: 14,
-                color: AppTheme.slate400,
-              ),
-              prefixIcon: Padding(
-                padding: const EdgeInsets.only(left: 14, right: 10),
-                child: Icon(widget.icon, size: 18, color: iconColor),
-              ),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 44, minHeight: 44,
-              ),
-              suffixIcon: widget.suffix != null
-                  ? Padding(
-                      padding: const EdgeInsets.only(right: 14),
-                      child: widget.suffix,
-                    )
-                  : null,
-              suffixIconConstraints: const BoxConstraints(
-                minWidth: 44, minHeight: 44,
-              ),
-              border:        InputBorder.none,
-              errorBorder:   InputBorder.none,
-              focusedBorder: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              errorStyle:    const TextStyle(height: 0, fontSize: 0),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 16),
-            ),
-          ),
-        ),
+          );
+        },
       );
-    },
-  );
 }
 
 // ── Error banner ───────────────────────────────────────────
@@ -452,27 +462,27 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFFFF1F2),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(
-        color: AppTheme.error.withValues(alpha: 0.2),
-        width: 0.5,
-      ),
-    ),
-    child: Row(children: [
-      const Icon(Icons.error_outline_rounded,
-          color: AppTheme.error, size: 16),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(message,
-            style: const TextStyle(
-              color: Color(0xFFBE123C),
-              fontSize: 13,
-              height: 1.3,
-            )),
-      ),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF1F2),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppTheme.error.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
+        ),
+        child: Row(children: [
+          const Icon(Icons.error_outline_rounded,
+              color: AppTheme.error, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message,
+                style: const TextStyle(
+                  color: Color(0xFFBE123C),
+                  fontSize: 13,
+                  height: 1.3,
+                )),
+          ),
+        ]),
+      );
 }
