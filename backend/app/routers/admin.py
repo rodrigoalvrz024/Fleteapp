@@ -73,21 +73,20 @@ def list_drivers(
             "status":             d.status.value
                                   if hasattr(d.status, 'value')
                                   else d.status,
-            "profile_image_url":  d.profile_image_url,
-            "license_image_url":  d.license_image_url,
-            "vehicle_doc_url":    d.vehicle_doc_url,
-            "rejection_reason":   d.rejection_reason,
+            "profile_image_url":  getattr(d, "profile_image_url", None),
+            "license_image_url":  getattr(d, "license_image_url", None),
+            "vehicle_doc_url":    getattr(d, "vehicle_doc_url", None),
+            "rejection_reason":   getattr(d, "rejection_reason", None),
             "vehicles":           [
                 {
-                    "id":    v.id,
-                    "brand": v.brand,
-                    "model": v.model,
-                    "year":  v.year,
-                    "plate": v.plate,
-                    "color": v.color,
+                    "id":    d.vehicle.id,
+                    "brand": d.vehicle.brand,
+                    "model": d.vehicle.model,
+                    "year":  d.vehicle.year,
+                    "plate": d.vehicle.plate,
+                    "color": d.vehicle.color,
                 }
-                for v in (d.vehicles or [])
-            ],
+            ] if d.vehicle else [],
             "created_at": str(u.created_at),
         }
         for d, u in drivers
@@ -119,8 +118,9 @@ def reject_driver(
         Driver.id == driver_id).first()
     if not driver:
         raise HTTPException(404, "Conductor no encontrado")
-    driver.status           = DriverStatus.rejected
-    driver.rejection_reason = body.reason
+    driver.status = DriverStatus.suspended
+    if hasattr(driver, "rejection_reason"):
+        driver.rejection_reason = body.reason
     db.commit()
     return {"message": f"Conductor {driver_id} rechazado"}
 
