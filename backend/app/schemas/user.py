@@ -1,14 +1,19 @@
+import enum
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
 from app.models.user import UserRole
+
+class PublicUserRole(str, enum.Enum):
+    client = "client"
+    driver = "driver"
 
 class UserCreate(BaseModel):
     email: EmailStr
     phone: str
     full_name: str
     password: str
-    role: UserRole = UserRole.client
+    role: PublicUserRole = PublicUserRole.client
 
     @field_validator("password")
     def password_strength(cls, v):
