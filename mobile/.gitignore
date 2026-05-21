@@ -41,6 +41,7 @@ app.*.map.json
 
 # API Keys — NUNCA subir estos archivos
 /android/local.properties
+/web/config.js
 /ios/Runner/AppDelegate.swift
 /ios/Flutter/Debug.xcconfig
 /ios/Flutter/Release.xcconfig

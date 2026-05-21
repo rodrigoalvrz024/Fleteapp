@@ -41,6 +41,34 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="config.js"></script>
+  <script>
+    function bootFlutter() {
+      var flutterBootstrap = document.createElement('script');
+      flutterBootstrap.src = 'flutter_bootstrap.js';
+      flutterBootstrap.async = true;
+      document.body.appendChild(flutterBootstrap);
+    }
+
+    var googleMapsApiKey = window.FLETEAPP_GOOGLE_MAPS_API_KEY;
+
+    if (googleMapsApiKey) {
+      var googleMapsScript = document.createElement('script');
+      googleMapsScript.src = 'https://maps.googleapis.com/maps/api/js?key='
+        + encodeURIComponent(googleMapsApiKey)
+        + '&libraries=places&loading=async';
+      googleMapsScript.async = true;
+      googleMapsScript.defer = true;
+      googleMapsScript.onload = bootFlutter;
+      googleMapsScript.onerror = function () {
+        console.warn('Google Maps JavaScript API could not be loaded.');
+        bootFlutter();
+      };
+      document.head.appendChild(googleMapsScript);
+    } else {
+      console.warn('Missing FLETEAPP_GOOGLE_MAPS_API_KEY in web/config.js.');
+      bootFlutter();
+    }
+  </script>
 </body>
 </html>
