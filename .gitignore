@@ -17,6 +17,9 @@ mobile/android/local.properties
 # General
 .DS_Store
 *.log
+firebase-debug.log*
+.firebase/
+.local-tools/
 .idea/
 mobile/ios/Runner/AppDelegate.swift
 mobile/ios/Flutter/Debug.xcconfig
