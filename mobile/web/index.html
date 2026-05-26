@@ -45,7 +45,7 @@
   <script>
     function bootFlutter() {
       var flutterBootstrap = document.createElement('script');
-      flutterBootstrap.src = 'flutter_bootstrap.js';
+      flutterBootstrap.src = 'flutter_bootstrap.js?v=' + Date.now();
       flutterBootstrap.async = true;
       document.body.appendChild(flutterBootstrap);
     }

@@ -27,3 +27,4 @@ class User(Base):
     freight_requests = relationship("FreightRequest", back_populates="client", foreign_keys="FreightRequest.client_id")
     ratings_given = relationship("Rating", back_populates="rater", foreign_keys="Rating.rater_id")
     notifications = relationship("Notification", back_populates="user")
+    password_reset_tokens = relationship("PasswordResetToken", back_populates="user")

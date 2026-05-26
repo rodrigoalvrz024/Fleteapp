@@ -40,6 +40,24 @@ class AuthService {
     return UserModel.fromJson(res.data);
   }
 
+  Future<String> forgotPassword(String email) async {
+    final res = await _api.post(ApiConstants.forgotPassword, {
+      'email': email,
+    });
+    return res.data['message'] as String;
+  }
+
+  Future<String> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    final res = await _api.post(ApiConstants.resetPassword, {
+      'token': token,
+      'new_password': newPassword,
+    });
+    return res.data['message'] as String;
+  }
+
   Future<void> logout() async {
     await _api.clearToken();
   }

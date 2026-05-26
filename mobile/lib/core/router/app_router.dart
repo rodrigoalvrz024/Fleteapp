@@ -2,6 +2,8 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
+import '../../screens/auth/forgot_password_screen.dart';
+import '../../screens/auth/reset_password_screen.dart';
 import '../../screens/client/client_home_screen.dart';
 import '../../screens/client/create_freight_screen.dart';
 import '../../screens/client/freight_list_screen.dart';
@@ -30,6 +32,16 @@ final _router = GoRouter(
     GoRoute(
       path: '/register',
       builder: (_, __) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      builder: (_, __) => const ForgotPasswordScreen(),
+    ),
+    GoRoute(
+      path: '/reset-password',
+      builder: (_, state) => ResetPasswordScreen(
+        token: state.uri.queryParameters['token'],
+      ),
     ),
 
     // ── Cliente ────────────────────────────────────

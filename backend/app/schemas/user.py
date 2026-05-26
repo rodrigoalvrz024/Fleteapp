@@ -32,6 +32,22 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    def password_strength(cls, v):
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        return v
+
+class MessageResponse(BaseModel):
+    message: str
+
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None

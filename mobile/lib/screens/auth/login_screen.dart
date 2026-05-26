@@ -188,6 +188,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             ),
                           ),
                         ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: auth.isLoading
+                                ? null
+                                : () => context.push('/forgot-password'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.primary,
+                              padding: const EdgeInsets.only(top: 6, bottom: 2),
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            child: const Text('¿Olvidaste tu contraseña?'),
+                          ),
+                        ),
                         const SizedBox(height: 20),
 
                         // Botón principal con scale + gradiente
