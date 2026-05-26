@@ -180,6 +180,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             loading: _loading,
                             money: _money,
                           ),
+                          if (!_loading && _metrics != null) ...[
+                            const SizedBox(height: 12),
+                            _MonitoringPanel(
+                              metrics: _metrics!,
+                              money: _money,
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           _TabSelector(
                             index: _tabIndex,
@@ -341,36 +348,70 @@ class _MetricsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = [
       _MetricData(
-        label: 'Usuarios',
-        value: loading ? '...' : '${metrics?.totalUsers ?? 0}',
+        label: 'Usuarios activos',
+        value: loading
+            ? '...'
+            : '${metrics?.activeUsers ?? 0}/${metrics?.totalUsers ?? 0}',
         icon: Icons.group_outlined,
         color: AppTheme.primary,
       ),
       _MetricData(
         label: 'Conductores',
-        value: loading ? '...' : '${metrics?.totalDrivers ?? 0}',
+        value: loading
+            ? '...'
+            : '${metrics?.approvedDrivers ?? 0}/${metrics?.totalDrivers ?? 0}',
         icon: Icons.badge_outlined,
         color: AppTheme.success,
       ),
       _MetricData(
-        label: 'Fletes',
-        value: loading ? '...' : '${metrics?.totalFreights ?? 0}',
+        label: 'Fletes activos',
+        value: loading ? '...' : '${metrics?.activeFreights ?? 0}',
         icon: Icons.local_shipping_outlined,
         color: AppTheme.urgent,
       ),
       _MetricData(
-        label: 'Ingresos',
+        label: 'Pagos autorizados',
         value: loading
             ? '...'
-            : '\$${money.format(metrics?.totalRevenueClp ?? 0)}',
+            : '\$${money.format(metrics?.authorizedPaymentsClp ?? 0)}',
         icon: Icons.payments_outlined,
         color: AppTheme.accent,
+      ),
+      _MetricData(
+        label: 'Comisión plataforma',
+        value: loading
+            ? '...'
+            : '\$${money.format(metrics?.platformCommissionClp ?? 0)}',
+        icon: Icons.account_balance_wallet_outlined,
+        color: AppTheme.success,
+      ),
+      _MetricData(
+        label: 'Comisión pendiente',
+        value: loading
+            ? '...'
+            : '\$${money.format(metrics?.pendingPlatformCommissionClp ?? 0)}',
+        icon: Icons.hourglass_bottom_rounded,
+        color: AppTheme.warning,
+      ),
+      _MetricData(
+        label: 'Pago conductores',
+        value: loading
+            ? '...'
+            : '\$${money.format(metrics?.driverPayoutClp ?? 0)}',
+        icon: Icons.handshake_outlined,
+        color: AppTheme.midnight,
+      ),
+      _MetricData(
+        label: 'Por aprobar',
+        value: loading ? '...' : '${metrics?.pendingDrivers ?? 0}',
+        icon: Icons.fact_check_outlined,
+        color: AppTheme.error,
       ),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth > 900
+        final columns = constraints.maxWidth > 980
             ? 4
             : constraints.maxWidth > 520
                 ? 2
@@ -455,6 +496,290 @@ class _MetricTile extends StatelessWidget {
             ),
           ],
         ),
+      );
+}
+
+class _MonitoringPanel extends StatelessWidget {
+  final AdminMetrics metrics;
+  final NumberFormat money;
+
+  const _MonitoringPanel({required this.metrics, required this.money});
+
+  @override
+  Widget build(BuildContext context) {
+    final panels = [
+      _BreakdownPanel(
+        title: 'Fletes por estado',
+        icon: Icons.route_outlined,
+        total: metrics.totalFreights,
+        items: [
+          _BreakdownItem(
+            label: 'Pendientes',
+            count: metrics.freightsByStatus['pending'] ?? 0,
+            color: AppTheme.warning,
+          ),
+          _BreakdownItem(
+            label: 'Aceptados',
+            count: metrics.freightsByStatus['accepted'] ?? 0,
+            color: AppTheme.primary,
+          ),
+          _BreakdownItem(
+            label: 'En curso',
+            count: metrics.freightsByStatus['in_progress'] ?? 0,
+            color: AppTheme.accent,
+          ),
+          _BreakdownItem(
+            label: 'Completados',
+            count: metrics.completedFreights,
+            color: AppTheme.success,
+          ),
+          _BreakdownItem(
+            label: 'Cancelados',
+            count: metrics.freightsByStatus['cancelled'] ?? 0,
+            color: AppTheme.error,
+          ),
+        ],
+      ),
+      _BreakdownPanel(
+        title: 'Conductores por estado',
+        icon: Icons.badge_outlined,
+        total: metrics.totalDrivers,
+        items: [
+          _BreakdownItem(
+            label: 'Aprobados',
+            count: metrics.approvedDrivers,
+            color: AppTheme.success,
+          ),
+          _BreakdownItem(
+            label: 'Pendientes',
+            count: metrics.pendingDrivers,
+            color: AppTheme.warning,
+          ),
+          _BreakdownItem(
+            label: 'Suspendidos',
+            count: metrics.suspendedDrivers,
+            color: AppTheme.error,
+          ),
+        ],
+      ),
+      _FinancePanel(metrics: metrics, money: money),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 980) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < panels.length; i++) ...[
+                Expanded(child: panels[i]),
+                if (i != panels.length - 1) const SizedBox(width: 10),
+              ],
+            ],
+          );
+        }
+        return Column(
+          children: [
+            for (var i = 0; i < panels.length; i++) ...[
+              panels[i],
+              if (i != panels.length - 1) const SizedBox(height: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _BreakdownItem {
+  final String label;
+  final int count;
+  final Color color;
+
+  const _BreakdownItem({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+}
+
+class _BreakdownPanel extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final int total;
+  final List<_BreakdownItem> items;
+
+  const _BreakdownPanel({
+    required this.title,
+    required this.icon,
+    required this.total,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: _adminBox(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PanelTitle(icon: icon, title: title),
+            const SizedBox(height: 12),
+            for (final item in items) ...[
+              _BreakdownRow(item: item, total: total),
+              if (item != items.last) const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      );
+}
+
+class _BreakdownRow extends StatelessWidget {
+  final _BreakdownItem item;
+  final int total;
+
+  const _BreakdownRow({required this.item, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total <= 0 ? 0.0 : item.count / total;
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                item.label,
+                style: const TextStyle(
+                  color: AppTheme.slate600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              '${item.count}',
+              style: const TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        SizedBox(
+          height: 6,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              color: item.color,
+              backgroundColor: AppTheme.slate100,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FinancePanel extends StatelessWidget {
+  final AdminMetrics metrics;
+  final NumberFormat money;
+
+  const _FinancePanel({required this.metrics, required this.money});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: _adminBox(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _PanelTitle(
+              icon: Icons.insights_outlined,
+              title: 'Salud financiera',
+            ),
+            const SizedBox(height: 12),
+            _FinanceRow(
+              label: 'Pagos autorizados',
+              value: '\$${money.format(metrics.authorizedPaymentsClp)}',
+            ),
+            _FinanceRow(
+              label: 'Tickets autorizados',
+              value: '${metrics.authorizedPaymentsCount}',
+            ),
+            _FinanceRow(
+              label: 'Ticket promedio',
+              value: '\$${money.format(metrics.averageAuthorizedTicketClp)}',
+            ),
+            _FinanceRow(
+              label: 'Bruto completado',
+              value: '\$${money.format(metrics.grossCompletedClp)}',
+            ),
+            _FinanceRow(
+              label: 'Finalización',
+              value: '${metrics.completionRate}%',
+            ),
+          ],
+        ),
+      );
+}
+
+class _FinanceRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _FinanceRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PanelTitle extends StatelessWidget {
+  final IconData icon;
+  final String title;
+
+  const _PanelTitle({required this.icon, required this.title});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, color: AppTheme.slate400, size: 16),
+          const SizedBox(width: 7),
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppTheme.midnight,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       );
 }
 

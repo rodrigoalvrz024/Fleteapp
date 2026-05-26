@@ -2,23 +2,89 @@ import 'api_service.dart';
 
 class AdminMetrics {
   final int totalUsers;
+  final int activeUsers;
+  final int inactiveUsers;
+  final Map<String, int> usersByRole;
   final int totalDrivers;
+  final Map<String, int> driversByStatus;
+  final int pendingDrivers;
+  final int approvedDrivers;
+  final int suspendedDrivers;
   final int totalFreights;
+  final Map<String, int> freightsByStatus;
+  final int activeFreights;
+  final int completedFreights;
+  final num completionRate;
+  final Map<String, int> paymentsByStatus;
+  final int authorizedPaymentsCount;
+  final num authorizedPaymentsClp;
+  final num averageAuthorizedTicketClp;
+  final num grossCompletedClp;
+  final num platformCommissionClp;
+  final num pendingPlatformCommissionClp;
+  final num driverPayoutClp;
   final num totalRevenueClp;
 
   const AdminMetrics({
     required this.totalUsers,
+    required this.activeUsers,
+    required this.inactiveUsers,
+    required this.usersByRole,
     required this.totalDrivers,
+    required this.driversByStatus,
+    required this.pendingDrivers,
+    required this.approvedDrivers,
+    required this.suspendedDrivers,
     required this.totalFreights,
+    required this.freightsByStatus,
+    required this.activeFreights,
+    required this.completedFreights,
+    required this.completionRate,
+    required this.paymentsByStatus,
+    required this.authorizedPaymentsCount,
+    required this.authorizedPaymentsClp,
+    required this.averageAuthorizedTicketClp,
+    required this.grossCompletedClp,
+    required this.platformCommissionClp,
+    required this.pendingPlatformCommissionClp,
+    required this.driverPayoutClp,
     required this.totalRevenueClp,
   });
 
-  factory AdminMetrics.fromJson(Map<String, dynamic> json) => AdminMetrics(
-        totalUsers: json['total_users'] ?? 0,
-        totalDrivers: json['total_drivers'] ?? 0,
-        totalFreights: json['total_freights'] ?? 0,
-        totalRevenueClp: json['total_revenue_clp'] ?? 0,
-      );
+  factory AdminMetrics.fromJson(Map<String, dynamic> json) {
+    Map<String, int> intMap(String key) =>
+        ((json[key] ?? {}) as Map<String, dynamic>).map(
+          (k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0),
+        );
+
+    return AdminMetrics(
+      totalUsers: json['total_users'] ?? 0,
+      activeUsers: json['active_users'] ?? 0,
+      inactiveUsers: json['inactive_users'] ?? 0,
+      usersByRole: intMap('users_by_role'),
+      totalDrivers: json['total_drivers'] ?? 0,
+      driversByStatus: intMap('drivers_by_status'),
+      pendingDrivers: json['pending_drivers'] ?? 0,
+      approvedDrivers: json['approved_drivers'] ?? 0,
+      suspendedDrivers: json['suspended_drivers'] ?? 0,
+      totalFreights: json['total_freights'] ?? 0,
+      freightsByStatus: intMap('freights_by_status'),
+      activeFreights: json['active_freights'] ?? 0,
+      completedFreights: json['completed_freights'] ?? 0,
+      completionRate: json['completion_rate'] ?? 0,
+      paymentsByStatus: intMap('payments_by_status'),
+      authorizedPaymentsCount: json['authorized_payments_count'] ?? 0,
+      authorizedPaymentsClp: json['authorized_payments_clp'] ?? 0,
+      averageAuthorizedTicketClp: json['average_authorized_ticket_clp'] ?? 0,
+      grossCompletedClp: json['gross_completed_clp'] ?? 0,
+      platformCommissionClp: json['platform_commission_clp'] ?? 0,
+      pendingPlatformCommissionClp:
+          json['pending_platform_commission_clp'] ?? 0,
+      driverPayoutClp: json['driver_payout_clp'] ?? 0,
+      totalRevenueClp:
+          json['total_revenue_clp'] ?? json['authorized_payments_clp'] ?? 0,
+    );
+  }
 }
 
 class AdminUser {
