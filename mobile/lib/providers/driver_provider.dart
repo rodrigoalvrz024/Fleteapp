@@ -14,14 +14,14 @@ class DriverState {
   final double rating;
 
   const DriverState({
-    this.isOnline       = false,
-    this.isLoading      = false,
+    this.isOnline = false,
+    this.isLoading = false,
     this.availableFreights = const [],
     this.incomingFreight,
     this.activeFreight,
     this.completedToday = 0,
-    this.earningsToday  = 0,
-    this.rating         = 5.0,
+    this.earningsToday = 0,
+    this.rating = 5.0,
   });
 
   DriverState copyWith({
@@ -35,22 +35,25 @@ class DriverState {
     int? completedToday,
     double? earningsToday,
     double? rating,
-  }) => DriverState(
-    isOnline:          isOnline ?? this.isOnline,
-    isLoading:         isLoading ?? this.isLoading,
-    availableFreights: availableFreights ?? this.availableFreights,
-    incomingFreight:   clearIncoming ? null : (incomingFreight ?? this.incomingFreight),
-    activeFreight:     clearActive   ? null : (activeFreight   ?? this.activeFreight),
-    completedToday:    completedToday ?? this.completedToday,
-    earningsToday:     earningsToday  ?? this.earningsToday,
-    rating:            rating         ?? this.rating,
-  );
+  }) =>
+      DriverState(
+        isOnline: isOnline ?? this.isOnline,
+        isLoading: isLoading ?? this.isLoading,
+        availableFreights: availableFreights ?? this.availableFreights,
+        incomingFreight:
+            clearIncoming ? null : (incomingFreight ?? this.incomingFreight),
+        activeFreight:
+            clearActive ? null : (activeFreight ?? this.activeFreight),
+        completedToday: completedToday ?? this.completedToday,
+        earningsToday: earningsToday ?? this.earningsToday,
+        rating: rating ?? this.rating,
+      );
 }
 
 class DriverNotifier extends StateNotifier<DriverState> {
   final FreightService _service = FreightService();
   Timer? _pollingTimer;
-  Set<int> _seenFreightIds = {};
+  final Set<int> _seenFreightIds = {};
 
   DriverNotifier() : super(const DriverState());
 
@@ -91,8 +94,8 @@ class DriverNotifier extends StateNotifier<DriverState> {
     if (!state.isOnline) return;
     try {
       final list = await _service.listFreights(status: 'pending');
-      final newOnes = list.where(
-          (f) => !_seenFreightIds.contains(f.id)).toList();
+      final newOnes =
+          list.where((f) => !_seenFreightIds.contains(f.id)).toList();
 
       state = state.copyWith(availableFreights: list);
 
@@ -112,8 +115,8 @@ class DriverNotifier extends StateNotifier<DriverState> {
     try {
       final freight = await _service.acceptFreight(id);
       state = state.copyWith(
-        activeFreight:  freight,
-        clearIncoming:  true,
+        activeFreight: freight,
+        clearIncoming: true,
       );
       _stopPolling();
       return true;
@@ -133,10 +136,10 @@ class DriverNotifier extends StateNotifier<DriverState> {
       final updated = await _service.updateStatus(id, status);
       if (status == 'completed') {
         state = state.copyWith(
-          clearActive:    true,
+          clearActive: true,
           completedToday: state.completedToday + 1,
-          earningsToday:  state.earningsToday +
-              (updated.estimatedPrice ?? 0) * 0.925,
+          earningsToday:
+              state.earningsToday + (updated.estimatedPrice ?? 0) * 0.925,
         );
         if (state.isOnline) _startPolling();
       } else {
@@ -152,6 +155,5 @@ class DriverNotifier extends StateNotifier<DriverState> {
   }
 }
 
-final driverProvider =
-    StateNotifierProvider<DriverNotifier, DriverState>(
-        (ref) => DriverNotifier());
+final driverProvider = StateNotifierProvider<DriverNotifier, DriverState>(
+    (ref) => DriverNotifier());

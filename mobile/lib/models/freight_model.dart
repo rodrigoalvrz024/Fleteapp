@@ -46,48 +46,48 @@ class FreightModel {
   });
 
   factory FreightModel.fromJson(Map<String, dynamic> j) => FreightModel(
-    id:                 j['id'],
-    clientId:           j['client_id'],
-    driverId:           j['driver_id'],
-    originAddress:      j['origin_address'],
-    destinationAddress: j['destination_address'],
-    distanceKm:         (j['distance_km'] as num?)?.toDouble(),
-    cargoDescription:   j['cargo_description'],
-    cargoWeightKg:      (j['cargo_weight_kg'] as num).toDouble(),
-    requiresHelpers:    j['requires_helpers'] ?? 0,
-    estimatedPrice:     (j['estimated_price'] as num?)?.toDouble(),
-    finalPrice:         (j['final_price'] as num?)?.toDouble(),
-    status:             j['status'],
-    createdAt:          DateTime.parse(j['created_at']),
-    isUrgent:           j['is_urgent'] ?? false,
-    mode:               j['mode'],
-    clientPays:         (j['client_pays'] as num?)?.toDouble(),
-    driverReceives:     (j['driver_receives'] as num?)?.toDouble(),
-    platformFee:        (j['platform_fee'] as num?)?.toDouble(),
-    helpersCost:        (j['helpers_cost'] as num?)?.toDouble(),
-    scheduledAt:        j['scheduled_at'] != null
-                          ? DateTime.parse(j['scheduled_at'])
-                          : null,
-  );
+        id: j['id'],
+        clientId: j['client_id'],
+        driverId: j['driver_id'],
+        originAddress: j['origin_address'],
+        destinationAddress: j['destination_address'],
+        distanceKm: (j['distance_km'] as num?)?.toDouble(),
+        cargoDescription: j['cargo_description'],
+        cargoWeightKg: (j['cargo_weight_kg'] as num).toDouble(),
+        requiresHelpers: j['requires_helpers'] ?? 0,
+        estimatedPrice: (j['estimated_price'] as num?)?.toDouble(),
+        finalPrice: (j['final_price'] as num?)?.toDouble(),
+        status: j['status'],
+        createdAt: DateTime.parse(j['created_at']),
+        isUrgent: j['is_urgent'] ?? false,
+        mode: j['mode'],
+        clientPays: (j['client_pays'] as num?)?.toDouble(),
+        driverReceives: (j['driver_receives'] as num?)?.toDouble(),
+        platformFee: (j['platform_fee'] as num?)?.toDouble(),
+        helpersCost: (j['helpers_cost'] as num?)?.toDouble(),
+        scheduledAt: j['scheduled_at'] != null
+            ? DateTime.parse(j['scheduled_at'])
+            : null,
+      );
 
   String get statusLabel {
     const labels = {
-      'pending':     'Pendiente',
-      'accepted':    'Aceptado',
+      'pending': 'Pendiente',
+      'accepted': 'Aceptado',
       'in_progress': 'En camino',
-      'completed':   'Completado',
-      'cancelled':   'Cancelado',
+      'completed': 'Completado',
+      'cancelled': 'Cancelado',
     };
     return labels[status] ?? status;
   }
 
   Color get statusColor {
     const Map<String, Color> colors = {
-      'pending':     Color(0xFFC2410C),
-      'accepted':    Color(0xFF1D4ED8),
+      'pending': Color(0xFFC2410C),
+      'accepted': Color(0xFF1D4ED8),
       'in_progress': Color(0xFF0369A1),
-      'completed':   Color(0xFF15803D),
-      'cancelled':   Color(0xFFBE123C),
+      'completed': Color(0xFF15803D),
+      'cancelled': Color(0xFFBE123C),
     };
     return colors[status] ?? const Color(0xFF94A3B8);
   }

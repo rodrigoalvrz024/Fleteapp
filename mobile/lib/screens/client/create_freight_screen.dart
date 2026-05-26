@@ -32,22 +32,21 @@ class CreateFreightScreen extends StatefulWidget {
 
 class _CreateFreightScreenState extends State<CreateFreightScreen>
     with SingleTickerProviderStateMixin {
-
-  final _formKey        = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   final _freightService = FreightService();
-  final _api            = ApiService();
+  final _api = ApiService();
 
-  final _cargoCtrl  = TextEditingController();
+  final _cargoCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _originCtrl = TextEditingController(text: 'Santiago Centro');
-  final _destCtrl   = TextEditingController(text: 'Las Condes');
+  final _destCtrl = TextEditingController(text: 'Las Condes');
 
   // Mapa
   GoogleMapController? _mapController;
   LatLng? _originLatLng = const LatLng(-33.4489, -70.6693);
-  LatLng? _destLatLng   = const LatLng(-33.4700, -70.6500);
+  LatLng? _destLatLng = const LatLng(-33.4700, -70.6500);
   bool _selectingOrigin = true;
-  Set<Marker>   _markers   = {};
+  Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   bool _showMap = false;
 
@@ -56,15 +55,15 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
   late TabController _modeTab;
 
   // Programado
-  DateTime?  _scheduledDate;
+  DateTime? _scheduledDate;
   TimeOfDay? _scheduledTime;
 
   // Peonetas
   int _helpers = 0;
 
   // Estado
-  bool   _loading    = false;
-  bool   _estimating = false;
+  bool _loading = false;
+  bool _estimating = false;
   String? _error;
 
   // Precio
@@ -127,20 +126,21 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
 
   void _initMarkers() {
     _markers = {
-      if (_originLatLng != null) Marker(
-        markerId: const MarkerId('origin'),
-        position: _originLatLng!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen),
-        infoWindow: const InfoWindow(title: 'Origen'),
-      ),
-      if (_destLatLng != null) Marker(
-        markerId: const MarkerId('dest'),
-        position: _destLatLng!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueRed),
-        infoWindow: const InfoWindow(title: 'Destino'),
-      ),
+      if (_originLatLng != null)
+        Marker(
+          markerId: const MarkerId('origin'),
+          position: _originLatLng!,
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(title: 'Origen'),
+        ),
+      if (_destLatLng != null)
+        Marker(
+          markerId: const MarkerId('dest'),
+          position: _destLatLng!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: const InfoWindow(title: 'Destino'),
+        ),
     };
     if (_originLatLng != null && _destLatLng != null) {
       _polylines = {
@@ -167,8 +167,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         );
         setState(() {
           _originLatLng = LatLng(pos.latitude, pos.longitude);
-          _originCtrl.text =
-              'Lat: ${pos.latitude.toStringAsFixed(4)}, '
+          _originCtrl.text = 'Lat: ${pos.latitude.toStringAsFixed(4)}, '
               'Lng: ${pos.longitude.toStringAsFixed(4)}';
         });
         _initMarkers();
@@ -182,13 +181,11 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     setState(() {
       if (_selectingOrigin) {
         _originLatLng = tapped;
-        _originCtrl.text =
-            'Lat: ${tapped.latitude.toStringAsFixed(4)}, '
+        _originCtrl.text = 'Lat: ${tapped.latitude.toStringAsFixed(4)}, '
             'Lng: ${tapped.longitude.toStringAsFixed(4)}';
       } else {
         _destLatLng = tapped;
-        _destCtrl.text =
-            'Lat: ${tapped.latitude.toStringAsFixed(4)}, '
+        _destCtrl.text = 'Lat: ${tapped.latitude.toStringAsFixed(4)}, '
             'Lng: ${tapped.longitude.toStringAsFixed(4)}';
       }
       _initMarkers();
@@ -206,39 +203,39 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     setState(() => _estimating = true);
     try {
       DateTime? scheduledAt;
-      if (!_isUrgent &&
-          _scheduledDate != null &&
-          _scheduledTime != null) {
+      if (!_isUrgent && _scheduledDate != null && _scheduledTime != null) {
         scheduledAt = DateTime(
-          _scheduledDate!.year, _scheduledDate!.month,
-          _scheduledDate!.day, _scheduledTime!.hour,
+          _scheduledDate!.year,
+          _scheduledDate!.month,
+          _scheduledDate!.day,
+          _scheduledTime!.hour,
           _scheduledTime!.minute,
         );
       }
       final res = await _api.get('/freights/estimate', params: {
-        'origin_lat':       _originLatLng!.latitude,
-        'origin_lng':       _originLatLng!.longitude,
-        'destination_lat':  _destLatLng!.latitude,
-        'destination_lng':  _destLatLng!.longitude,
-        'cargo_weight_kg':  weight,
+        'origin_lat': _originLatLng!.latitude,
+        'origin_lng': _originLatLng!.longitude,
+        'destination_lat': _destLatLng!.latitude,
+        'destination_lng': _destLatLng!.longitude,
+        'cargo_weight_kg': weight,
         'requires_helpers': _helpers,
-        'is_urgent':        _isUrgent,
-        if (scheduledAt != null)
-          'scheduled_at': scheduledAt.toIso8601String(),
+        'is_urgent': _isUrgent,
+        if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
       });
       setState(() {
-        _clientPays     = (res.data['client_pays'] as num?)?.toDouble();
+        _clientPays = (res.data['client_pays'] as num?)?.toDouble();
         _driverReceives = (res.data['driver_receives'] as num?)?.toDouble();
-        _distanceKm     = (res.data['distance_km'] as num?)?.toDouble();
-        _durationText   = res.data['duration_text'];
+        _distanceKm = (res.data['distance_km'] as num?)?.toDouble();
+        _durationText = res.data['duration_text'];
       });
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       setState(() => _estimating = false);
     }
   }
 
   Future<void> _pickDate() async {
-    final now  = DateTime.now();
+    final now = DateTime.now();
     final date = await showDatePicker(
       context: context,
       initialDate: now.add(const Duration(hours: 1)),
@@ -246,8 +243,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       lastDate: now.add(const Duration(days: 30)),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-              primary: AppTheme.primary),
+          colorScheme: const ColorScheme.light(primary: AppTheme.primary),
         ),
         child: child!,
       ),
@@ -264,8 +260,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       initialTime: TimeOfDay.now(),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(
-              primary: AppTheme.primary),
+          colorScheme: const ColorScheme.light(primary: AppTheme.primary),
         ),
         child: child!,
       ),
@@ -295,8 +290,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         _destLatLng != null &&
         _cargoCtrl.text.isNotEmpty &&
         (double.tryParse(_weightCtrl.text) ?? 0) > 0 &&
-        (_isUrgent ||
-            (_scheduledDate != null && _scheduledTime != null));
+        (_isUrgent || (_scheduledDate != null && _scheduledTime != null));
   }
 
   Future<void> _submit() async {
@@ -309,30 +303,35 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     }
 
     HapticFeedback.mediumImpact();
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
     try {
       DateTime? scheduledAt;
       if (!_isUrgent) {
         scheduledAt = DateTime(
-          _scheduledDate!.year, _scheduledDate!.month,
-          _scheduledDate!.day, _scheduledTime!.hour,
+          _scheduledDate!.year,
+          _scheduledDate!.month,
+          _scheduledDate!.day,
+          _scheduledTime!.hour,
           _scheduledTime!.minute,
         );
       }
 
       await _freightService.createFreight(
-        originAddress:      _originCtrl.text,
-        originLat:          _originLatLng!.latitude,
-        originLng:          _originLatLng!.longitude,
+        originAddress: _originCtrl.text,
+        originLat: _originLatLng!.latitude,
+        originLng: _originLatLng!.longitude,
         destinationAddress: _destCtrl.text,
-        destinationLat:     _destLatLng!.latitude,
-        destinationLng:     _destLatLng!.longitude,
-        cargoDescription:   _cargoCtrl.text,
-        cargoWeightKg:      double.parse(_weightCtrl.text),
-        requiresHelpers:    _helpers,
-        isUrgent:           _isUrgent,
-        scheduledAt:        scheduledAt,
+        destinationLat: _destLatLng!.latitude,
+        destinationLng: _destLatLng!.longitude,
+        cargoDescription: _cargoCtrl.text,
+        cargoWeightKg: double.parse(_weightCtrl.text),
+        requiresHelpers: _helpers,
+        isUrgent: _isUrgent,
+        scheduledAt: scheduledAt,
       );
 
       if (!mounted) return;
@@ -342,8 +341,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
             : '📅 Flete programado correctamente'),
         backgroundColor: AppTheme.success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ));
       context.go('/client/freights');
     } catch (_) {
@@ -374,7 +372,6 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
-
             // ── 1. Tipo de flete ─────────────────────────
             _ModeSelector(controller: _modeTab),
             const SizedBox(height: 16),
@@ -418,7 +415,8 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                 Padding(
                   padding: const EdgeInsets.only(left: 20),
                   child: Container(
-                    height: 20, width: 1,
+                    height: 20,
+                    width: 1,
                     color: AppTheme.slate200,
                   ),
                 ),
@@ -450,10 +448,8 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                         polylines: _polylines,
                         onMapCreated: (c) => _mapController = c,
                         onTap: _onMapTap,
-                        onToggle: (v) =>
-                            setState(() => _selectingOrigin = v),
-                        onClose: () =>
-                            setState(() => _showMap = false),
+                        onToggle: (v) => setState(() => _selectingOrigin = v),
+                        onClose: () => setState(() => _showMap = false),
                       ),
                       const SizedBox(height: 12),
                     ])
@@ -468,19 +464,18 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                 TextFormField(
                   controller: _cargoCtrl,
                   maxLines: 3,
-                  style: const TextStyle(
-                    fontSize: 14, color: AppTheme.midnight),
+                  style:
+                      const TextStyle(fontSize: 14, color: AppTheme.midnight),
                   decoration: const InputDecoration(
                     hintText:
                         'Ej: Muebles de living, cajas de ropa, electrodomésticos...',
-                    hintStyle: TextStyle(
-                        fontSize: 13, color: AppTheme.slate400),
+                    hintStyle:
+                        TextStyle(fontSize: 13, color: AppTheme.slate400),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                   ),
-                  validator: (v) => (v?.isNotEmpty ?? false)
-                      ? null
-                      : 'Describe la carga',
+                  validator: (v) =>
+                      (v?.isNotEmpty ?? false) ? null : 'Describe la carga',
                   onChanged: (_) => setState(() {}),
                 ),
                 const Divider(height: 20),
@@ -492,25 +487,22 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                     child: TextFormField(
                       controller: _weightCtrl,
                       keyboardType:
-                          const TextInputType.numberWithOptions(
-                              decimal: true),
+                          const TextInputType.numberWithOptions(decimal: true),
                       style: const TextStyle(
                           fontSize: 14, color: AppTheme.midnight),
                       decoration: const InputDecoration(
                         hintText: 'Peso en kg (ej: 150)',
-                        hintStyle: TextStyle(
-                            fontSize: 13, color: AppTheme.slate400),
+                        hintStyle:
+                            TextStyle(fontSize: 13, color: AppTheme.slate400),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
                         suffixText: 'kg',
-                        suffixStyle: TextStyle(
-                            color: AppTheme.slate400, fontSize: 13),
+                        suffixStyle:
+                            TextStyle(color: AppTheme.slate400, fontSize: 13),
                       ),
                       validator: (v) {
                         final n = double.tryParse(v ?? '');
-                        return (n != null && n > 0)
-                            ? null
-                            : 'Ingresa el peso';
+                        return (n != null && n > 0) ? null : 'Ingresa el peso';
                       },
                       onChanged: (_) => _estimatePrice(),
                     ),
@@ -565,17 +557,17 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                 child: Padding(
                   padding: EdgeInsets.all(12),
                   child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppTheme.primary),
+                      strokeWidth: 2, color: AppTheme.primary),
                 ),
               )
             else if (_clientPays != null)
               _PriceCard(
-                clientPays:     _clientPays!,
+                clientPays: _clientPays!,
                 driverReceives: _driverReceives,
-                distanceKm:     _distanceKm,
-                durationText:   _durationText,
-                isUrgent:       _isUrgent,
-                fmt:            fmt,
+                distanceKm: _distanceKm,
+                durationText: _durationText,
+                isUrgent: _isUrgent,
+                fmt: fmt,
               ),
 
             // ── Error ────────────────────────────────────
@@ -598,7 +590,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                   Expanded(
                     child: Text(_error!,
                         style: const TextStyle(
-                          color: AppTheme.error, fontSize: 13)),
+                            color: AppTheme.error, fontSize: 13)),
                   ),
                 ]),
               ),
@@ -610,19 +602,18 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       // ── CTA sticky ───────────────────────────────────
       bottomNavigationBar: Container(
         padding: EdgeInsets.fromLTRB(
-            16, 12, 16,
-            MediaQuery.of(context).padding.bottom + 12),
-        decoration: BoxDecoration(
+            16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+        decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(
             top: BorderSide(color: AppTheme.slate200, width: 0.5),
           ),
         ),
         child: _SubmitButton(
-          isUrgent:  _isUrgent,
+          isUrgent: _isUrgent,
           canSubmit: _canSubmit,
-          loading:   _loading,
-          onTap:     _submit,
+          loading: _loading,
+          onTap: _submit,
         ),
       ),
     );
@@ -637,57 +628,57 @@ class _ModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 48,
-    decoration: BoxDecoration(
-      color: AppTheme.slate100,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    padding: const EdgeInsets.all(4),
-    child: TabBar(
-      controller: controller,
-      indicator: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(9),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      indicatorSize:    TabBarIndicatorSize.tab,
-      dividerColor:     Colors.transparent,
-      labelColor:       AppTheme.midnight,
-      unselectedLabelColor: AppTheme.slate400,
-      labelStyle: const TextStyle(
-          fontSize: 13, fontWeight: FontWeight.w600),
-      unselectedLabelStyle: const TextStyle(
-          fontSize: 13, fontWeight: FontWeight.w400),
-      tabs: const [
-        Tab(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.calendar_today_rounded, size: 14),
-              SizedBox(width: 6),
-              Text('Programado'),
+        height: 48,
+        decoration: BoxDecoration(
+          color: AppTheme.slate100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: TabBar(
+          controller: controller,
+          indicator: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: Colors.transparent,
+          labelColor: AppTheme.midnight,
+          unselectedLabelColor: AppTheme.slate400,
+          labelStyle:
+              const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          unselectedLabelStyle:
+              const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
+          tabs: const [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.calendar_today_rounded, size: 14),
+                  SizedBox(width: 6),
+                  Text('Programado'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.flash_on_rounded, size: 14),
+                  SizedBox(width: 6),
+                  Text('Urgente'),
+                ],
+              ),
+            ),
+          ],
         ),
-        Tab(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.flash_on_rounded, size: 14),
-              SizedBox(width: 6),
-              Text('Urgente'),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
+      );
 }
 
 class _TarifaBanner extends StatelessWidget {
@@ -696,44 +687,41 @@ class _TarifaBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(
-        horizontal: 14, vertical: 11),
-    decoration: BoxDecoration(
-      color: isNight
-          ? const Color(0xFF1E1B4B).withValues(alpha: 0.05)
-          : const Color(0xFFFFF7ED),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: isNight
-            ? Colors.deepPurple.withValues(alpha: 0.2)
-            : AppTheme.urgent.withValues(alpha: 0.25),
-        width: 0.5,
-      ),
-    ),
-    child: Row(children: [
-      Icon(
-        isNight ? Icons.nightlight_round : Icons.wb_sunny_rounded,
-        size: 16,
-        color: isNight
-            ? Colors.deepPurple.shade300
-            : AppTheme.urgent,
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Text(
-          isNight
-              ? 'Tarifa nocturna (21:00 - 08:00) · Mínimo \$40.000'
-              : 'Tarifa diurna (08:00 - 21:00) · Mínimo \$30.000',
-          style: TextStyle(
-            fontSize: 12,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: isNight
+              ? const Color(0xFF1E1B4B).withValues(alpha: 0.05)
+              : const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
             color: isNight
-                ? Colors.deepPurple.shade400
-                : const Color(0xFFB45309),
+                ? Colors.deepPurple.withValues(alpha: 0.2)
+                : AppTheme.urgent.withValues(alpha: 0.25),
+            width: 0.5,
           ),
         ),
-      ),
-    ]),
-  );
+        child: Row(children: [
+          Icon(
+            isNight ? Icons.nightlight_round : Icons.wb_sunny_rounded,
+            size: 16,
+            color: isNight ? Colors.deepPurple.shade300 : AppTheme.urgent,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isNight
+                  ? 'Tarifa nocturna (21:00 - 08:00) · Mínimo \$40.000'
+                  : 'Tarifa diurna (08:00 - 21:00) · Mínimo \$30.000',
+              style: TextStyle(
+                fontSize: 12,
+                color: isNight
+                    ? Colors.deepPurple.shade400
+                    : const Color(0xFFB45309),
+              ),
+            ),
+          ),
+        ]),
+      );
 }
 
 class _SectionCard extends StatelessWidget {
@@ -748,31 +736,31 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppTheme.slate200, width: 0.5),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [
-          Icon(icon, size: 14, color: AppTheme.slate400),
-          const SizedBox(width: 6),
-          Text(title,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.slate400,
-                letterSpacing: 0.5,
-              )),
-        ]),
-        const SizedBox(height: 12),
-        child,
-      ],
-    ),
-  );
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, size: 14, color: AppTheme.slate400),
+              const SizedBox(width: 6),
+              Text(title,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.slate400,
+                    letterSpacing: 0.5,
+                  )),
+            ]),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      );
 }
 
 class _DateTimePicker extends StatelessWidget {
@@ -787,44 +775,38 @@ class _DateTimePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isSet
-            ? AppTheme.primary.withValues(alpha: 0.05)
-            : const Color(0xFFF4F6F8),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isSet ? AppTheme.primary.withValues(alpha: 0.3)
-              : AppTheme.slate200,
-          width: 0.8,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isSet
+                ? AppTheme.primary.withValues(alpha: 0.05)
+                : const Color(0xFFF4F6F8),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSet
+                  ? AppTheme.primary.withValues(alpha: 0.3)
+                  : AppTheme.slate200,
+              width: 0.8,
+            ),
+          ),
+          child: Row(children: [
+            Icon(Icons.calendar_month_rounded,
+                size: 18, color: isSet ? AppTheme.primary : AppTheme.slate400),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isSet ? AppTheme.midnight : AppTheme.slate400,
+                    fontWeight: isSet ? FontWeight.w500 : FontWeight.normal,
+                  )),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 16, color: isSet ? AppTheme.primary : AppTheme.slate400),
+          ]),
         ),
-      ),
-      child: Row(children: [
-        Icon(Icons.calendar_month_rounded,
-            size: 18,
-            color: isSet ? AppTheme.primary : AppTheme.slate400),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(label,
-              style: TextStyle(
-                fontSize: 14,
-                color: isSet
-                    ? AppTheme.midnight
-                    : AppTheme.slate400,
-                fontWeight: isSet
-                    ? FontWeight.w500
-                    : FontWeight.normal,
-              )),
-        ),
-        Icon(Icons.chevron_right_rounded,
-            size: 16,
-            color: isSet ? AppTheme.primary : AppTheme.slate400),
-      ]),
-    ),
-  );
+      );
 }
 
 class _LocationRow extends StatelessWidget {
@@ -844,47 +826,46 @@ class _LocationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Row(children: [
-      Container(
-        width: 32, height: 32,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.10),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, size: 16, color: color),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.slate400,
-                  letterSpacing: 0.4,
-                )),
-            const SizedBox(height: 2),
-            Text(
-              value.isEmpty ? 'Toca para seleccionar' : value,
-              style: TextStyle(
-                fontSize: 13,
-                color: isSet
-                    ? AppTheme.midnight
-                    : AppTheme.slate400,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+        onTap: onTap,
+        child: Row(children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
             ),
-          ],
-        ),
-      ),
-      Icon(Icons.edit_location_alt_outlined,
-          size: 16, color: AppTheme.slate400),
-    ]),
-  );
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.slate400,
+                      letterSpacing: 0.4,
+                    )),
+                const SizedBox(height: 2),
+                Text(
+                  value.isEmpty ? 'Toca para seleccionar' : value,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isSet ? AppTheme.midnight : AppTheme.slate400,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.edit_location_alt_outlined,
+              size: 16, color: AppTheme.slate400),
+        ]),
+      );
 }
 
 class _MapSection extends StatelessWidget {
@@ -910,110 +891,102 @@ class _MapSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 240,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppTheme.slate200, width: 0.5),
-    ),
-    clipBehavior: Clip.hardEdge,
-    child: Stack(children: [
-      GoogleMap(
-        initialCameraPosition: CameraPosition(
-            target: initialPos, zoom: 13),
-        onMapCreated: onMapCreated,
-        onTap: onTap,
-        markers: markers,
-        polylines: polylines,
-        myLocationEnabled: true,
-        myLocationButtonEnabled: false,
-        zoomControlsEnabled: false,
-        mapToolbarEnabled: false,
-      ),
-      // Toggle
-      Positioned(
-        top: 10, left: 10, right: 10,
-        child: Row(children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onToggle(true),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 8),
-                decoration: BoxDecoration(
-                  color: selectingOrigin
-                      ? AppTheme.success
-                      : Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4)
-                  ],
-                ),
-                child: Text('Marcar origen',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+        height: 240,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(children: [
+          GoogleMap(
+            initialCameraPosition: CameraPosition(target: initialPos, zoom: 13),
+            onMapCreated: onMapCreated,
+            onTap: onTap,
+            markers: markers,
+            polylines: polylines,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+          ),
+          // Toggle
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Row(children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onToggle(true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
                       color: selectingOrigin
-                          ? Colors.white
-                          : AppTheme.success,
-                    )),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onToggle(false),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 8),
-                decoration: BoxDecoration(
-                  color: !selectingOrigin
-                      ? AppTheme.error
-                      : Colors.white.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 4)
-                  ],
+                          ? AppTheme.success
+                          : Colors.white.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 4)
+                      ],
+                    ),
+                    child: Text('Marcar origen',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              selectingOrigin ? Colors.white : AppTheme.success,
+                        )),
+                  ),
                 ),
-                child: Text('Marcar destino',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onToggle(false),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
                       color: !selectingOrigin
-                          ? Colors.white
-                          : AppTheme.error,
-                    )),
+                          ? AppTheme.error
+                          : Colors.white.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 4)
+                      ],
+                    ),
+                    child: Text('Marcar destino',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              !selectingOrigin ? Colors.white : AppTheme.error,
+                        )),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: onClose,
-            child: Container(
-              width: 32, height: 32,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.92),
-                shape: BoxShape.circle,
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4)
-                ],
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onClose,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.92),
+                    shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black12, blurRadius: 4)
+                    ],
+                  ),
+                  child: const Icon(Icons.close_rounded,
+                      size: 16, color: AppTheme.midnight),
+                ),
               ),
-              child: const Icon(Icons.close_rounded,
-                  size: 16, color: AppTheme.midnight),
-            ),
+            ]),
           ),
         ]),
-      ),
-    ]),
-  );
+      );
 }
 
 class _Counter extends StatelessWidget {
@@ -1028,55 +1001,56 @@ class _Counter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      GestureDetector(
-        onTap: onDecrement,
-        child: Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: onDecrement != null
-                ? AppTheme.slate100
-                : const Color(0xFFF4F4F4),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: AppTheme.slate200, width: 0.5),
-          ),
-          child: Icon(Icons.remove_rounded,
-              size: 16,
-              color: onDecrement != null
-                  ? AppTheme.midnight
-                  : AppTheme.slate400),
-        ),
-      ),
-      SizedBox(
-        width: 36,
-        child: Text('$value',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.midnight,
-            )),
-      ),
-      GestureDetector(
-        onTap: onIncrement,
-        child: Container(
-          width: 36, height: 36,
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: AppTheme.primary.withValues(alpha: 0.3),
-              width: 0.5,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: onDecrement,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: onDecrement != null
+                    ? AppTheme.slate100
+                    : const Color(0xFFF4F4F4),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.slate200, width: 0.5),
+              ),
+              child: Icon(Icons.remove_rounded,
+                  size: 16,
+                  color: onDecrement != null
+                      ? AppTheme.midnight
+                      : AppTheme.slate400),
             ),
           ),
-          child: const Icon(Icons.add_rounded,
-              size: 16, color: AppTheme.primary),
-        ),
-      ),
-    ],
-  );
+          SizedBox(
+            width: 36,
+            child: Text('$value',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.midnight,
+                )),
+          ),
+          GestureDetector(
+            onTap: onIncrement,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.3),
+                  width: 0.5,
+                ),
+              ),
+              child: const Icon(Icons.add_rounded,
+                  size: 16, color: AppTheme.primary),
+            ),
+          ),
+        ],
+      );
 }
 
 class _PriceCard extends StatelessWidget {
@@ -1097,84 +1071,82 @@ class _PriceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: AppTheme.success.withValues(alpha: 0.3),
-        width: 0.8,
-      ),
-    ),
-    child: Column(children: [
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Total a pagar',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.slate400,
-                      fontWeight: FontWeight.w500,
-                    )),
-                const SizedBox(height: 2),
-                Text('\$${fmt.format(clientPays)} CLP',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.midnight,
-                    )),
-              ],
-            ),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppTheme.success.withValues(alpha: 0.3),
+            width: 0.8,
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isUrgent
-                  ? AppTheme.urgent.withValues(alpha: 0.1)
-                  : AppTheme.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              isUrgent ? '⚡ Urgente' : '📅 Programado',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isUrgent
-                    ? AppTheme.urgent
-                    : AppTheme.primary,
+        ),
+        child: Column(children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total a pagar',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.slate400,
+                          fontWeight: FontWeight.w500,
+                        )),
+                    const SizedBox(height: 2),
+                    Text('\$${fmt.format(clientPays)} CLP',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.midnight,
+                        )),
+                  ],
+                ),
               ),
-            ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isUrgent
+                      ? AppTheme.urgent.withValues(alpha: 0.1)
+                      : AppTheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isUrgent ? '⚡ Urgente' : '📅 Programado',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isUrgent ? AppTheme.urgent : AppTheme.primary,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      const Divider(height: 16),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          if (distanceKm != null)
-            _PriceMeta(
-              icon: Icons.route_rounded,
-              label: '${distanceKm!.toStringAsFixed(1)} km',
-            ),
-          if (durationText != null)
-            _PriceMeta(
-              icon: Icons.schedule_rounded,
-              label: durationText!,
-            ),
-          if (driverReceives != null)
-            _PriceMeta(
-              icon: Icons.person_outline_rounded,
-              label: 'Conductor: \$${fmt.format(driverReceives)}',
-            ),
-        ],
-      ),
-    ]),
-  );
+          const Divider(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (distanceKm != null)
+                _PriceMeta(
+                  icon: Icons.route_rounded,
+                  label: '${distanceKm!.toStringAsFixed(1)} km',
+                ),
+              if (durationText != null)
+                _PriceMeta(
+                  icon: Icons.schedule_rounded,
+                  label: durationText!,
+                ),
+              if (driverReceives != null)
+                _PriceMeta(
+                  icon: Icons.person_outline_rounded,
+                  label: 'Conductor: \$${fmt.format(driverReceives)}',
+                ),
+            ],
+          ),
+        ]),
+      );
 }
 
 class _PriceMeta extends StatelessWidget {
@@ -1184,15 +1156,14 @@ class _PriceMeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(icon, size: 12, color: AppTheme.slate400),
-      const SizedBox(width: 4),
-      Text(label,
-          style: const TextStyle(
-            fontSize: 11, color: AppTheme.slate400)),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppTheme.slate400),
+          const SizedBox(width: 4),
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: AppTheme.slate400)),
+        ],
+      );
 }
 
 class _SubmitButton extends StatefulWidget {
@@ -1211,18 +1182,16 @@ class _SubmitButton extends StatefulWidget {
 
 class _SubmitButtonState extends State<_SubmitButton>
     with SingleTickerProviderStateMixin {
-
   late AnimationController _ctrl;
-  late Animation<double>   _scale;
+  late Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _ctrl  = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 120));
-    _scale = Tween(begin: 1.0, end: 0.97).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 120));
+    _scale = Tween(begin: 1.0, end: 0.97)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
   }
 
   @override
@@ -1233,76 +1202,83 @@ class _SubmitButtonState extends State<_SubmitButton>
 
   @override
   Widget build(BuildContext context) => ScaleTransition(
-    scale: _scale,
-    child: GestureDetector(
-      onTapDown:   widget.canSubmit && !widget.loading
-          ? (_) => _ctrl.forward() : null,
-      onTapUp:     widget.canSubmit && !widget.loading
-          ? (_) { _ctrl.reverse(); widget.onTap(); } : null,
-      onTapCancel: () => _ctrl.reverse(),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: 52,
-        decoration: BoxDecoration(
-          gradient: widget.canSubmit
-              ? LinearGradient(
-                  colors: widget.isUrgent
-                      ? [const Color(0xFFFF8C00),
-                         const Color(0xFFF97316)]
-                      : [const Color(0xFF4F94F8),
-                         const Color(0xFF2563EB)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
+        scale: _scale,
+        child: GestureDetector(
+          onTapDown: widget.canSubmit && !widget.loading
+              ? (_) => _ctrl.forward()
               : null,
-          color: widget.canSubmit ? null : AppTheme.slate200,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: widget.canSubmit ? [
-            BoxShadow(
-              color: (widget.isUrgent
-                  ? AppTheme.urgent
-                  : AppTheme.primary).withValues(alpha: 0.28),
-              blurRadius: 18,
-              offset: const Offset(0, 7),
-            ),
-          ] : [],
-        ),
-        child: Center(
-          child: widget.loading
-              ? const SizedBox(
-                  height: 20, width: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5))
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      widget.isUrgent
-                          ? Icons.flash_on_rounded
-                          : Icons.check_circle_outline_rounded,
-                      color: widget.canSubmit
-                          ? Colors.white
-                          : AppTheme.slate400,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      widget.isUrgent
-                          ? 'Solicitar flete urgente'
-                          : 'Confirmar flete',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: widget.canSubmit
-                            ? Colors.white
-                            : AppTheme.slate400,
-                        letterSpacing: 0.2,
+          onTapUp: widget.canSubmit && !widget.loading
+              ? (_) {
+                  _ctrl.reverse();
+                  widget.onTap();
+                }
+              : null,
+          onTapCancel: () => _ctrl.reverse(),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: widget.canSubmit
+                  ? LinearGradient(
+                      colors: widget.isUrgent
+                          ? [const Color(0xFFFF8C00), const Color(0xFFF97316)]
+                          : [const Color(0xFF4F94F8), const Color(0xFF2563EB)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+              color: widget.canSubmit ? null : AppTheme.slate200,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: widget.canSubmit
+                  ? [
+                      BoxShadow(
+                        color: (widget.isUrgent
+                                ? AppTheme.urgent
+                                : AppTheme.primary)
+                            .withValues(alpha: 0.28),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
                       ),
+                    ]
+                  : [],
+            ),
+            child: Center(
+              child: widget.loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.5))
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          widget.isUrgent
+                              ? Icons.flash_on_rounded
+                              : Icons.check_circle_outline_rounded,
+                          color: widget.canSubmit
+                              ? Colors.white
+                              : AppTheme.slate400,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.isUrgent
+                              ? 'Solicitar flete urgente'
+                              : 'Confirmar flete',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: widget.canSubmit
+                                ? Colors.white
+                                : AppTheme.slate400,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 }

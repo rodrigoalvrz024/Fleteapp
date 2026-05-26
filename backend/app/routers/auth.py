@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -10,6 +10,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.database import get_db
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User, UserRole
+from app.models.user_consent import UserConsent
 from app.schemas.user import (
     MessageResponse,
     PasswordResetConfirm,
@@ -32,7 +33,20 @@ def _is_expired(expires_at: datetime, now: datetime) -> bool:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-def register(data: UserCreate, db: Session = Depends(get_db)):
+def register(
+    data: UserCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not data.accepts_terms:
+        raise HTTPException(status_code=400, detail="Debes aceptar los Términos y Condiciones")
+    if not data.accepts_privacy:
+        raise HTTPException(status_code=400, detail="Debes aceptar la Política de Privacidad")
+    if data.role.value == UserRole.driver.value and not data.accepts_driver_documents:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes autorizar la revisión de documentos de conductor",
+        )
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="El email ya está registrado")
     if db.query(User).filter(User.phone == data.phone).first():
@@ -49,8 +63,48 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
+    _record_registration_consents(db, user, data, request)
+
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+
+
+def _record_registration_consents(
+    db: Session,
+    user: User,
+    data: UserCreate,
+    request: Request,
+) -> None:
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    consents = [
+        UserConsent(
+            user_id=user.id,
+            consent_type="terms",
+            version=settings.TERMS_VERSION,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        ),
+        UserConsent(
+            user_id=user.id,
+            consent_type="privacy",
+            version=settings.PRIVACY_VERSION,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        ),
+    ]
+    if data.role.value == UserRole.driver.value and data.accepts_driver_documents:
+        consents.append(
+            UserConsent(
+                user_id=user.id,
+                consent_type="driver_document_verification",
+                version=settings.PRIVACY_VERSION,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        )
+    db.add_all(consents)
+    db.commit()
 
 
 @router.post("/login", response_model=TokenResponse)

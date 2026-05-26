@@ -18,6 +18,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _passCtrl = TextEditingController();
   String _role = 'client';
   bool _obscure = true;
+  bool _acceptTerms = false;
+  bool _acceptPrivacy = false;
+  bool _acceptDriverDocuments = false;
 
   @override
   void dispose() {
@@ -30,15 +33,32 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_acceptTerms || !_acceptPrivacy) {
+      _showError('Debes aceptar los terminos y la politica de privacidad.');
+      return;
+    }
+    if (_role == 'driver' && !_acceptDriverDocuments) {
+      _showError('Debes autorizar la revision de documentos de conductor.');
+      return;
+    }
     final ok = await ref.read(authProvider.notifier).register(
           _emailCtrl.text.trim(),
           _phoneCtrl.text.trim(),
           _nameCtrl.text.trim(),
           _passCtrl.text,
           _role,
+          acceptsTerms: _acceptTerms,
+          acceptsPrivacy: _acceptPrivacy,
+          acceptsDriverDocuments: _role == 'driver' && _acceptDriverDocuments,
         );
     if (!mounted) return;
-    if (ok) context.go(_role == 'driver' ? '/driver' : '/client');
+    if (ok) context.go(_role == 'driver' ? '/driver/onboarding' : '/client');
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+    );
   }
 
   @override
@@ -120,7 +140,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           icon: Icons.person,
                           value: 'client',
                           selected: _role == 'client',
-                          onTap: () => setState(() => _role = 'client'))),
+                          onTap: () => setState(() {
+                                _role = 'client';
+                                _acceptDriverDocuments = false;
+                              }))),
                   const SizedBox(width: 12),
                   Expanded(
                       child: _RoleCard(
@@ -131,6 +154,31 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           onTap: () => setState(() => _role = 'driver'))),
                 ],
               ),
+              const SizedBox(height: 20),
+              _ConsentRow(
+                value: _acceptTerms,
+                onChanged: (value) =>
+                    setState(() => _acceptTerms = value ?? false),
+                text: 'Acepto los terminos y condiciones',
+                linkText: 'Ver',
+                onLink: () => context.push('/legal/terms'),
+              ),
+              _ConsentRow(
+                value: _acceptPrivacy,
+                onChanged: (value) =>
+                    setState(() => _acceptPrivacy = value ?? false),
+                text: 'Acepto la politica de privacidad',
+                linkText: 'Ver',
+                onLink: () => context.push('/legal/privacy'),
+              ),
+              if (_role == 'driver')
+                _ConsentRow(
+                  value: _acceptDriverDocuments,
+                  onChanged: (value) =>
+                      setState(() => _acceptDriverDocuments = value ?? false),
+                  text:
+                      'Autorizo a FleteApp a revisar mi licencia y documentos del vehiculo para validar mi cuenta',
+                ),
               const SizedBox(height: 28),
               ElevatedButton(
                 onPressed: auth.isLoading ? null : _register,
@@ -189,6 +237,81 @@ class _RoleCard extends StatelessWidget {
                       color: selected ? Colors.white : AppTheme.textPrimary)),
             ],
           ),
+        ),
+      );
+}
+
+class _ConsentRow extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  final String text;
+  final String? linkText;
+  final VoidCallback? onLink;
+
+  const _ConsentRow({
+    required this.value,
+    required this.onChanged,
+    required this.text,
+    this.linkText,
+    this.onLink,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: Checkbox(
+                value: value,
+                onChanged: onChanged,
+                activeColor: AppTheme.primary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (linkText != null && onLink != null)
+                      InkWell(
+                        onTap: onLink,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 1,
+                          ),
+                          child: Text(
+                            linkText!,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
 }

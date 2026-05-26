@@ -59,6 +59,10 @@ class ApiService {
   }
 
   Future<Response> uploadForm(String path, FormData data) async {
-  return await _dio.post(path, data: data);
+    return await _dio.post(
+      path,
+      data: data,
+      options: Options(contentType: 'multipart/form-data'),
+    );
   }
 }

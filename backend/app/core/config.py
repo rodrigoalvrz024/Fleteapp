@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "FleteApp <onboarding@resend.dev>"
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
+    TERMS_VERSION: str = "2026-05-26"
+    PRIVACY_VERSION: str = "2026-05-26"
 
     class Config:
         env_file = ".env"

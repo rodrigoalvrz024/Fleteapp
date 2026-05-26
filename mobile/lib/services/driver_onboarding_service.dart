@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
 import 'api_service.dart';
 import '../models/driver_model.dart';
 import '../core/constants/api_constants.dart';
@@ -12,28 +12,35 @@ class DriverOnboardingService {
     return DriverModel.fromJson(res.data);
   }
 
-  Future<DriverModel> registerDriver() async {
-    final res = await _api.post(ApiConstants.driverReg, {});
+  Future<DriverModel> registerDriver({
+    required String rut,
+    required String licenseNumber,
+    required DateTime licenseExpiry,
+  }) async {
+    final res = await _api.post(ApiConstants.driverReg, {
+      'rut': rut,
+      'license_number': licenseNumber,
+      'license_expiry': licenseExpiry.toIso8601String(),
+    });
     return DriverModel.fromJson(res.data);
   }
 
-  Future<String> uploadImage(File file, String field) async {
-    final name     = file.path.split('/').last;
+  Future<String> uploadImage(XFile file, String field) async {
+    final bytes = await file.readAsBytes();
     final formData = FormData.fromMap({
-      field: await MultipartFile.fromFile(
-        file.path,
-        filename: name,
+      field: MultipartFile.fromBytes(
+        bytes,
+        filename: file.name,
       ),
     });
-    final res = await ApiService().uploadForm(
-        '${ApiConstants.driverMe}/upload', formData);
+    final res = await ApiService()
+        .uploadForm('${ApiConstants.driverMe}/upload', formData);
     return res.data['url'] as String;
   }
 
   Future<DriverModel> addVehicle(VehicleModel vehicle) async {
-    final res = await _api.post(
-        ApiConstants.driverVehicle, vehicle.toJson());
-    return DriverModel.fromJson(res.data);
+    await _api.post(ApiConstants.driverVehicle, vehicle.toJson());
+    return getMyDriver();
   }
 
   Future<DriverModel> submitForReview() async {

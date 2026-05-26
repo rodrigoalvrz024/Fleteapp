@@ -4,55 +4,55 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // ── Paleta principal ────────────────────────────────────
-  static const Color primary     = Color(0xFF3B82F6);  // azul moderno
+  static const Color primary = Color(0xFF3B82F6); // azul moderno
   static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color accent      = Color(0xFF06B6D4);  // cyan
-  static const Color urgent      = Color(0xFFF97316);  // naranja urgente
-  static const Color success     = Color(0xFF10B981);
-  static const Color error       = Color(0xFFEF4444);
-  static const Color warning     = Color(0xFFF59E0B);
+  static const Color accent = Color(0xFF06B6D4); // cyan
+  static const Color urgent = Color(0xFFF97316); // naranja urgente
+  static const Color success = Color(0xFF10B981);
+  static const Color error = Color(0xFFEF4444);
+  static const Color warning = Color(0xFFF59E0B);
 
   // ── Neutros ─────────────────────────────────────────────
-  static const Color midnight    = Color(0xFF0F172A);  // texto principal
-  static const Color slate600    = Color(0xFF475569);
-  static const Color slate400    = Color(0xFF94A3B8);
-  static const Color slate200    = Color(0xFFE2E8F0);
-  static const Color slate100    = Color(0xFFF1F5F9);
-  static const Color background  = Color(0xFFF8FAFC);
-  static const Color surface     = Color(0xFFFFFFFF);
+  static const Color midnight = Color(0xFF0F172A); // texto principal
+  static const Color slate600 = Color(0xFF475569);
+  static const Color slate400 = Color(0xFF94A3B8);
+  static const Color slate200 = Color(0xFFE2E8F0);
+  static const Color slate100 = Color(0xFFF1F5F9);
+  static const Color background = Color(0xFFF8FAFC);
+  static const Color surface = Color(0xFFFFFFFF);
 
   // ── Alias para compatibilidad con código existente ──────
-  static const Color textPrimary   = midnight;
+  static const Color textPrimary = midnight;
   static const Color textSecondary = slate400;
-  static const Color secondary     = accent;
+  static const Color secondary = accent;
 
   // ── Status colors ───────────────────────────────────────
   static Color statusColor(String status) => switch (status) {
-    'pending'     => const Color(0xFFC2410C),
-    'accepted'    => const Color(0xFF1D4ED8),
-    'in_progress' => const Color(0xFF0369A1),
-    'completed'   => const Color(0xFF15803D),
-    'cancelled'   => const Color(0xFFBE123C),
-    _             => slate400,
-  };
+        'pending' => const Color(0xFFC2410C),
+        'accepted' => const Color(0xFF1D4ED8),
+        'in_progress' => const Color(0xFF0369A1),
+        'completed' => const Color(0xFF15803D),
+        'cancelled' => const Color(0xFFBE123C),
+        _ => slate400,
+      };
 
   static Color statusBg(String status) => switch (status) {
-    'pending'     => const Color(0xFFFFF7ED),
-    'accepted'    => const Color(0xFFEFF6FF),
-    'in_progress' => const Color(0xFFE0F2FE),
-    'completed'   => const Color(0xFFF0FDF4),
-    'cancelled'   => const Color(0xFFFFF1F2),
-    _             => slate100,
-  };
+        'pending' => const Color(0xFFFFF7ED),
+        'accepted' => const Color(0xFFEFF6FF),
+        'in_progress' => const Color(0xFFE0F2FE),
+        'completed' => const Color(0xFFF0FDF4),
+        'cancelled' => const Color(0xFFFFF1F2),
+        _ => slate100,
+      };
 
   static String statusLabel(String status) => switch (status) {
-    'pending'     => 'Pendiente',
-    'accepted'    => 'Aceptado',
-    'in_progress' => 'En camino',
-    'completed'   => 'Completado',
-    'cancelled'   => 'Cancelado',
-    _             => status,
-  };
+        'pending' => 'Pendiente',
+        'accepted' => 'Aceptado',
+        'in_progress' => 'En camino',
+        'completed' => 'Completado',
+        'cancelled' => 'Cancelado',
+        _ => status,
+      };
 
   // ── Tema principal ──────────────────────────────────────
   static ThemeData get light {
@@ -89,11 +89,11 @@ class AppTheme {
           backgroundColor: primary,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 0,
-          textStyle: GoogleFonts.inter(
-              fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle:
+              GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -101,10 +101,10 @@ class AppTheme {
           foregroundColor: primary,
           minimumSize: const Size(double.infinity, 52),
           side: const BorderSide(color: slate200),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.inter(
-              fontSize: 15, fontWeight: FontWeight.w500),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle:
+              GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -126,12 +126,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: error, width: 0.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
-        labelStyle: GoogleFonts.inter(
-            fontSize: 14, color: slate400),
-        hintStyle: GoogleFonts.inter(
-            fontSize: 14, color: slate400),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        labelStyle: GoogleFonts.inter(fontSize: 14, color: slate400),
+        hintStyle: GoogleFonts.inter(fontSize: 14, color: slate400),
       ),
       cardTheme: CardThemeData(
         color: surface,
@@ -154,18 +152,19 @@ class AppTheme {
   static BoxDecoration cardDecoration({
     double radius = 16,
     Color? borderColor,
-  }) => BoxDecoration(
-    color: surface,
-    borderRadius: BorderRadius.circular(radius),
-    border: Border.all(
-      color: borderColor ?? slate200,
-      width: 0.5,
-    ),
-  );
+  }) =>
+      BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: borderColor ?? slate200,
+          width: 0.5,
+        ),
+      );
 
   static BoxDecoration urgentDecoration() => BoxDecoration(
-    color: surface,
-    borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: urgent.withValues(alpha: 0.4), width: 0.5),
-  );
+        color: surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: urgent.withValues(alpha: 0.4), width: 0.5),
+      );
 }

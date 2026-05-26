@@ -152,6 +152,12 @@ class AdminDriver {
   final String phone;
   final String status;
   final String createdAt;
+  final String? licenseImageUrl;
+  final String? vehicleDocUrl;
+  final String? circulationPermitUrl;
+  final String? technicalReviewUrl;
+  final String? soapUrl;
+  final String? rejectionReason;
   final List<AdminVehicle> vehicles;
 
   const AdminDriver({
@@ -162,6 +168,12 @@ class AdminDriver {
     required this.phone,
     required this.status,
     required this.createdAt,
+    this.licenseImageUrl,
+    this.vehicleDocUrl,
+    this.circulationPermitUrl,
+    this.technicalReviewUrl,
+    this.soapUrl,
+    this.rejectionReason,
     required this.vehicles,
   });
 
@@ -173,6 +185,12 @@ class AdminDriver {
         phone: json['phone'] ?? '',
         status: json['status'] ?? '',
         createdAt: json['created_at'] ?? '',
+        licenseImageUrl: json['license_image_url'],
+        vehicleDocUrl: json['vehicle_doc_url'],
+        circulationPermitUrl: json['circulation_permit_url'],
+        technicalReviewUrl: json['technical_review_url'],
+        soapUrl: json['soap_url'],
+        rejectionReason: json['rejection_reason'],
         vehicles: ((json['vehicles'] ?? []) as List)
             .map((item) => AdminVehicle.fromJson(item))
             .toList(),

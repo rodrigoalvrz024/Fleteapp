@@ -13,9 +13,9 @@ class AuthState {
 
   AuthState copyWith({UserModel? user, bool? isLoading, String? error}) =>
       AuthState(
-        user:      user      ?? this.user,
+        user: user ?? this.user,
         isLoading: isLoading ?? this.isLoading,
-        error:     error,
+        error: error,
       );
 
   bool get isAuthenticated => user != null;
@@ -40,8 +40,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> login(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final data = await _service.login(
-          email: email, password: password);
+      final data = await _service.login(email: email, password: password);
       final user = UserModel.fromJson(data['user']);
       state = AuthState(user: user);
 
@@ -52,8 +51,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       return true;
     } catch (e) {
-      state = state.copyWith(
-          isLoading: false, error: _parseError(e));
+      state = state.copyWith(isLoading: false, error: _parseError(e));
       return false;
     }
   }
@@ -63,23 +61,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String phone,
     String name,
     String password,
-    String role,
-  ) async {
+    String role, {
+    required bool acceptsTerms,
+    required bool acceptsPrivacy,
+    required bool acceptsDriverDocuments,
+  }) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final data = await _service.register(
-        email:    email,
-        phone:    phone,
+        email: email,
+        phone: phone,
         fullName: name,
         password: password,
-        role:     role,
+        role: role,
+        acceptsTerms: acceptsTerms,
+        acceptsPrivacy: acceptsPrivacy,
+        acceptsDriverDocuments: acceptsDriverDocuments,
       );
       final user = UserModel.fromJson(data['user']);
       state = AuthState(user: user);
       return true;
     } catch (e) {
-      state = state.copyWith(
-          isLoading: false, error: _parseError(e));
+      state = state.copyWith(isLoading: false, error: _parseError(e));
       return false;
     }
   }
@@ -103,5 +106,4 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider =
-    StateNotifierProvider<AuthNotifier, AuthState>(
-        (ref) => AuthNotifier());
+    StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier());

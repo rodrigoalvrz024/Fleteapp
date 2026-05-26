@@ -4,6 +4,7 @@ import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
 import '../../screens/auth/forgot_password_screen.dart';
 import '../../screens/auth/reset_password_screen.dart';
+import '../../screens/legal/legal_document_screen.dart';
 import '../../screens/client/client_home_screen.dart';
 import '../../screens/client/create_freight_screen.dart';
 import '../../screens/client/freight_list_screen.dart';
@@ -41,6 +42,18 @@ final _router = GoRouter(
       path: '/reset-password',
       builder: (_, state) => ResetPasswordScreen(
         token: state.uri.queryParameters['token'],
+      ),
+    ),
+    GoRoute(
+      path: '/legal/terms',
+      builder: (_, __) => const LegalDocumentScreen(
+        type: LegalDocumentType.terms,
+      ),
+    ),
+    GoRoute(
+      path: '/legal/privacy',
+      builder: (_, __) => const LegalDocumentScreen(
+        type: LegalDocumentType.privacy,
       ),
     ),
 

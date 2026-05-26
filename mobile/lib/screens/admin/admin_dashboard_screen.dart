@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
@@ -1075,6 +1076,8 @@ class _DriverRow extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               _VehicleLine(vehicle: vehicle),
+              const SizedBox(height: 10),
+              _DriverDocuments(driver: driver),
             ],
           );
 
@@ -1169,6 +1172,102 @@ class _DriverActions extends StatelessWidget {
       ],
     );
   }
+}
+
+class _DriverDocuments extends StatelessWidget {
+  final AdminDriver driver;
+
+  const _DriverDocuments({required this.driver});
+
+  @override
+  Widget build(BuildContext context) {
+    final docs = [
+      _DocumentLink('Licencia', driver.licenseImageUrl),
+      _DocumentLink(
+        'Permiso',
+        driver.circulationPermitUrl ?? driver.vehicleDocUrl,
+      ),
+      _DocumentLink('Revision', driver.technicalReviewUrl),
+      _DocumentLink('SOAP', driver.soapUrl),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: docs
+          .map(
+            (doc) => _DocumentChip(
+              label: doc.label,
+              url: doc.url,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _DocumentChip extends StatelessWidget {
+  final String label;
+  final String? url;
+
+  const _DocumentChip({required this.label, required this.url});
+
+  Future<void> _open() async {
+    final value = url;
+    if (value == null || value.isEmpty) return;
+    final uri = Uri.tryParse(value);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final available = url != null && url!.isNotEmpty;
+    return InkWell(
+      onTap: available ? _open : null,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: available
+              ? AppTheme.primary.withValues(alpha: 0.08)
+              : AppTheme.slate100,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: available
+                ? AppTheme.primary.withValues(alpha: 0.28)
+                : AppTheme.slate200,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              available ? Icons.visibility_outlined : Icons.error_outline,
+              size: 14,
+              color: available ? AppTheme.primary : AppTheme.warning,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              available ? label : 'Falta $label',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: available ? AppTheme.primary : AppTheme.warning,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DocumentLink {
+  final String label;
+  final String? url;
+
+  const _DocumentLink(this.label, this.url);
 }
 
 class _VehicleLine extends StatelessWidget {

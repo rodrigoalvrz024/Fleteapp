@@ -37,18 +37,18 @@ class _SavedPlace {
   });
 
   Map<String, dynamic> toJson() => {
-    'label':   label,
-    'address': address,
-    'lat':     latLng.latitude,
-    'lng':     latLng.longitude,
-  };
+        'label': label,
+        'address': address,
+        'lat': latLng.latitude,
+        'lng': latLng.longitude,
+      };
 
   factory _SavedPlace.fromJson(Map<String, dynamic> j) => _SavedPlace(
-    label:   j['label'],
-    address: j['address'],
-    latLng:  LatLng(j['lat'], j['lng']),
-    icon:    Icons.history_rounded,
-  );
+        label: j['label'],
+        address: j['address'],
+        latLng: LatLng(j['lat'], j['lng']),
+        icon: Icons.history_rounded,
+      );
 }
 
 class ClientHomeScreen extends ConsumerStatefulWidget {
@@ -59,27 +59,26 @@ class ClientHomeScreen extends ConsumerStatefulWidget {
 
 class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     with TickerProviderStateMixin {
-
   GoogleMapController? _mapCtrl;
-  LatLng _currentPos     = const LatLng(-33.4489, -70.6693);
-  Set<Marker> _markers   = {};
+  LatLng _currentPos = const LatLng(-33.4489, -70.6693);
+  Set<Marker> _markers = {};
   String _currentAddress = 'Obteniendo ubicación...';
 
-  final _searchCtrl  = TextEditingController();
+  final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
-  bool _isSearching  = false;
+  bool _isSearching = false;
 
   late DraggableScrollableController _sheetCtrl;
-  double _sheetSize   = 0.28;
+  double _sheetSize = 0.28;
   bool _headerVisible = true;
 
   late AnimationController _headerCtrl;
-  late Animation<double>   _headerFade;
-  late Animation<Offset>   _headerSlide;
+  late Animation<double> _headerFade;
+  late Animation<Offset> _headerSlide;
   late AnimationController _btnCtrl;
-  late Animation<double>   _btnScale;
+  late Animation<double> _btnScale;
   late AnimationController _sheetEntryCtrl;
-  late Animation<double>   _sheetEntry;
+  late Animation<double> _sheetEntry;
 
   List<_SavedPlace> _recents = [];
 
@@ -88,22 +87,22 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
 
   final List<_SavedPlace> _defaultPlaces = const [
     _SavedPlace(
-      label:   'Oficina',
+      label: 'Oficina',
       address: 'Av. Providencia 1234, Providencia',
-      latLng:  LatLng(-33.4319, -70.6108),
-      icon:    Icons.work_outline_rounded,
+      latLng: LatLng(-33.4319, -70.6108),
+      icon: Icons.work_outline_rounded,
     ),
     _SavedPlace(
-      label:   'Casa',
+      label: 'Casa',
       address: 'Lo Barnechea, Santiago',
-      latLng:  LatLng(-33.3516, -70.5150),
-      icon:    Icons.home_outlined,
+      latLng: LatLng(-33.3516, -70.5150),
+      icon: Icons.home_outlined,
     ),
     _SavedPlace(
-      label:   'Bodega',
+      label: 'Bodega',
       address: 'Pudahuel, Santiago',
-      latLng:  LatLng(-33.4430, -70.7575),
-      icon:    Icons.warehouse_outlined,
+      latLng: LatLng(-33.4430, -70.7575),
+      icon: Icons.warehouse_outlined,
     ),
   ];
 
@@ -116,22 +115,19 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
 
     _headerCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 220));
-    _headerFade  = CurvedAnimation(
-        parent: _headerCtrl, curve: Curves.easeInOut);
-    _headerSlide = Tween<Offset>(
-        begin: Offset.zero, end: const Offset(0, -1))
-        .animate(CurvedAnimation(
-            parent: _headerCtrl, curve: Curves.easeInOut));
+    _headerFade = CurvedAnimation(parent: _headerCtrl, curve: Curves.easeInOut);
+    _headerSlide = Tween<Offset>(begin: Offset.zero, end: const Offset(0, -1))
+        .animate(CurvedAnimation(parent: _headerCtrl, curve: Curves.easeInOut));
 
-    _btnCtrl  = AnimationController(
+    _btnCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 130));
-    _btnScale = Tween(begin: 1.0, end: 0.96).animate(
-        CurvedAnimation(parent: _btnCtrl, curve: Curves.easeOut));
+    _btnScale = Tween(begin: 1.0, end: 0.96)
+        .animate(CurvedAnimation(parent: _btnCtrl, curve: Curves.easeOut));
 
     _sheetEntryCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
-    _sheetEntry = CurvedAnimation(
-        parent: _sheetEntryCtrl, curve: Curves.easeOutCubic);
+    _sheetEntry =
+        CurvedAnimation(parent: _sheetEntryCtrl, curve: Curves.easeOutCubic);
     _sheetEntryCtrl.forward();
 
     _searchFocus.addListener(() {
@@ -158,12 +154,11 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
 
   Future<void> _loadRecents() async {
     try {
-      final prefs  = await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getStringList('recent_places') ?? [];
       setState(() {
-        _recents = stored
-            .map((s) => _SavedPlace.fromJson(jsonDecode(s)))
-            .toList();
+        _recents =
+            stored.map((s) => _SavedPlace.fromJson(jsonDecode(s))).toList();
       });
     } catch (_) {}
   }
@@ -200,8 +195,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
 
       String address = 'Mi ubicación';
       try {
-        final marks = await placemarkFromCoordinates(
-            pos.latitude, pos.longitude);
+        final marks =
+            await placemarkFromCoordinates(pos.latitude, pos.longitude);
         if (marks.isNotEmpty) {
           final p = marks.first;
           final parts = [
@@ -214,20 +209,19 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
       } catch (_) {}
 
       setState(() {
-        _currentPos     = ll;
+        _currentPos = ll;
         _currentAddress = address;
         _markers = {
           Marker(
             markerId: const MarkerId('me'),
             position: ll,
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueBlue),
+            icon:
+                BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
             infoWindow: InfoWindow(title: address),
           ),
         };
       });
-      await _mapCtrl?.animateCamera(
-          CameraUpdate.newLatLngZoom(ll, 15));
+      await _mapCtrl?.animateCamera(CameraUpdate.newLatLngZoom(ll, 15));
     } catch (_) {
       setState(() => _currentAddress = 'No se pudo obtener ubicación');
     }
@@ -245,23 +239,18 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     }
   }
 
-  void _expandSheet() => _sheetCtrl.animateTo(
-      0.88,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut);
+  void _expandSheet() => _sheetCtrl.animateTo(0.88,
+      duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
 
   void _collapseSheet() {
     _searchFocus.unfocus();
-    _sheetCtrl.animateTo(
-        _snapMin,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut);
+    _sheetCtrl.animateTo(_snapMin,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
   }
 
   void _goToMyLocation() {
     HapticFeedback.lightImpact();
-    _mapCtrl?.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentPos, 15));
+    _mapCtrl?.animateCamera(CameraUpdate.newLatLngZoom(_currentPos, 15));
   }
 
   void _navigateToCreate({
@@ -276,12 +265,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     final uri = Uri(
       path: '/client/create-freight',
       queryParameters: {
-        if (destAddress.isNotEmpty)   'dest_address':   destAddress,
-        if (destLat != null)          'dest_lat':       destLat.toString(),
-        if (destLng != null)          'dest_lng':       destLng.toString(),
+        if (destAddress.isNotEmpty) 'dest_address': destAddress,
+        if (destLat != null) 'dest_lat': destLat.toString(),
+        if (destLng != null) 'dest_lng': destLng.toString(),
         if (originAddress.isNotEmpty) 'origin_address': originAddress,
-        if (originLat != null)        'origin_lat':     originLat.toString(),
-        if (originLng != null)        'origin_lng':     originLng.toString(),
+        if (originLat != null) 'origin_lat': originLat.toString(),
+        if (originLng != null) 'origin_lng': originLng.toString(),
       },
     );
     context.push(uri.toString());
@@ -290,10 +279,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
   void _onSolicitar() {
     final address = _searchCtrl.text.trim();
     _navigateToCreate(
-      destAddress:   address,
+      destAddress: address,
       originAddress: _currentAddress,
-      originLat:     _currentPos.latitude,
-      originLng:     _currentPos.longitude,
+      originLat: _currentPos.latitude,
+      originLng: _currentPos.longitude,
     );
   }
 
@@ -302,15 +291,13 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     _searchCtrl.text = place.address;
     _searchFocus.unfocus();
     _saveRecent(place);
-    _mapCtrl?.animateCamera(
-        CameraUpdate.newLatLngZoom(place.latLng, 15));
+    _mapCtrl?.animateCamera(CameraUpdate.newLatLngZoom(place.latLng, 15));
     setState(() {
       _markers = {
         Marker(
           markerId: const MarkerId('dest'),
           position: place.latLng,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueRed),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           infoWindow: InfoWindow(title: place.label),
         ),
         if (_markers.any((m) => m.markerId.value == 'me'))
@@ -320,12 +307,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     Future.delayed(const Duration(milliseconds: 400), () {
       if (!mounted) return;
       _navigateToCreate(
-        destAddress:   place.address,
-        destLat:       place.latLng.latitude,
-        destLng:       place.latLng.longitude,
+        destAddress: place.address,
+        destLat: place.latLng.latitude,
+        destLng: place.latLng.longitude,
         originAddress: _currentAddress,
-        originLat:     _currentPos.latitude,
-        originLng:     _currentPos.longitude,
+        originLat: _currentPos.latitude,
+        originLng: _currentPos.longitude,
       );
     });
   }
@@ -338,9 +325,18 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => _ProfileMenu(
-        onProfile:   () { Navigator.pop(context); context.push('/profile'); },
-        onFreights:  () { Navigator.pop(context); context.push('/client/freights'); },
-        onAddresses: () { Navigator.pop(context); context.push('/profile'); },
+        onProfile: () {
+          Navigator.pop(context);
+          context.push('/profile');
+        },
+        onFreights: () {
+          Navigator.pop(context);
+          context.push('/client/freights');
+        },
+        onAddresses: () {
+          Navigator.pop(context);
+          context.push('/profile');
+        },
         onLogout: () async {
           Navigator.pop(context);
           await ref.read(authProvider.notifier).logout();
@@ -371,14 +367,13 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
         resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
-
             // ── Mapa ────────────────────────────────────
             GoogleMap(
-              initialCameraPosition: CameraPosition(
-                  target: _currentPos, zoom: 14),
+              initialCameraPosition:
+                  CameraPosition(target: _currentPos, zoom: 14),
+              style: _mapStyle,
               onMapCreated: (c) async {
                 _mapCtrl = c;
-                await c.setMapStyle(_mapStyle);
               },
               onCameraMoveStarted: () {
                 if (_isSearching) _searchFocus.unfocus();
@@ -398,23 +393,22 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
-              padding: EdgeInsets.only(
-                  bottom: size.height * _snapMin),
+              padding: EdgeInsets.only(bottom: size.height * _snapMin),
             ),
 
             // ── Header dinámico ──────────────────────────
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: SafeArea(
                 child: SlideTransition(
                   position: _headerSlide,
                   child: FadeTransition(
                     opacity: ReverseAnimation(_headerFade),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                          16, 10, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                       child: Row(children: [
-
                         // Pill de saludo
                         Expanded(
                           child: Container(
@@ -422,12 +416,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                 horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius:
-                                  BorderRadius.circular(50),
+                              borderRadius: BorderRadius.circular(50),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.08),
+                                  color: Colors.black.withValues(alpha: 0.08),
                                   blurRadius: 14,
                                   offset: const Offset(0, 4),
                                 ),
@@ -435,16 +427,15 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             ),
                             child: Row(children: [
                               Container(
-                                width: 26, height: 26,
+                                width: 26,
+                                height: 26,
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primary
-                                      .withValues(alpha: 0.12),
+                                  color:
+                                      AppTheme.primary.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
-                                    Icons.local_shipping_rounded,
-                                    size: 14,
-                                    color: AppTheme.primary),
+                                child: const Icon(Icons.local_shipping_rounded,
+                                    size: 14, color: AppTheme.primary),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -454,8 +445,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                       fontWeight: FontWeight.w600,
                                       color: AppTheme.midnight,
                                     ),
-                                    overflow:
-                                        TextOverflow.ellipsis),
+                                    overflow: TextOverflow.ellipsis),
                               ),
                               const SizedBox(width: 4),
                               Flexible(
@@ -478,23 +468,21 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                         GestureDetector(
                           onTap: _showProfileMenu,
                           child: Container(
-                            width: 40, height: 40,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black
-                                      .withValues(alpha: 0.08),
+                                  color: Colors.black.withValues(alpha: 0.08),
                                   blurRadius: 10,
                                   offset: const Offset(0, 3),
                                 ),
                               ],
                             ),
-                            child: const Icon(
-                                Icons.person_outline_rounded,
-                                size: 18,
-                                color: AppTheme.midnight),
+                            child: const Icon(Icons.person_outline_rounded,
+                                size: 18, color: AppTheme.midnight),
                           ),
                         ),
                       ]),
@@ -513,14 +501,14 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
               child: GestureDetector(
                 onTap: _goToMyLocation,
                 child: Container(
-                  width: 42, height: 42,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: 0.09),
+                        color: Colors.black.withValues(alpha: 0.09),
                         blurRadius: 10,
                         offset: const Offset(0, 3),
                       ),
@@ -539,21 +527,20 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                 end: Offset.zero,
               ).animate(_sheetEntry),
               child: DraggableScrollableSheet(
-                controller:       _sheetCtrl,
+                controller: _sheetCtrl,
                 initialChildSize: _snapMin,
-                minChildSize:     _snapMin,
-                maxChildSize:     _snapMax,
-                snap:             true,
-                snapSizes:        const [_snapMin, 0.52, _snapMax],
+                minChildSize: _snapMin,
+                maxChildSize: _snapMax,
+                snap: true,
+                snapSizes: const [_snapMin, 0.52, _snapMax],
                 builder: (ctx, scroll) => DecoratedBox(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(24)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: 0.10),
+                        color: Colors.black.withValues(alpha: 0.10),
                         blurRadius: 28,
                         offset: const Offset(0, -6),
                       ),
@@ -564,34 +551,29 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                     padding: EdgeInsets.zero,
                     physics: const ClampingScrollPhysics(),
                     children: [
-
                       // Handle
                       Center(
                         child: Container(
-                          margin: const EdgeInsets.only(
-                              top: 10, bottom: 4),
-                          width: 38, height: 4,
+                          margin: const EdgeInsets.only(top: 10, bottom: 4),
+                          width: 38,
+                          height: 4,
                           decoration: BoxDecoration(
                             color: const Color(0xFFCDD5DF),
-                            borderRadius:
-                                BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
 
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                            20, 10, 20, 0),
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.stretch,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-
                             // Input búsqueda
                             _SearchInput(
                               controller: _searchCtrl,
-                              focusNode:  _searchFocus,
-                              onChanged:  (v) => setState(() {}),
+                              focusNode: _searchFocus,
+                              onChanged: (v) => setState(() {}),
                               onClear: () {
                                 _searchCtrl.clear();
                                 setState(() {});
@@ -603,19 +585,16 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             ScaleTransition(
                               scale: _btnScale,
                               child: GestureDetector(
-                                onTapDown: (_) =>
-                                    _btnCtrl.forward(),
+                                onTapDown: (_) => _btnCtrl.forward(),
                                 onTapUp: (_) {
                                   _btnCtrl.reverse();
                                   _onSolicitar();
                                 },
-                                onTapCancel: () =>
-                                    _btnCtrl.reverse(),
+                                onTapCancel: () => _btnCtrl.reverse(),
                                 child: Container(
                                   height: 54,
                                   decoration: BoxDecoration(
-                                    gradient:
-                                        const LinearGradient(
+                                    gradient: const LinearGradient(
                                       colors: [
                                         Color(0xFF4F94F8),
                                         Color(0xFF2563EB),
@@ -623,8 +602,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                     ),
-                                    borderRadius:
-                                        BorderRadius.circular(14),
+                                    borderRadius: BorderRadius.circular(14),
                                     boxShadow: [
                                       BoxShadow(
                                         color: const Color(0xFF2563EB)
@@ -635,13 +613,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                     ],
                                   ),
                                   child: const Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(
-                                          Icons.local_shipping_rounded,
-                                          color: Colors.white,
-                                          size: 20),
+                                      Icon(Icons.local_shipping_rounded,
+                                          color: Colors.white, size: 20),
                                       SizedBox(width: 10),
                                       Text('Solicitar flete',
                                           style: TextStyle(
@@ -660,24 +635,23 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             // Banner urgente / nocturno
                             if (_isNight)
                               _InfoRow(
-                                icon:   Icons.nightlight_round,
-                                color:  Colors.deepPurple.shade300,
-                                bg:     const Color(0xFF1E1B4B)
+                                icon: Icons.nightlight_round,
+                                color: Colors.deepPurple.shade300,
+                                bg: const Color(0xFF1E1B4B)
                                     .withValues(alpha: 0.05),
-                                border: Colors.deepPurple
-                                    .withValues(alpha: 0.15),
-                                text:   'Tarifa nocturna · Mínimo \$40.000',
-                                onTap:  _onSolicitar,
+                                border:
+                                    Colors.deepPurple.withValues(alpha: 0.15),
+                                text: 'Tarifa nocturna · Mínimo \$40.000',
+                                onTap: _onSolicitar,
                               )
                             else
                               _InfoRow(
-                                icon:   Icons.flash_on_rounded,
-                                color:  AppTheme.urgent,
-                                bg:     const Color(0xFFFFF7ED),
-                                border: AppTheme.urgent
-                                    .withValues(alpha: 0.2),
-                                text:   'Modo urgente · Mínimo \$30.000',
-                                onTap:  _onSolicitar,
+                                icon: Icons.flash_on_rounded,
+                                color: AppTheme.urgent,
+                                bg: const Color(0xFFFFF7ED),
+                                border: AppTheme.urgent.withValues(alpha: 0.2),
+                                text: 'Modo urgente · Mínimo \$30.000',
+                                onTap: _onSolicitar,
                               ),
                             const SizedBox(height: 22),
 
@@ -687,8 +661,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                               onTap: () {
                                 _searchCtrl.text = _currentAddress;
                                 _mapCtrl?.animateCamera(
-                                  CameraUpdate.newLatLngZoom(
-                                      _currentPos, 15),
+                                  CameraUpdate.newLatLngZoom(_currentPos, 15),
                                 );
                                 _collapseSheet();
                               },
@@ -698,8 +671,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             // Recientes
                             const _Label('Recientes'),
                             const SizedBox(height: 10),
-                            ..._displayRecents.map((d) =>
-                                _RecentTile(
+                            ..._displayRecents.map((d) => _RecentTile(
                                   place: d,
                                   onTap: () => _selectPlace(d),
                                 )),
@@ -742,29 +714,27 @@ class _ProfileMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user     = ref.watch(authProvider).user;
-    final name     = user?.fullName ?? 'Usuario';
-    final email    = user?.email ?? '';
-    final initials = name.trim().split(' ')
-        .take(2).map((w) => w[0].toUpperCase()).join();
+    final user = ref.watch(authProvider).user;
+    final name = user?.fullName ?? 'Usuario';
+    final email = user?.email ?? '';
+    final initials =
+        name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join();
 
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(
-          20, 16, 20,
-          MediaQuery.of(context).padding.bottom + 20),
+          20, 16, 20, MediaQuery.of(context).padding.bottom + 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-
           // Handle
           Center(
             child: Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
                 color: AppTheme.slate200,
                 borderRadius: BorderRadius.circular(2),
@@ -776,7 +746,8 @@ class _ProfileMenu extends ConsumerWidget {
           // Avatar + info + botón editar
           Row(children: [
             Container(
-              width: 52, height: 52,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
@@ -812,8 +783,8 @@ class _ProfileMenu extends ConsumerWidget {
             GestureDetector(
               onTap: onProfile,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
@@ -833,21 +804,21 @@ class _ProfileMenu extends ConsumerWidget {
 
           // Opciones
           _MenuOption(
-            icon:  Icons.receipt_long_outlined,
+            icon: Icons.receipt_long_outlined,
             label: 'Mis fletes',
-            sub:   'Ver historial de solicitudes',
+            sub: 'Ver historial de solicitudes',
             onTap: onFreights,
           ),
           _MenuOption(
-            icon:  Icons.location_on_outlined,
+            icon: Icons.location_on_outlined,
             label: 'Mis direcciones',
-            sub:   'Casa, trabajo y más',
+            sub: 'Casa, trabajo y más',
             onTap: onAddresses,
           ),
           _MenuOption(
-            icon:  Icons.person_outline_rounded,
+            icon: Icons.person_outline_rounded,
             label: 'Mi perfil',
-            sub:   'Datos personales y cuenta',
+            sub: 'Datos personales y cuenta',
             onTap: onProfile,
           ),
           const SizedBox(height: 8),
@@ -869,8 +840,7 @@ class _ProfileMenu extends ConsumerWidget {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.logout_rounded,
-                      size: 16, color: AppTheme.error),
+                  Icon(Icons.logout_rounded, size: 16, color: AppTheme.error),
                   SizedBox(width: 8),
                   Text('Cerrar sesión',
                       style: TextStyle(
@@ -901,44 +871,44 @@ class _MenuOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(
-          vertical: 12, horizontal: 4),
-      child: Row(children: [
-        Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(
-            color: AppTheme.slate100,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, size: 18, color: AppTheme.slate600),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+          child: Row(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.slate100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 18, color: AppTheme.slate600),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.midnight,
+                      )),
+                  Text(sub,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.slate400,
+                      )),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                size: 16, color: AppTheme.slate400),
+          ]),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.midnight,
-                  )),
-              Text(sub,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.slate400,
-                  )),
-            ],
-          ),
-        ),
-        const Icon(Icons.chevron_right_rounded,
-            size: 16, color: AppTheme.slate400),
-      ]),
-    ),
-  );
+      );
 }
 
 // ── Widgets del bottom sheet ────────────────────────────────
@@ -957,104 +927,101 @@ class _SearchInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: const Color(0xFFF4F6F8),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(
-          color: const Color(0xFFDDE3EC), width: 0.8),
-    ),
-    child: TextField(
-      controller:      controller,
-      focusNode:       focusNode,
-      onChanged:       onChanged,
-      textInputAction: TextInputAction.search,
-      style: const TextStyle(
-          fontSize: 15, color: AppTheme.midnight),
-      decoration: InputDecoration(
-        hintText: '¿A dónde va el flete?',
-        hintStyle: const TextStyle(
-            fontSize: 15, color: AppTheme.slate400),
-        prefixIcon: Container(
-          margin: const EdgeInsets.all(10),
-          width: 24, height: 24,
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.10),
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.location_on_rounded,
-              size: 13, color: AppTheme.primary),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F6F8),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFDDE3EC), width: 0.8),
         ),
-        suffixIcon: controller.text.isNotEmpty
-            ? IconButton(
-                icon: const Icon(Icons.close_rounded,
-                    size: 16, color: AppTheme.slate400),
-                onPressed: onClear,
-              )
-            : null,
-        border: InputBorder.none,
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 16),
-      ),
-    ),
-  );
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          onChanged: onChanged,
+          textInputAction: TextInputAction.search,
+          style: const TextStyle(fontSize: 15, color: AppTheme.midnight),
+          decoration: InputDecoration(
+            hintText: '¿A dónde va el flete?',
+            hintStyle: const TextStyle(fontSize: 15, color: AppTheme.slate400),
+            prefixIcon: Container(
+              margin: const EdgeInsets.all(10),
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.location_on_rounded,
+                  size: 13, color: AppTheme.primary),
+            ),
+            suffixIcon: controller.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        size: 16, color: AppTheme.slate400),
+                    onPressed: onClear,
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+        ),
+      );
 }
 
 class _LocationCurrentTile extends StatelessWidget {
   final String address;
   final VoidCallback onTap;
-  const _LocationCurrentTile(
-      {required this.address, required this.onTap});
+  const _LocationCurrentTile({required this.address, required this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.primary.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppTheme.primary.withValues(alpha: 0.12),
-          width: 0.5,
-        ),
-      ),
-      child: Row(children: [
-        Container(
-          width: 36, height: 36,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.10),
-            shape: BoxShape.circle,
+            color: AppTheme.primary.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppTheme.primary.withValues(alpha: 0.12),
+              width: 0.5,
+            ),
           ),
-          child: const Icon(Icons.my_location_rounded,
-              size: 18, color: AppTheme.primary),
+          child: Row(children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.my_location_rounded,
+                  size: 18, color: AppTheme.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Mi ubicación actual',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.midnight,
+                      )),
+                  Text(address,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.slate400,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const Icon(Icons.north_west_rounded,
+                size: 13, color: AppTheme.primary),
+          ]),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Mi ubicación actual',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: AppTheme.midnight,
-                  )),
-              Text(address,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.slate400,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
-          ),
-        ),
-        const Icon(Icons.north_west_rounded,
-            size: 13, color: AppTheme.primary),
-      ]),
-    ),
-  );
+      );
 }
 
 class _InfoRow extends StatelessWidget {
@@ -1073,26 +1040,24 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border, width: 0.5),
-      ),
-      child: Row(children: [
-        Icon(icon, size: 15, color: color),
-        const SizedBox(width: 10),
-        Expanded(
-            child: Text(text,
-                style: TextStyle(fontSize: 12, color: color))),
-        Icon(Icons.chevron_right_rounded,
-            size: 14, color: color),
-      ]),
-    ),
-  );
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: border, width: 0.5),
+          ),
+          child: Row(children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 10),
+            Expanded(
+                child:
+                    Text(text, style: TextStyle(fontSize: 12, color: color))),
+            Icon(Icons.chevron_right_rounded, size: 14, color: color),
+          ]),
+        ),
+      );
 }
 
 class _Label extends StatelessWidget {
@@ -1115,62 +1080,61 @@ class _RecentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            vertical: 10, horizontal: 4),
-        child: Row(children: [
-          Container(
-            width: 38, height: 38,
-            decoration: BoxDecoration(
-              color: AppTheme.slate100,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(place.icon,
-                size: 17, color: AppTheme.slate600),
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: Row(children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppTheme.slate100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(place.icon, size: 17, color: AppTheme.slate600),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(place.label,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.midnight,
+                        )),
+                    Text(place.address,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.slate400,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              const Icon(Icons.north_west_rounded,
+                  size: 13, color: AppTheme.slate400),
+            ]),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(place.label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.midnight,
-                    )),
-                Text(place.address,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.slate400,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          const Icon(Icons.north_west_rounded,
-              size: 13, color: AppTheme.slate400),
-        ]),
-      ),
-    ),
-  );
+        ),
+      );
 }
 
 class _HowItWorks extends StatelessWidget {
   const _HowItWorks();
   @override
   Widget build(BuildContext context) => const Row(children: [
-    _Step(Icons.pin_drop_outlined,            'Marca\norigen y destino'),
-    _Arrow(),
-    _Step(Icons.local_shipping_outlined,      'Conductor\nacepta'),
-    _Arrow(),
-    _Step(Icons.check_circle_outline_rounded, 'Entrega\nconfirmada'),
-  ]);
+        _Step(Icons.pin_drop_outlined, 'Marca\norigen y destino'),
+        _Arrow(),
+        _Step(Icons.local_shipping_outlined, 'Conductor\nacepta'),
+        _Arrow(),
+        _Step(Icons.check_circle_outline_rounded, 'Entrega\nconfirmada'),
+      ]);
 }
 
 class _Step extends StatelessWidget {
@@ -1179,33 +1143,34 @@ class _Step extends StatelessWidget {
   const _Step(this.icon, this.label);
   @override
   Widget build(BuildContext context) => Expanded(
-    child: Column(children: [
-      Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(
-          color: AppTheme.primary.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(11),
-        ),
-        child: Icon(icon, size: 19, color: AppTheme.primary),
-      ),
-      const SizedBox(height: 7),
-      Text(label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppTheme.slate400,
-            height: 1.4,
-          )),
-    ]),
-  );
+        child: Column(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, size: 19, color: AppTheme.primary),
+          ),
+          const SizedBox(height: 7),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppTheme.slate400,
+                height: 1.4,
+              )),
+        ]),
+      );
 }
 
 class _Arrow extends StatelessWidget {
   const _Arrow();
   @override
   Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.only(bottom: 18),
-    child: Icon(Icons.arrow_forward_rounded,
-        size: 12, color: AppTheme.slate400),
-  );
+        padding: EdgeInsets.only(bottom: 18),
+        child: Icon(Icons.arrow_forward_rounded,
+            size: 12, color: AppTheme.slate400),
+      );
 }

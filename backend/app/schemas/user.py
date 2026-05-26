@@ -14,6 +14,9 @@ class UserCreate(BaseModel):
     full_name: str
     password: str
     role: PublicUserRole = PublicUserRole.client
+    accepts_terms: bool = False
+    accepts_privacy: bool = False
+    accepts_driver_documents: bool = False
 
     @field_validator("password")
     def password_strength(cls, v):

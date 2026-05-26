@@ -28,3 +28,4 @@ class User(Base):
     ratings_given = relationship("Rating", back_populates="rater", foreign_keys="Rating.rater_id")
     notifications = relationship("Notification", back_populates="user")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user")
+    consents = relationship("UserConsent", back_populates="user")

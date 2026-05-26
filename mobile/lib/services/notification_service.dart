@@ -14,8 +14,7 @@ class NotificationService {
       );
 
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint(
-            'Notificación recibida: ${message.notification?.title}');
+        debugPrint('Notificación recibida: ${message.notification?.title}');
       });
 
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {

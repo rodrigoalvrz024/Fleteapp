@@ -92,6 +92,9 @@ def list_drivers(
             "profile_image_url":  getattr(d, "profile_image_url", None),
             "license_image_url":  getattr(d, "license_image_url", None),
             "vehicle_doc_url":    getattr(d, "vehicle_doc_url", None),
+            "circulation_permit_url": getattr(d, "circulation_permit_url", None),
+            "technical_review_url": getattr(d, "technical_review_url", None),
+            "soap_url": getattr(d, "soap_url", None),
             "rejection_reason":   getattr(d, "rejection_reason", None),
             "vehicles":           [
                 {
@@ -118,6 +121,16 @@ def approve_driver(
         Driver.id == driver_id).first()
     if not driver:
         raise HTTPException(404, "Conductor no encontrado")
+    if not driver.vehicle:
+        raise HTTPException(400, "El conductor no tiene vehiculo registrado")
+    if not driver.license_image_url:
+        raise HTTPException(400, "Falta licencia de conducir")
+    if not (driver.vehicle_doc_url or driver.circulation_permit_url):
+        raise HTTPException(400, "Falta permiso de circulacion")
+    if not driver.technical_review_url:
+        raise HTTPException(400, "Falta revision tecnica")
+    if not driver.soap_url:
+        raise HTTPException(400, "Falta SOAP")
     driver.status           = DriverStatus.approved
     driver.rejection_reason = None
     db.commit()

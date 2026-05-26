@@ -11,6 +11,9 @@ class AuthService {
     required String fullName,
     required String password,
     required String role,
+    required bool acceptsTerms,
+    required bool acceptsPrivacy,
+    required bool acceptsDriverDocuments,
   }) async {
     final res = await _api.post(ApiConstants.register, {
       'email': email,
@@ -18,6 +21,9 @@ class AuthService {
       'full_name': fullName,
       'password': password,
       'role': role,
+      'accepts_terms': acceptsTerms,
+      'accepts_privacy': acceptsPrivacy,
+      'accepts_driver_documents': acceptsDriverDocuments,
     });
     await _api.saveToken(res.data['access_token']);
     return res.data;
