@@ -1087,6 +1087,10 @@ class _DriverRow extends StatelessWidget {
               _VehicleLine(vehicle: vehicle),
               const SizedBox(height: 10),
               _DriverDocuments(driver: driver),
+              if (driver.reviewHistory.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _DriverReviewHistory(reviews: driver.reviewHistory),
+              ],
             ],
           );
 
@@ -1309,6 +1313,97 @@ class _DocumentLink {
     required this.type,
     required this.available,
   });
+}
+
+class _DriverReviewHistory extends StatelessWidget {
+  final List<AdminDriverReview> reviews;
+
+  const _DriverReviewHistory({required this.reviews});
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = reviews.first;
+    final approved = latest.action == 'approved';
+    final color = approved ? AppTheme.success : AppTheme.error;
+    final created = latest.createdAt != null
+        ? DateFormat('dd/MM HH:mm').format(DateTime.parse(latest.createdAt!))
+        : '';
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                approved ? Icons.verified_outlined : Icons.report_outlined,
+                size: 15,
+                color: color,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${latest.actionLabel} por ${latest.adminName ?? 'admin'}'
+                  '${created.isNotEmpty ? ' - $created' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if ((latest.reason ?? '').isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(
+              latest.reason!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.slate600,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ],
+          const SizedBox(height: 7),
+          _ReviewDocumentSummary(snapshot: latest.documentsSnapshot),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewDocumentSummary extends StatelessWidget {
+  final Map<String, bool> snapshot;
+
+  const _ReviewDocumentSummary({required this.snapshot});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = [
+      snapshot['license_image'],
+      snapshot['circulation_permit'] == true || snapshot['vehicle_doc'] == true,
+      snapshot['technical_review'],
+      snapshot['soap'],
+    ].where((value) => value == true).length;
+    return Text(
+      'Documentos presentes al revisar: $total/4',
+      style: const TextStyle(
+        color: AppTheme.slate400,
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
 }
 
 class _VehicleLine extends StatelessWidget {

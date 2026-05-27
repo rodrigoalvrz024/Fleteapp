@@ -154,6 +154,7 @@ class AdminDriver {
   final String createdAt;
   final Map<String, bool> documents;
   final String? rejectionReason;
+  final List<AdminDriverReview> reviewHistory;
   final List<AdminVehicle> vehicles;
 
   const AdminDriver({
@@ -166,6 +167,7 @@ class AdminDriver {
     required this.createdAt,
     required this.documents,
     this.rejectionReason,
+    this.reviewHistory = const [],
     required this.vehicles,
   });
 
@@ -197,11 +199,62 @@ class AdminDriver {
         'soap': documents['soap'] ?? legacyHas('soap_url'),
       },
       rejectionReason: json['rejection_reason'],
+      reviewHistory: ((json['review_history'] ?? []) as List)
+          .map((item) => AdminDriverReview.fromJson(item))
+          .toList(),
       vehicles: ((json['vehicles'] ?? []) as List)
           .map((item) => AdminVehicle.fromJson(item))
           .toList(),
     );
   }
+}
+
+class AdminDriverReview {
+  final int id;
+  final int adminId;
+  final String? adminName;
+  final String action;
+  final String statusBefore;
+  final String statusAfter;
+  final String? reason;
+  final Map<String, bool> documentsSnapshot;
+  final String? createdAt;
+
+  const AdminDriverReview({
+    required this.id,
+    required this.adminId,
+    this.adminName,
+    required this.action,
+    required this.statusBefore,
+    required this.statusAfter,
+    this.reason,
+    required this.documentsSnapshot,
+    this.createdAt,
+  });
+
+  factory AdminDriverReview.fromJson(Map<String, dynamic> json) {
+    final docs =
+        (json['documents_snapshot'] as Map<String, dynamic>? ?? {}).map(
+      (key, value) => MapEntry(key, value == true),
+    );
+    return AdminDriverReview(
+      id: json['id'] ?? 0,
+      adminId: json['admin_id'] ?? 0,
+      adminName: json['admin_name'],
+      action: json['action'] ?? '',
+      statusBefore: json['status_before'] ?? '',
+      statusAfter: json['status_after'] ?? '',
+      reason: json['reason'],
+      documentsSnapshot: docs,
+      createdAt: json['created_at'],
+    );
+  }
+
+  String get actionLabel => switch (action) {
+        'approved' => 'Aprobado',
+        'rejected' => 'Rechazado',
+        _ => action,
+      };
 }
 
 class AdminService {

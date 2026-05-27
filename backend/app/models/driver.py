@@ -35,3 +35,4 @@ class Driver(Base):
     user = relationship("User", foreign_keys=[user_id])
     vehicle = relationship("Vehicle", back_populates="driver", uselist=False)
     freight_requests = relationship("FreightRequest", back_populates="driver", foreign_keys="FreightRequest.driver_id")
+    review_audits = relationship("DriverReviewAudit", back_populates="driver")
