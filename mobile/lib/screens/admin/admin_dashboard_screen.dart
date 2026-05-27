@@ -25,6 +25,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   AdminMetrics? _metrics;
   List<AdminUser> _users = [];
   List<AdminDriver> _drivers = [];
+  List<AdminPrivacyRequest> _privacyRequests = [];
   int _tabIndex = 0;
 
   @override
@@ -59,12 +60,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _service.getMetrics(),
         _service.listUsers(),
         _service.listDrivers(),
+        _service.listPrivacyRequests(),
       ]);
       if (!mounted) return;
       setState(() {
         _metrics = results[0] as AdminMetrics;
         _users = results[1] as List<AdminUser>;
         _drivers = results[2] as List<AdminDriver>;
+        _privacyRequests = results[3] as List<AdminPrivacyRequest>;
       });
     } catch (_) {
       if (mounted) {
@@ -110,6 +113,29 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       action: () => _service.deleteDriverDocuments(
         driver.id,
         reason: reason.trim(),
+      ),
+    );
+  }
+
+  Future<void> _updatePrivacyRequest(
+    AdminPrivacyRequest request,
+    String status,
+  ) async {
+    final needsResponse = status == 'resolved' || status == 'rejected';
+    final response = needsResponse
+        ? await showDialog<String>(
+            context: context,
+            builder: (_) => _PrivacyRequestDialog(status: status),
+          )
+        : '';
+    if (response == null) return;
+
+    await _runDriverAction(
+      success: 'Solicitud ${request.id} actualizada',
+      action: () => _service.updatePrivacyRequest(
+        requestId: request.id,
+        status: status,
+        response: response.trim(),
       ),
     );
   }
@@ -208,6 +234,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             index: _tabIndex,
                             userCount: _users.length,
                             driverCount: _drivers.length,
+                            privacyCount: _privacyRequests.length,
                             onChanged: (value) =>
                                 setState(() => _tabIndex = value),
                           ),
@@ -216,13 +243,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             const _LoadingPanel()
                           else if (_tabIndex == 0)
                             _UsersPanel(users: _users)
-                          else
+                          else if (_tabIndex == 1)
                             _DriversPanel(
                               drivers: _drivers,
                               actionLoading: _actionLoading,
                               onApprove: _approve,
                               onReject: _reject,
                               onDeleteDocuments: _deleteDocuments,
+                            )
+                          else
+                            _PrivacyRequestsPanel(
+                              requests: _privacyRequests,
+                              actionLoading: _actionLoading,
+                              onUpdate: _updatePrivacyRequest,
                             ),
                         ],
                       ),
@@ -423,6 +456,12 @@ class _MetricsGrid extends StatelessWidget {
         value: loading ? '...' : '${metrics?.pendingDrivers ?? 0}',
         icon: Icons.fact_check_outlined,
         color: AppTheme.error,
+      ),
+      _MetricData(
+        label: 'Solicitudes datos',
+        value: loading ? '...' : '${metrics?.pendingPrivacyRequests ?? 0}',
+        icon: Icons.privacy_tip_outlined,
+        color: AppTheme.midnight,
       ),
     ];
 
@@ -804,12 +843,14 @@ class _TabSelector extends StatelessWidget {
   final int index;
   final int userCount;
   final int driverCount;
+  final int privacyCount;
   final ValueChanged<int> onChanged;
 
   const _TabSelector({
     required this.index,
     required this.userCount,
     required this.driverCount,
+    required this.privacyCount,
     required this.onChanged,
   });
 
@@ -835,6 +876,13 @@ class _TabSelector extends StatelessWidget {
               label: 'Revision',
               count: driverCount,
               onTap: () => onChanged(1),
+            ),
+            _TabButton(
+              selected: index == 2,
+              icon: Icons.privacy_tip_outlined,
+              label: 'Datos',
+              count: privacyCount,
+              onTap: () => onChanged(2),
             ),
           ],
         ),
@@ -996,6 +1044,255 @@ class _UserRow extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _PrivacyRequestsPanel extends StatelessWidget {
+  final List<AdminPrivacyRequest> requests;
+  final bool actionLoading;
+  final void Function(AdminPrivacyRequest request, String status) onUpdate;
+
+  const _PrivacyRequestsPanel({
+    required this.requests,
+    required this.actionLoading,
+    required this.onUpdate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (requests.isEmpty) {
+      return const _EmptyPanel(
+        icon: Icons.privacy_tip_outlined,
+        text: 'Sin solicitudes de privacidad',
+      );
+    }
+    return _DataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _PanelTitle(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Solicitudes de datos personales',
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < requests.length; i++) ...[
+            _PrivacyRequestRow(
+              request: requests[i],
+              actionLoading: actionLoading,
+              onUpdate: onUpdate,
+            ),
+            if (i != requests.length - 1) const Divider(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyRequestRow extends StatelessWidget {
+  final AdminPrivacyRequest request;
+  final bool actionLoading;
+  final void Function(AdminPrivacyRequest request, String status) onUpdate;
+
+  const _PrivacyRequestRow({
+    required this.request,
+    required this.actionLoading,
+    required this.onUpdate,
+  });
+
+  Color get _statusColor => switch (request.status) {
+        'pending' => AppTheme.warning,
+        'in_review' => AppTheme.primary,
+        'resolved' => AppTheme.success,
+        'rejected' => AppTheme.error,
+        _ => AppTheme.slate400,
+      };
+
+  String _formatDate(String? value) {
+    if (value == null || value.isEmpty) return '';
+    try {
+      return DateFormat('dd/MM HH:mm').format(DateTime.parse(value).toLocal());
+    } catch (_) {
+      return value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final created = _formatDate(request.createdAt);
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      request.typeLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _StatusPill(label: request.statusLabel, color: _statusColor),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '${request.fullName} · ${request.email}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 12,
+                ),
+              ),
+              if (created.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(
+                  'Creada $created',
+                  style: const TextStyle(
+                    color: AppTheme.slate400,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              if ((request.message ?? '').isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  request.message!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+              if ((request.adminResponse ?? '').isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  request.adminResponse!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          );
+
+          final actions = _PrivacyRequestActions(
+            request: request,
+            loading: actionLoading,
+            onUpdate: onUpdate,
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                details,
+                const SizedBox(height: 12),
+                actions,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 16),
+              SizedBox(width: 260, child: actions),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PrivacyRequestActions extends StatelessWidget {
+  final AdminPrivacyRequest request;
+  final bool loading;
+  final void Function(AdminPrivacyRequest request, String status) onUpdate;
+
+  const _PrivacyRequestActions({
+    required this.request,
+    required this.loading,
+    required this.onUpdate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!request.isOpen) {
+      return _StatusPill(
+        label: request.statusLabel,
+        color: request.status == 'resolved' ? AppTheme.success : AppTheme.error,
+      );
+    }
+
+    final canTake = request.status == 'pending';
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      children: [
+        if (canTake)
+          OutlinedButton.icon(
+            onPressed: loading ? null : () => onUpdate(request, 'in_review'),
+            icon: const Icon(Icons.visibility_outlined, size: 18),
+            label: const Text('Tomar'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        OutlinedButton.icon(
+          onPressed: loading ? null : () => onUpdate(request, 'rejected'),
+          icon: const Icon(Icons.close_rounded, size: 18),
+          label: const Text('Rechazar'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppTheme.error,
+            minimumSize: const Size(0, 40),
+            side: BorderSide(color: AppTheme.error.withValues(alpha: 0.35)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: loading ? null : () => onUpdate(request, 'resolved'),
+          icon: const Icon(Icons.check_rounded, size: 18),
+          label: const Text('Resolver'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.success,
+            minimumSize: const Size(0, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _DriversPanel extends StatelessWidget {
@@ -1658,6 +1955,58 @@ class _DeleteDocumentsDialogState extends State<_DeleteDocumentsDialog> {
           ),
         ],
       );
+}
+
+class _PrivacyRequestDialog extends StatefulWidget {
+  final String status;
+
+  const _PrivacyRequestDialog({required this.status});
+
+  @override
+  State<_PrivacyRequestDialog> createState() => _PrivacyRequestDialogState();
+}
+
+class _PrivacyRequestDialogState extends State<_PrivacyRequestDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final resolving = widget.status == 'resolved';
+    return AlertDialog(
+      title: Text(resolving ? 'Resolver solicitud' : 'Rechazar solicitud'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: 2,
+        maxLines: 4,
+        decoration: InputDecoration(
+          labelText: 'Respuesta',
+          hintText: resolving
+              ? 'Ej: solicitud gestionada por soporte'
+              : 'Ej: falta validar identidad',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          style: FilledButton.styleFrom(
+            backgroundColor: resolving ? AppTheme.success : AppTheme.error,
+          ),
+          child: Text(resolving ? 'Resolver' : 'Rechazar'),
+        ),
+      ],
+    );
+  }
 }
 
 class _DataPanel extends StatelessWidget {

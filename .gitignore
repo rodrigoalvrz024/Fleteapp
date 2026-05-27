@@ -19,6 +19,7 @@ mobile/android/local.properties
 *.log
 firebase-debug.log*
 .firebase/
+.dart-appdata/
 .local-tools/
 .idea/
 mobile/ios/Runner/AppDelegate.swift

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/privacy_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -14,7 +15,9 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _privacyService = PrivacyService();
   Uint8List? _avatarBytes;
+  bool _privacyLoading = false;
 
   Future<void> _pickAvatar() async {
     HapticFeedback.lightImpact();
@@ -102,20 +105,67 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       );
 
+  Future<void> _submitPrivacyRequest(
+    BuildContext ctx,
+    String requestType,
+    String success,
+  ) async {
+    if (_privacyLoading) return;
+    setState(() => _privacyLoading = true);
+    try {
+      await _privacyService.createRequest(requestType: requestType);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        _snack(success, AppTheme.success),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        _snack('No se pudo crear la solicitud', AppTheme.error),
+      );
+    } finally {
+      if (mounted) setState(() => _privacyLoading = false);
+    }
+  }
+
+  void _confirmPrivacyRequest(
+    BuildContext ctx, {
+    required String title,
+    required String message,
+    required String requestType,
+    required String confirmLabel,
+    required String success,
+    Color confirmColor = AppTheme.primary,
+  }) =>
+      showDialog(
+        context: ctx,
+        builder: (_) => _ConfirmDialog(
+          title: title,
+          message: message,
+          confirmLabel: confirmLabel,
+          confirmColor: confirmColor,
+          onConfirm: () async {
+            Navigator.pop(ctx);
+            await _submitPrivacyRequest(ctx, requestType, success);
+          },
+        ),
+      );
+
   void _confirmDeleteAccount(BuildContext ctx) => showDialog(
         context: ctx,
         builder: (_) => _ConfirmDialog(
           title: 'Eliminar cuenta',
-          message: 'Esta acción es irreversible. Se eliminarán '
-              'todos tus datos, historial de fletes y métodos de pago.',
-          confirmLabel: 'Eliminar cuenta',
+          message: 'Crearemos una solicitud para revisar tu cuenta, fletes, '
+              'pagos y documentos asociados.',
+          confirmLabel: 'Solicitar',
           confirmColor: AppTheme.error,
-          onConfirm: () {
+          onConfirm: () async {
             Navigator.pop(ctx);
-            ScaffoldMessenger.of(ctx).showSnackBar(_snack(
-              'Solicitud enviada al equipo de soporte',
-              AppTheme.slate600,
-            ));
+            await _submitPrivacyRequest(
+              ctx,
+              'account_deletion',
+              'Solicitud de eliminación creada',
+            );
           },
         ),
       );
@@ -329,6 +379,48 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 16),
 
           // ── 5. Ayuda y soporte ───────────────────────
+          const _SectionTitle('Privacidad y datos'),
+          const SizedBox(height: 8),
+          _Card(children: [
+            _Item(
+              icon: Icons.file_download_outlined,
+              label: 'Solicitar copia de datos',
+              value: 'Acceso a tus datos personales',
+              onTap: () => _confirmPrivacyRequest(
+                context,
+                title: 'Copia de datos',
+                message: 'Crearemos una solicitud para preparar la informacion '
+                    'asociada a tu cuenta.',
+                requestType: 'data_export',
+                confirmLabel: 'Solicitar',
+                success: 'Solicitud de copia creada',
+              ),
+            ),
+            _Div(),
+            _Item(
+              icon: Icons.edit_note_rounded,
+              label: 'Rectificar datos',
+              value: 'Actualizar informacion incorrecta',
+              onTap: () => _confirmPrivacyRequest(
+                context,
+                title: 'Rectificar datos',
+                message: 'Crearemos una solicitud para revisar y corregir '
+                    'informacion de tu cuenta.',
+                requestType: 'data_rectification',
+                confirmLabel: 'Solicitar',
+                success: 'Solicitud de rectificacion creada',
+              ),
+            ),
+            _Div(),
+            _Item(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Politica de privacidad',
+              value: 'Version vigente',
+              onTap: () => context.push('/legal/privacy'),
+            ),
+          ]),
+          const SizedBox(height: 16),
+
           const _SectionTitle('Ayuda y soporte'),
           const SizedBox(height: 8),
           _Card(children: [
@@ -373,7 +465,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             _Item(
               icon: Icons.delete_outline_rounded,
               label: 'Eliminar cuenta',
-              value: 'Esta acción es irreversible',
+              value: 'Crear solicitud de eliminacion',
               onTap: () => _confirmDeleteAccount(context),
               color: AppTheme.error,
             ),

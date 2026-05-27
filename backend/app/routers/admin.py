@@ -7,11 +7,16 @@ from typing import List
 from pydantic import BaseModel
 from app.core.config import settings
 from app.database import get_db
+from app.models.data_privacy_request import (
+    DataPrivacyRequest,
+    DataPrivacyRequestStatus,
+)
 from app.models.driver_review_audit import DriverReviewAudit
 from app.models.user import User
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus
+from app.schemas.privacy_request import PrivacyRequestAdminUpdate
 from app.schemas.user import UserResponse
 from app.core.security import require_role
 from app.services.storage_service import (
@@ -53,6 +58,10 @@ def _sum_or_zero(db: Session, column, *filters) -> float:
     for item in filters:
         query = query.filter(item)
     return float(query.scalar() or 0)
+
+
+def _datetime_or_none(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
 
 
 def _status_value(status) -> str:
@@ -164,6 +173,73 @@ def activate_user(
     user.is_active = True
     db.commit()
     return {"message": f"Usuario {user_id} activado"}
+
+
+def _privacy_request_to_dict(request: DataPrivacyRequest, user: User) -> dict:
+    return {
+        "id": request.id,
+        "user_id": request.user_id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "phone": user.phone,
+        "role": _status_value(user.role),
+        "request_type": _status_value(request.request_type),
+        "status": _status_value(request.status),
+        "message": request.message,
+        "admin_response": request.admin_response,
+        "resolved_by": request.resolved_by,
+        "resolved_at": _datetime_or_none(request.resolved_at),
+        "created_at": _datetime_or_none(request.created_at),
+        "updated_at": _datetime_or_none(request.updated_at),
+    }
+
+
+@router.get("/privacy-requests")
+def list_privacy_requests(
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    rows = (
+        db.query(DataPrivacyRequest, User)
+        .join(User, DataPrivacyRequest.user_id == User.id)
+        .order_by(DataPrivacyRequest.created_at.desc())
+        .all()
+    )
+    return [_privacy_request_to_dict(request, user) for request, user in rows]
+
+
+@router.put("/privacy-requests/{request_id}")
+def update_privacy_request(
+    request_id: int,
+    data: PrivacyRequestAdminUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_role("admin")),
+):
+    privacy_request = (
+        db.query(DataPrivacyRequest)
+        .filter(DataPrivacyRequest.id == request_id)
+        .first()
+    )
+    if not privacy_request:
+        raise HTTPException(404, "Solicitud no encontrada")
+    if data.status == DataPrivacyRequestStatus.pending:
+        raise HTTPException(400, "Usa en_revision, resuelta o rechazada")
+
+    privacy_request.status = data.status
+    privacy_request.admin_response = (
+        data.admin_response.strip() if data.admin_response else None
+    )
+    if data.status in (
+        DataPrivacyRequestStatus.resolved,
+        DataPrivacyRequestStatus.rejected,
+    ):
+        privacy_request.resolved_by = current_admin.id
+        privacy_request.resolved_at = datetime.now(timezone.utc)
+    else:
+        privacy_request.resolved_by = None
+        privacy_request.resolved_at = None
+    db.commit()
+    return {"message": f"Solicitud {request_id} actualizada"}
 
 # ── Conductores ────────────────────────────────────────────
 
@@ -425,6 +501,14 @@ def get_metrics(
     drivers_by_status = _count_by(db, Driver.status)
     freights_by_status = _count_by(db, FreightRequest.status)
     payments_by_status = _count_by(db, Payment.status)
+    pending_privacy_requests = db.query(DataPrivacyRequest).filter(
+        DataPrivacyRequest.status.in_(
+            [
+                DataPrivacyRequestStatus.pending,
+                DataPrivacyRequestStatus.in_review,
+            ]
+        )
+    ).count()
 
     authorized_payments_clp = _sum_or_zero(
         db, Payment.amount, Payment.status == PaymentStatus.authorized
@@ -495,6 +579,7 @@ def get_metrics(
         "completed_freights":             completed_freights,
         "completion_rate":                completion_rate,
         "payments_by_status":             payments_by_status,
+        "pending_privacy_requests":       pending_privacy_requests,
         "authorized_payments_count":      authorized_payments_count,
         "authorized_payments_clp":        authorized_payments_clp,
         "average_authorized_ticket_clp":  average_authorized_ticket_clp,

@@ -16,6 +16,7 @@ class AdminMetrics {
   final int completedFreights;
   final num completionRate;
   final Map<String, int> paymentsByStatus;
+  final int pendingPrivacyRequests;
   final int authorizedPaymentsCount;
   final num authorizedPaymentsClp;
   final num averageAuthorizedTicketClp;
@@ -41,6 +42,7 @@ class AdminMetrics {
     required this.completedFreights,
     required this.completionRate,
     required this.paymentsByStatus,
+    required this.pendingPrivacyRequests,
     required this.authorizedPaymentsCount,
     required this.authorizedPaymentsClp,
     required this.averageAuthorizedTicketClp,
@@ -73,6 +75,7 @@ class AdminMetrics {
       completedFreights: json['completed_freights'] ?? 0,
       completionRate: json['completion_rate'] ?? 0,
       paymentsByStatus: intMap('payments_by_status'),
+      pendingPrivacyRequests: json['pending_privacy_requests'] ?? 0,
       authorizedPaymentsCount: json['authorized_payments_count'] ?? 0,
       authorizedPaymentsClp: json['authorized_payments_clp'] ?? 0,
       averageAuthorizedTicketClp: json['average_authorized_ticket_clp'] ?? 0,
@@ -85,6 +88,69 @@ class AdminMetrics {
           json['total_revenue_clp'] ?? json['authorized_payments_clp'] ?? 0,
     );
   }
+}
+
+class AdminPrivacyRequest {
+  final int id;
+  final int userId;
+  final String fullName;
+  final String email;
+  final String phone;
+  final String role;
+  final String requestType;
+  final String status;
+  final String? message;
+  final String? adminResponse;
+  final String? resolvedAt;
+  final String? createdAt;
+
+  const AdminPrivacyRequest({
+    required this.id,
+    required this.userId,
+    required this.fullName,
+    required this.email,
+    required this.phone,
+    required this.role,
+    required this.requestType,
+    required this.status,
+    this.message,
+    this.adminResponse,
+    this.resolvedAt,
+    this.createdAt,
+  });
+
+  factory AdminPrivacyRequest.fromJson(Map<String, dynamic> json) =>
+      AdminPrivacyRequest(
+        id: json['id'] ?? 0,
+        userId: json['user_id'] ?? 0,
+        fullName: json['full_name'] ?? '',
+        email: json['email'] ?? '',
+        phone: json['phone'] ?? '',
+        role: json['role'] ?? '',
+        requestType: json['request_type'] ?? '',
+        status: json['status'] ?? '',
+        message: json['message'],
+        adminResponse: json['admin_response'],
+        resolvedAt: json['resolved_at'],
+        createdAt: json['created_at'],
+      );
+
+  String get typeLabel => switch (requestType) {
+        'account_deletion' => 'Eliminar cuenta',
+        'data_export' => 'Copia de datos',
+        'data_rectification' => 'Rectificar datos',
+        _ => requestType,
+      };
+
+  String get statusLabel => switch (status) {
+        'pending' => 'Pendiente',
+        'in_review' => 'En revision',
+        'resolved' => 'Resuelta',
+        'rejected' => 'Rechazada',
+        _ => status,
+      };
+
+  bool get isOpen => status == 'pending' || status == 'in_review';
 }
 
 class AdminUser {
@@ -289,6 +355,13 @@ class AdminService {
         .toList();
   }
 
+  Future<List<AdminPrivacyRequest>> listPrivacyRequests() async {
+    final res = await _api.get('/admin/privacy-requests');
+    return (res.data as List)
+        .map((item) => AdminPrivacyRequest.fromJson(item))
+        .toList();
+  }
+
   Future<void> approveDriver(int driverId) async {
     await _api.put('/admin/drivers/$driverId/approve');
   }
@@ -304,6 +377,18 @@ class AdminService {
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
       },
     );
+  }
+
+  Future<void> updatePrivacyRequest({
+    required int requestId,
+    required String status,
+    String? response,
+  }) async {
+    await _api.put('/admin/privacy-requests/$requestId', {
+      'status': status,
+      if (response != null && response.trim().isNotEmpty)
+        'admin_response': response.trim(),
+    });
   }
 
   Future<String> getDriverDocumentViewUrl({
