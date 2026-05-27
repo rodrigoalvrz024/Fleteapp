@@ -19,6 +19,12 @@ ALLOWED_UPLOAD_TYPES = {
     "application/pdf": ".pdf",
 }
 DOCUMENT_VIEW_PURPOSE = "driver_document_view"
+FILE_SIGNATURES = {
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/webp": (b"RIFF",),
+    "application/pdf": (b"%PDF-",),
+}
 
 
 def _max_upload_bytes() -> int:
@@ -30,6 +36,20 @@ def _ensure_storage_configured() -> None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Almacenamiento privado de documentos no configurado",
+        )
+
+
+def _validate_file_signature(content_type: str, content: bytes) -> None:
+    signatures = FILE_SIGNATURES.get(content_type, ())
+    if not signatures or not any(content.startswith(signature) for signature in signatures):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El contenido del archivo no coincide con el formato declarado.",
+        )
+    if content_type == "image/webp" and content[8:12] != b"WEBP":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El contenido del archivo no coincide con el formato declarado.",
         )
 
 
@@ -57,6 +77,7 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"El archivo supera el maximo de {settings.DRIVER_DOCUMENT_MAX_MB} MB.",
         )
+    _validate_file_signature(content_type, content)
 
     object_name = _object_name(driver_id, field, extension)
     blob = _bucket().blob(object_name)
@@ -124,6 +145,11 @@ def delete_private_document(document_ref: str | None) -> dict:
 
 def stream_private_document(document_ref: str) -> StreamingResponse:
     _ensure_storage_configured()
+    if is_external_document_ref(document_ref) and not settings.ALLOW_EXTERNAL_DOCUMENT_REFS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documento no disponible",
+        )
     object_name = _normalize_document_ref(document_ref)
     blob = _bucket().blob(object_name)
     if not blob.exists():
@@ -146,6 +172,13 @@ def stream_private_document(document_ref: str) -> StreamingResponse:
 
 
 def _normalize_document_ref(document_ref: str) -> str:
+    if is_external_document_ref(document_ref):
+        if settings.ALLOW_EXTERNAL_DOCUMENT_REFS:
+            return document_ref
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documento no disponible",
+        )
     if document_ref.startswith("gs://"):
         prefix = f"gs://{settings.DRIVER_DOCUMENTS_BUCKET}/"
         if not document_ref.startswith(prefix):
@@ -154,4 +187,10 @@ def _normalize_document_ref(document_ref: str) -> str:
                 detail="Documento no disponible",
             )
         return document_ref[len(prefix) :]
-    return document_ref
+    normalized = str(PurePosixPath(document_ref))
+    if normalized.startswith("../") or normalized == ".." or "/../" in normalized:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documento no disponible",
+        )
+    return normalized

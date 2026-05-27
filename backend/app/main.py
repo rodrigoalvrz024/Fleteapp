@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
 from app.database import engine, Base, SessionLocal
 from app.db_migrations import run_startup_migrations
 from app.models.audit_event import AuditEvent
@@ -16,7 +17,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in settings.CORS_ORIGINS.split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +66,17 @@ async def record_backend_errors(request, call_next):
         raise
     if response.status_code >= 500:
         _record_backend_error(request, None, response.status_code)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto") == "https"
+    ):
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains; preload",
+        )
     return response
 
 

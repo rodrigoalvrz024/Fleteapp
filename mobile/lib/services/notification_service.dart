@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
@@ -7,11 +8,13 @@ class NotificationService {
   static Future<void> initialize() async {
     // NO llamar Firebase.initializeApp() aquí — ya se hace en main.dart
     try {
-      await _messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      if (!kIsWeb) {
+        await _messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
 
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('Notificación recibida: ${message.notification?.title}');

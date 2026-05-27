@@ -14,7 +14,6 @@ class PaymentResponse(BaseModel):
     method: PaymentMethod
     status: PaymentStatus
     transaction_id: Optional[str]
-    webpay_token: Optional[str]
     paid_at: Optional[datetime]
     created_at: datetime
 

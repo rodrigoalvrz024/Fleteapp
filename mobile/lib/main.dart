@@ -1,21 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
+import 'firebase_options.dart';
 import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es', null);
+  runApp(const ProviderScope(child: FleteApp()));
+  _initializeFirebaseServices();
+}
+
+Future<void> _initializeFirebaseServices() async {
   try {
-    await Firebase.initializeApp();
+    if (kIsWeb) {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
+    } else {
+      await Firebase.initializeApp();
+    }
     await NotificationService.initialize();
   } catch (e) {
     debugPrint('Firebase init error: $e');
   }
-  runApp(const ProviderScope(child: FleteApp()));
 }
 
 class FleteApp extends ConsumerWidget {

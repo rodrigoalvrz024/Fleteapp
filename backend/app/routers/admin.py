@@ -74,6 +74,13 @@ def _status_value(status) -> str:
     return status.value if hasattr(status, "value") else str(status)
 
 
+def _csv_safe(value) -> str:
+    text = "" if value is None else str(value)
+    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{text}"
+    return text
+
+
 def _parse_datetime_filter(value: str | None, *, end_of_day: bool = False) -> datetime | None:
     if not value:
         return None
@@ -403,20 +410,20 @@ def export_audit_events(
     for event in events:
         writer.writerow(
             [
-                event.id,
-                _datetime_or_none(event.occurred_at) or "",
-                event.actor_user_id or "",
-                actor_names.get(event.actor_user_id, ""),
-                event.actor_role or "",
-                event.entity_type,
-                event.entity_id,
-                event.event_type,
-                event.reason or "",
-                event.ip_address or "",
-                event.request_id or "",
-                json.dumps(event.before_data or {}, ensure_ascii=False),
-                json.dumps(event.after_data or {}, ensure_ascii=False),
-                json.dumps(event.event_metadata or {}, ensure_ascii=False),
+                _csv_safe(event.id),
+                _csv_safe(_datetime_or_none(event.occurred_at)),
+                _csv_safe(event.actor_user_id),
+                _csv_safe(actor_names.get(event.actor_user_id, "")),
+                _csv_safe(event.actor_role),
+                _csv_safe(event.entity_type),
+                _csv_safe(event.entity_id),
+                _csv_safe(event.event_type),
+                _csv_safe(event.reason),
+                _csv_safe(event.ip_address),
+                _csv_safe(event.request_id),
+                _csv_safe(json.dumps(event.before_data or {}, ensure_ascii=False)),
+                _csv_safe(json.dumps(event.after_data or {}, ensure_ascii=False)),
+                _csv_safe(json.dumps(event.event_metadata or {}, ensure_ascii=False)),
             ]
         )
     filename = f"fleteapp_audit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
@@ -886,6 +893,8 @@ def get_driver_document_view_url(
         raise HTTPException(404, "Documento no encontrado")
 
     if is_external_document_ref(document_ref):
+        if not settings.ALLOW_EXTERNAL_DOCUMENT_REFS:
+            raise HTTPException(404, "Documento no disponible")
         return {"url": document_ref, "expires_at": None}
 
     token, expires_at = create_driver_document_view_token(

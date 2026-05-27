@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.rate_limit import check_rate_limit
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db
 from app.models.password_reset import PasswordResetToken
@@ -39,6 +40,12 @@ def register(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    check_rate_limit(
+        request,
+        scope="auth-register",
+        max_attempts=8,
+        window_seconds=60 * 60,
+    )
     if not data.accepts_terms:
         raise HTTPException(status_code=400, detail="Debes aceptar los Términos y Condiciones")
     if not data.accepts_privacy:
@@ -134,7 +141,14 @@ def _record_registration_consents(
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
+    check_rate_limit(
+        request,
+        scope="auth-login",
+        identifier=data.email.lower(),
+        max_attempts=8,
+        window_seconds=15 * 60,
+    )
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
@@ -146,7 +160,24 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-def forgot_password(data: PasswordResetRequest, db: Session = Depends(get_db)):
+def forgot_password(
+    data: PasswordResetRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    check_rate_limit(
+        request,
+        scope="forgot-password-ip",
+        max_attempts=6,
+        window_seconds=60 * 60,
+    )
+    check_rate_limit(
+        request,
+        scope="forgot-password-email",
+        identifier=data.email.lower(),
+        max_attempts=3,
+        window_seconds=60 * 60,
+    )
     generic = "Si el correo existe, enviaremos instrucciones para recuperar la contraseña."
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not user.is_active:
@@ -180,7 +211,17 @@ def forgot_password(data: PasswordResetRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-def reset_password(data: PasswordResetConfirm, db: Session = Depends(get_db)):
+def reset_password(
+    data: PasswordResetConfirm,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    check_rate_limit(
+        request,
+        scope="reset-password",
+        max_attempts=10,
+        window_seconds=60 * 60,
+    )
     token_hash = hashlib.sha256(data.token.encode("utf-8")).hexdigest()
     reset_token = (
         db.query(PasswordResetToken)
