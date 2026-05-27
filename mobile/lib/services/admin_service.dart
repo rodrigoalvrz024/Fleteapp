@@ -153,6 +153,132 @@ class AdminPrivacyRequest {
   bool get isOpen => status == 'pending' || status == 'in_review';
 }
 
+class AdminAuditEvent {
+  final int id;
+  final String? occurredAt;
+  final int? actorUserId;
+  final String? actorRole;
+  final String entityType;
+  final String? entityId;
+  final String eventType;
+  final Map<String, dynamic> beforeData;
+  final Map<String, dynamic> afterData;
+  final String? reason;
+  final String? requestId;
+  final Map<String, dynamic> metadata;
+
+  const AdminAuditEvent({
+    required this.id,
+    this.occurredAt,
+    this.actorUserId,
+    this.actorRole,
+    required this.entityType,
+    this.entityId,
+    required this.eventType,
+    required this.beforeData,
+    required this.afterData,
+    this.reason,
+    this.requestId,
+    required this.metadata,
+  });
+
+  factory AdminAuditEvent.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic> asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        return value.map((key, value) => MapEntry('$key', value));
+      }
+      return const <String, dynamic>{};
+    }
+
+    int? asInt(Object? value) => value is num ? value.toInt() : null;
+
+    return AdminAuditEvent(
+      id: json['id'] ?? 0,
+      occurredAt: json['occurred_at'],
+      actorUserId: asInt(json['actor_user_id']),
+      actorRole: json['actor_role'],
+      entityType: json['entity_type'] ?? '',
+      entityId: json['entity_id']?.toString(),
+      eventType: json['event_type'] ?? '',
+      beforeData: asMap(json['before_data']),
+      afterData: asMap(json['after_data']),
+      reason: json['reason'],
+      requestId: json['request_id'],
+      metadata: asMap(json['metadata']),
+    );
+  }
+
+  String get entityLabel => switch (entityType) {
+        'user' => 'Usuario',
+        'driver' => 'Conductor',
+        'vehicle' => 'Vehiculo',
+        'freight' => 'Flete',
+        'payment' => 'Pago',
+        'privacy_request' => 'Privacidad',
+        _ => entityType.isEmpty ? 'Sistema' : entityType,
+      };
+
+  String get eventLabel => switch (eventType) {
+        'user.registered' => 'Registro',
+        'user.updated' => 'Perfil actualizado',
+        'user.suspended' => 'Usuario suspendido',
+        'user.activated' => 'Usuario activado',
+        'driver.registered' => 'Conductor registrado',
+        'driver.updated' => 'Conductor actualizado',
+        'driver.approved' => 'Conductor aprobado',
+        'driver.rejected' => 'Conductor rechazado',
+        'driver.document_uploaded' => 'Documento subido',
+        'driver.submitted_for_review' => 'Enviado a revision',
+        'driver.documents_deleted' => 'Documentos eliminados',
+        'vehicle.created' => 'Vehiculo creado',
+        'freight.created' => 'Flete creado',
+        'freight.accepted' => 'Flete aceptado',
+        'freight.status_changed' => 'Estado de flete',
+        'payment.initiated' => 'Pago iniciado',
+        'payment.authorized' => 'Pago autorizado',
+        'privacy_request.created' => 'Solicitud creada',
+        'privacy_request.status_changed' => 'Solicitud actualizada',
+        _ => eventType,
+      };
+
+  String get targetLabel => entityId == null || entityId!.isEmpty
+      ? entityLabel
+      : '$entityLabel #$entityId';
+
+  String get actorLabel {
+    if (actorRole == null || actorRole!.isEmpty) return 'Sistema';
+    final label = switch (actorRole) {
+      'admin' => 'Admin',
+      'driver' => 'Conductor',
+      'client' => 'Cliente',
+      _ => actorRole!,
+    };
+    return actorUserId == null ? label : '$label #$actorUserId';
+  }
+
+  String get detailSummary {
+    final trimmedReason = reason?.trim();
+    if (trimmedReason != null && trimmedReason.isNotEmpty) {
+      return trimmedReason;
+    }
+
+    final beforeStatus = beforeData['status'];
+    final afterStatus = afterData['status'];
+    if (beforeStatus != null && afterStatus != null) {
+      return 'Estado: $beforeStatus -> $afterStatus';
+    }
+
+    final documentType = metadata['document_type'];
+    if (documentType != null) return 'Documento: $documentType';
+
+    final keys = afterData.keys.take(3).toList();
+    if (keys.isNotEmpty) return 'Campos: ${keys.join(', ')}';
+
+    return '';
+  }
+}
+
 class AdminUser {
   final int id;
   final String email;
@@ -359,6 +485,13 @@ class AdminService {
     final res = await _api.get('/admin/privacy-requests');
     return (res.data as List)
         .map((item) => AdminPrivacyRequest.fromJson(item))
+        .toList();
+  }
+
+  Future<List<AdminAuditEvent>> listAuditEvents({int limit = 100}) async {
+    final res = await _api.get('/admin/audit-events', params: {'limit': limit});
+    return (res.data as List)
+        .map((item) => AdminAuditEvent.fromJson(item))
         .toList();
   }
 

@@ -26,6 +26,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   List<AdminUser> _users = [];
   List<AdminDriver> _drivers = [];
   List<AdminPrivacyRequest> _privacyRequests = [];
+  List<AdminAuditEvent> _auditEvents = [];
   int _tabIndex = 0;
 
   @override
@@ -61,6 +62,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _service.listUsers(),
         _service.listDrivers(),
         _service.listPrivacyRequests(),
+        _service.listAuditEvents(limit: 100),
       ]);
       if (!mounted) return;
       setState(() {
@@ -68,6 +70,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _users = results[1] as List<AdminUser>;
         _drivers = results[2] as List<AdminDriver>;
         _privacyRequests = results[3] as List<AdminPrivacyRequest>;
+        _auditEvents = results[4] as List<AdminAuditEvent>;
       });
     } catch (_) {
       if (mounted) {
@@ -235,6 +238,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             userCount: _users.length,
                             driverCount: _drivers.length,
                             privacyCount: _privacyRequests.length,
+                            auditCount: _auditEvents.length,
                             onChanged: (value) =>
                                 setState(() => _tabIndex = value),
                           ),
@@ -251,12 +255,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               onReject: _reject,
                               onDeleteDocuments: _deleteDocuments,
                             )
-                          else
+                          else if (_tabIndex == 2)
                             _PrivacyRequestsPanel(
                               requests: _privacyRequests,
                               actionLoading: _actionLoading,
                               onUpdate: _updatePrivacyRequest,
-                            ),
+                            )
+                          else
+                            _AuditEventsPanel(events: _auditEvents),
                         ],
                       ),
                     ),
@@ -844,6 +850,7 @@ class _TabSelector extends StatelessWidget {
   final int userCount;
   final int driverCount;
   final int privacyCount;
+  final int auditCount;
   final ValueChanged<int> onChanged;
 
   const _TabSelector({
@@ -851,6 +858,7 @@ class _TabSelector extends StatelessWidget {
     required this.userCount,
     required this.driverCount,
     required this.privacyCount,
+    required this.auditCount,
     required this.onChanged,
   });
 
@@ -884,6 +892,13 @@ class _TabSelector extends StatelessWidget {
               count: privacyCount,
               onTap: () => onChanged(2),
             ),
+            _TabButton(
+              selected: index == 3,
+              icon: Icons.history_rounded,
+              label: 'Historial',
+              count: auditCount,
+              onTap: () => onChanged(3),
+            ),
           ],
         ),
       );
@@ -906,39 +921,56 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(7),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            height: 42,
-            decoration: BoxDecoration(
-              color: selected ? AppTheme.surface : Colors.transparent,
-              borderRadius: BorderRadius.circular(7),
-              border: selected
-                  ? Border.all(color: AppTheme.slate200, width: 0.5)
-                  : null,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 17,
-                  color: selected ? AppTheme.midnight : AppTheme.slate400,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? AppTheme.midnight : AppTheme.slate400,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(width: 7),
-                _CountBadge(count: count, selected: selected),
-              ],
+        child: Tooltip(
+          message: label,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(7),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              height: 42,
+              decoration: BoxDecoration(
+                color: selected ? AppTheme.surface : Colors.transparent,
+                borderRadius: BorderRadius.circular(7),
+                border: selected
+                    ? Border.all(color: AppTheme.slate200, width: 0.5)
+                    : null,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showLabel = constraints.maxWidth >= 92;
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 17,
+                        color: selected ? AppTheme.midnight : AppTheme.slate400,
+                      ),
+                      if (showLabel) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: selected
+                                  ? AppTheme.midnight
+                                  : AppTheme.slate400,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 7),
+                      _CountBadge(count: count, selected: selected),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1293,6 +1325,204 @@ class _PrivacyRequestActions extends StatelessWidget {
       ],
     );
   }
+}
+
+class _AuditEventsPanel extends StatelessWidget {
+  final List<AdminAuditEvent> events;
+
+  const _AuditEventsPanel({required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    if (events.isEmpty) {
+      return const _EmptyPanel(
+        icon: Icons.history_rounded,
+        text: 'Sin eventos auditados',
+      );
+    }
+    return _DataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _PanelTitle(
+              icon: Icons.history_rounded,
+              title: 'Historial operacional',
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < events.length; i++) ...[
+            _AuditEventRow(event: events[i]),
+            if (i != events.length - 1) const Divider(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AuditEventRow extends StatelessWidget {
+  final AdminAuditEvent event;
+
+  const _AuditEventRow({required this.event});
+
+  Color get _eventColor {
+    if (event.eventType.startsWith('driver.')) return AppTheme.success;
+    if (event.eventType.startsWith('freight.')) return AppTheme.primary;
+    if (event.eventType.startsWith('payment.')) return AppTheme.midnight;
+    if (event.eventType.startsWith('privacy_request.')) return AppTheme.error;
+    if (event.eventType.startsWith('user.')) return AppTheme.warning;
+    return AppTheme.slate400;
+  }
+
+  IconData get _eventIcon {
+    if (event.eventType.startsWith('driver.')) {
+      return Icons.local_shipping_outlined;
+    }
+    if (event.eventType.startsWith('freight.')) return Icons.route_outlined;
+    if (event.eventType.startsWith('payment.')) return Icons.payments_outlined;
+    if (event.eventType.startsWith('privacy_request.')) {
+      return Icons.privacy_tip_outlined;
+    }
+    if (event.eventType.startsWith('user.')) return Icons.person_outline;
+    return Icons.history_rounded;
+  }
+
+  String _formatDate(String? value) {
+    if (value == null || value.isEmpty) return '';
+    try {
+      return DateFormat('dd/MM HH:mm').format(DateTime.parse(value).toLocal());
+    } catch (_) {
+      return value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final occurredAt = _formatDate(event.occurredAt);
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _eventColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_eventIcon, color: _eventColor, size: 19),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            event.targetLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.midnight,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: compact ? 140 : 220,
+                          ),
+                          child: _StatusPill(
+                            label: event.eventLabel,
+                            color: _eventColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      occurredAt.isEmpty
+                          ? event.actorLabel
+                          : '${event.actorLabel} - $occurredAt',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.slate400,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (event.detailSummary.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        event.detailSummary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.slate600,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (event.requestId != null &&
+                            event.requestId!.isNotEmpty)
+                          _AuditMetaChip(label: 'Req ${event.requestId}'),
+                        if (event.beforeData.isNotEmpty)
+                          _AuditMetaChip(
+                            label: 'Antes ${event.beforeData.length}',
+                          ),
+                        if (event.afterData.isNotEmpty)
+                          _AuditMetaChip(
+                            label: 'Despues ${event.afterData.length}',
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AuditMetaChip extends StatelessWidget {
+  final String label;
+
+  const _AuditMetaChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.slate100,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.slate400,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
 }
 
 class _DriversPanel extends StatelessWidget {
