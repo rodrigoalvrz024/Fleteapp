@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.data_privacy_request import (
@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.privacy_request import PrivacyRequestCreate, PrivacyRequestResponse
 from app.schemas.user import UserResponse, UserUpdate
 from app.core.security import get_current_user
+from app.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
 
@@ -17,9 +18,31 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.put("/me", response_model=UserResponse)
-def update_me(data: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_me(
+    data: UserUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    before_data = {
+        "full_name": current_user.full_name,
+        "phone": current_user.phone,
+        "avatar_url": current_user.avatar_url,
+        "fcm_token": current_user.fcm_token,
+    }
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(current_user, field, value)
+    current_user.last_modified_by = current_user.id
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="user",
+        entity_id=current_user.id,
+        event_type="user.updated",
+        before_data=before_data,
+        after_data=data.model_dump(exclude_none=True),
+        request=request,
+    )
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -45,6 +68,7 @@ def list_my_privacy_requests(
 )
 def create_my_privacy_request(
     data: PrivacyRequestCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -72,8 +96,22 @@ def create_my_privacy_request(
         user_id=current_user.id,
         request_type=data.request_type,
         message=data.message.strip() if data.message else None,
+        last_modified_by=current_user.id,
     )
     db.add(privacy_request)
+    db.flush()
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="data_privacy_request",
+        entity_id=privacy_request.id,
+        event_type="privacy_request.created",
+        after_data={
+            "request_type": data.request_type.value,
+            "status": DataPrivacyRequestStatus.pending.value,
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(privacy_request)
     return privacy_request

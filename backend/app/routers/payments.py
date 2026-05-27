@@ -8,6 +8,7 @@ from app.models.payment import Payment, PaymentStatus, PaymentMethod
 from app.schemas.payment import PaymentCreate, PaymentResponse, WebpayInitResponse
 from app.core.security import require_role
 from app.core.config import settings
+from app.services.audit_service import record_audit_event
 import uuid
 
 router = APIRouter(prefix="/payments", tags=["Pagos"])
@@ -36,8 +37,23 @@ def initiate_payment(data: PaymentCreate, db: Session = Depends(get_db), current
         buy_order=buy_order,
         status=PaymentStatus.pending,
         webpay_token=f"SANDBOX_TOKEN_{buy_order}",
+        last_modified_by=current_user.id,
     )
     db.add(payment)
+    db.flush()
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="payment",
+        entity_id=payment.id,
+        event_type="payment.initiated",
+        after_data={
+            "freight_id": freight.id,
+            "amount": amount,
+            "method": data.method.value,
+            "status": PaymentStatus.pending.value,
+        },
+    )
     db.commit()
 
     # URL simulada para sandbox
@@ -51,9 +67,22 @@ def payment_callback(token_ws: str = None, db: Session = Depends(get_db)):
     payment = db.query(Payment).filter(Payment.webpay_token == token_ws).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
+    status_before = payment.status.value if hasattr(payment.status, "value") else str(payment.status)
     payment.status = PaymentStatus.authorized
     payment.paid_at = datetime.utcnow()
     payment.authorization_code = f"AUTH-{uuid.uuid4().hex[:6].upper()}"
+    record_audit_event(
+        db,
+        entity_type="payment",
+        entity_id=payment.id,
+        event_type="payment.authorized",
+        before_data={"status": status_before},
+        after_data={
+            "status": PaymentStatus.authorized.value,
+            "paid_at": payment.paid_at.isoformat(),
+            "authorization_code": payment.authorization_code,
+        },
+    )
     db.commit()
     return {"message": "Pago confirmado", "payment_id": payment.id}
 

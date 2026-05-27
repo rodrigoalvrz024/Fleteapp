@@ -33,6 +33,9 @@ class Driver(Base):
     rating_count = Column(Integer, default=0)
     total_trips = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    last_modified_by = Column(Integer, nullable=True)
 
     user = relationship("User", foreign_keys=[user_id])
     vehicle = relationship("Vehicle", back_populates="driver", uselist=False)

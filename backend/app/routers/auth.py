@@ -21,6 +21,7 @@ from app.schemas.user import (
     UserResponse,
 )
 from app.services.email_service import EmailService
+from app.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 email_service = EmailService()
@@ -64,6 +65,17 @@ def register(
     db.refresh(user)
 
     _record_registration_consents(db, user, data, request)
+    user.last_modified_by = user.id
+    record_audit_event(
+        db,
+        actor=user,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="user.registered",
+        after_data={"role": user.role.value if hasattr(user.role, "value") else str(user.role)},
+        request=request,
+    )
+    db.commit()
 
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))

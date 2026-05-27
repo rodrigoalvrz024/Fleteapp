@@ -38,6 +38,8 @@ class DataPrivacyRequest(Base):
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    last_modified_by = Column(Integer, nullable=True)
 
     user = relationship("User", foreign_keys=[user_id])
     resolver = relationship("User", foreign_keys=[resolved_by])

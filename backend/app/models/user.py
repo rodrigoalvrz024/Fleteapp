@@ -23,6 +23,8 @@ class User(Base):
     fcm_token = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    last_modified_by = Column(Integer, nullable=True)
 
     freight_requests = relationship("FreightRequest", back_populates="client", foreign_keys="FreightRequest.client_id")
     ratings_given = relationship("Rating", back_populates="rater", foreign_keys="Rating.rater_id")

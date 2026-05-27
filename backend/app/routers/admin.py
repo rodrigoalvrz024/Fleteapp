@@ -11,6 +11,7 @@ from app.models.data_privacy_request import (
     DataPrivacyRequest,
     DataPrivacyRequestStatus,
 )
+from app.models.audit_event import AuditEvent
 from app.models.driver_review_audit import DriverReviewAudit
 from app.models.user import User
 from app.models.driver import Driver, DriverStatus
@@ -19,6 +20,7 @@ from app.models.payment import Payment, PaymentStatus
 from app.schemas.privacy_request import PrivacyRequestAdminUpdate
 from app.schemas.user import UserResponse
 from app.core.security import require_role
+from app.services.audit_service import record_audit_event
 from app.services.storage_service import (
     create_driver_document_view_token,
     decode_driver_document_view_token,
@@ -151,26 +153,52 @@ def list_users(
 @router.put("/users/{user_id}/suspend")
 def suspend_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _=Depends(require_role("admin"))
+    current_admin: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    before_data = {"is_active": user.is_active}
     user.is_active = False
+    user.last_modified_by = current_admin.id
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="user.suspended",
+        before_data=before_data,
+        after_data={"is_active": user.is_active},
+        request=request,
+    )
     db.commit()
     return {"message": f"Usuario {user_id} suspendido"}
 
 @router.put("/users/{user_id}/activate")
 def activate_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _=Depends(require_role("admin"))
+    current_admin: User = Depends(require_role("admin"))
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    before_data = {"is_active": user.is_active}
     user.is_active = True
+    user.last_modified_by = current_admin.id
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="user.activated",
+        before_data=before_data,
+        after_data={"is_active": user.is_active},
+        request=request,
+    )
     db.commit()
     return {"message": f"Usuario {user_id} activado"}
 
@@ -194,6 +222,48 @@ def _privacy_request_to_dict(request: DataPrivacyRequest, user: User) -> dict:
     }
 
 
+def _audit_event_to_dict(event: AuditEvent) -> dict:
+    return {
+        "id": event.id,
+        "occurred_at": _datetime_or_none(event.occurred_at),
+        "actor_user_id": event.actor_user_id,
+        "actor_role": event.actor_role,
+        "entity_type": event.entity_type,
+        "entity_id": event.entity_id,
+        "event_type": event.event_type,
+        "before_data": event.before_data,
+        "after_data": event.after_data,
+        "reason": event.reason,
+        "ip_address": event.ip_address,
+        "request_id": event.request_id,
+        "metadata": event.event_metadata,
+    }
+
+
+@router.get("/audit-events")
+def list_audit_events(
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    event_type: str | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    query = db.query(AuditEvent)
+    if entity_type:
+        query = query.filter(AuditEvent.entity_type == entity_type)
+    if entity_id:
+        query = query.filter(AuditEvent.entity_id == entity_id)
+    if event_type:
+        query = query.filter(AuditEvent.event_type == event_type)
+    events = (
+        query.order_by(AuditEvent.occurred_at.desc())
+        .limit(min(max(limit, 1), 500))
+        .all()
+    )
+    return [_audit_event_to_dict(event) for event in events]
+
+
 @router.get("/privacy-requests")
 def list_privacy_requests(
     db: Session = Depends(get_db),
@@ -212,6 +282,7 @@ def list_privacy_requests(
 def update_privacy_request(
     request_id: int,
     data: PrivacyRequestAdminUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_role("admin")),
 ):
@@ -225,10 +296,17 @@ def update_privacy_request(
     if data.status == DataPrivacyRequestStatus.pending:
         raise HTTPException(400, "Usa en_revision, resuelta o rechazada")
 
+    before_data = {
+        "status": _status_value(privacy_request.status),
+        "admin_response": privacy_request.admin_response,
+        "resolved_by": privacy_request.resolved_by,
+        "resolved_at": _datetime_or_none(privacy_request.resolved_at),
+    }
     privacy_request.status = data.status
     privacy_request.admin_response = (
         data.admin_response.strip() if data.admin_response else None
     )
+    privacy_request.last_modified_by = current_admin.id
     if data.status in (
         DataPrivacyRequestStatus.resolved,
         DataPrivacyRequestStatus.rejected,
@@ -238,6 +316,22 @@ def update_privacy_request(
     else:
         privacy_request.resolved_by = None
         privacy_request.resolved_at = None
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="data_privacy_request",
+        entity_id=privacy_request.id,
+        event_type="privacy_request.status_changed",
+        before_data=before_data,
+        after_data={
+            "status": data.status.value,
+            "admin_response": privacy_request.admin_response,
+            "resolved_by": privacy_request.resolved_by,
+            "resolved_at": _datetime_or_none(privacy_request.resolved_at),
+        },
+        reason=privacy_request.admin_response,
+        request=request,
+    )
     db.commit()
     return {"message": f"Solicitud {request_id} actualizada"}
 
@@ -308,6 +402,7 @@ def list_drivers(
 @router.put("/drivers/{driver_id}/approve")
 def approve_driver(
     driver_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_role("admin"))
 ):
@@ -326,10 +421,12 @@ def approve_driver(
     if not driver.soap_url:
         raise HTTPException(400, "Falta SOAP")
     status_before = _status_value(driver.status)
+    documents_before = _documents_snapshot(driver)
     driver.status           = DriverStatus.approved
     driver.rejection_reason = None
     driver.documents_retention_until = None
     driver.documents_deleted_at = None
+    driver.last_modified_by = current_admin.id
     _create_review_audit(
         db=db,
         driver=driver,
@@ -338,6 +435,19 @@ def approve_driver(
         status_before=status_before,
         status_after=DriverStatus.approved.value,
     )
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="driver",
+        entity_id=driver.id,
+        event_type="driver.approved",
+        before_data={"status": status_before, "documents": documents_before},
+        after_data={
+            "status": DriverStatus.approved.value,
+            "documents": _documents_snapshot(driver),
+        },
+        request=request,
+    )
     db.commit()
     return {"message": f"Conductor {driver_id} aprobado"}
 
@@ -345,6 +455,7 @@ def approve_driver(
 def reject_driver(
     driver_id: int,
     body: RejectBody,
+    request: Request,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_role("admin"))
 ):
@@ -357,6 +468,7 @@ def reject_driver(
     if not driver:
         raise HTTPException(404, "Conductor no encontrado")
     status_before = _status_value(driver.status)
+    documents_before = _documents_snapshot(driver)
     driver.status = DriverStatus.suspended
     if hasattr(driver, "rejection_reason"):
         driver.rejection_reason = reason
@@ -365,6 +477,7 @@ def reject_driver(
             days=settings.DRIVER_REJECTED_DOCUMENT_RETENTION_DAYS
         )
         driver.documents_deleted_at = None
+    driver.last_modified_by = current_admin.id
     _create_review_audit(
         db=db,
         driver=driver,
@@ -374,6 +487,22 @@ def reject_driver(
         status_after=DriverStatus.suspended.value,
         reason=reason,
     )
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="driver",
+        entity_id=driver.id,
+        event_type="driver.rejected",
+        before_data={"status": status_before, "documents": documents_before},
+        after_data={
+            "status": DriverStatus.suspended.value,
+            "documents_retention_until": _datetime_or_none(
+                driver.documents_retention_until
+            ),
+        },
+        reason=reason,
+        request=request,
+    )
     db.commit()
     return {"message": f"Conductor {driver_id} rechazado"}
 
@@ -381,6 +510,7 @@ def reject_driver(
 @router.delete("/drivers/{driver_id}/documents")
 def delete_driver_documents(
     driver_id: int,
+    request: Request,
     body: DeleteDocumentsBody | None = None,
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_role("admin")),
@@ -408,6 +538,7 @@ def delete_driver_documents(
 
     driver.documents_deleted_at = datetime.now(timezone.utc)
     driver.documents_retention_until = None
+    driver.last_modified_by = current_admin.id
     _create_review_audit(
         db=db,
         driver=driver,
@@ -418,6 +549,21 @@ def delete_driver_documents(
         reason=(body.reason.strip() if body and body.reason else None),
         documents_snapshot=documents_snapshot,
         vehicle_snapshot=vehicle_snapshot,
+    )
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="driver",
+        entity_id=driver.id,
+        event_type="driver.documents_deleted",
+        before_data={"documents": documents_snapshot},
+        after_data={
+            "documents": _documents_snapshot(driver),
+            "documents_deleted_at": _datetime_or_none(driver.documents_deleted_at),
+            "deletion_results": deletion_results,
+        },
+        reason=(body.reason.strip() if body and body.reason else None),
+        request=request,
     )
     db.commit()
     return {

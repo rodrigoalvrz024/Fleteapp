@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
@@ -10,6 +10,7 @@ from app.schemas.freight import FreightCreate, FreightResponse, FreightStatusUpd
 from app.core.security import get_current_user, require_role
 from app.services.freight_service import calculate_distance_km, estimate_price, can_transition
 from app.services.notification_service import send_push_notification
+from app.services.audit_service import record_audit_event
 import asyncio
 from typing import Optional, List
 from datetime import datetime
@@ -55,6 +56,7 @@ def _require_freight_status_access(
 @router.post("", response_model=FreightResponse, status_code=201)
 async def create_freight(
     data: FreightCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client"))
 ):
@@ -92,8 +94,26 @@ async def create_freight(
         cargo_volume_m3     = data.cargo_volume_m3,
         requires_helpers    = data.requires_helpers,
         scheduled_at        = data.scheduled_at,
+        last_modified_by    = current_user.id,
     )
     db.add(freight)
+    db.flush()
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="freight.created",
+        after_data={
+            "status": FreightStatus.pending.value,
+            "distance_km": freight.distance_km,
+            "client_pays": freight.client_pays,
+            "driver_receives": freight.driver_receives,
+            "platform_fee": freight.platform_fee,
+            "mode": freight.mode,
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(freight)
 
@@ -149,18 +169,40 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
     if not freight or freight.status != FreightStatus.pending:
         raise HTTPException(status_code=400, detail="Flete no disponible")
 
+    status_before = freight.status.value if hasattr(freight.status, "value") else str(freight.status)
     freight.driver_id = driver.id
     freight.status = FreightStatus.accepted
     freight.accepted_at = datetime.utcnow()
+    freight.last_modified_by = current_user.id
 
     history = TripStatusHistory(freight_id=freight.id, status=FreightStatus.accepted, note=f"Aceptado por conductor {driver.id}")
     db.add(history)
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="freight.accepted",
+        before_data={"status": status_before, "driver_id": None},
+        after_data={
+            "status": FreightStatus.accepted.value,
+            "driver_id": driver.id,
+            "accepted_at": freight.accepted_at.isoformat(),
+        },
+        metadata={"driver_profile_id": driver.id},
+    )
     db.commit()
     db.refresh(freight)
     return freight
 
 @router.put("/{freight_id}/status", response_model=FreightResponse)
-def update_status(freight_id: int, data: FreightStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_status(
+    freight_id: int,
+    data: FreightStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
@@ -170,6 +212,7 @@ def update_status(freight_id: int, data: FreightStatusUpdate, db: Session = Depe
     if not can_transition(freight.status, data.status):
         raise HTTPException(status_code=400, detail=f"No se puede pasar de {freight.status} a {data.status}")
 
+    status_before = freight.status.value if hasattr(freight.status, "value") else str(freight.status)
     freight.status = data.status
     if data.status == FreightStatus.in_progress:
         freight.started_at = datetime.utcnow()
@@ -179,9 +222,25 @@ def update_status(freight_id: int, data: FreightStatusUpdate, db: Session = Depe
     elif data.status == FreightStatus.cancelled:
         freight.cancelled_at = datetime.utcnow()
         freight.cancel_reason = data.note
+    freight.last_modified_by = current_user.id
 
     history = TripStatusHistory(freight_id=freight.id, status=data.status, note=data.note)
     db.add(history)
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="freight.status_changed",
+        before_data={"status": status_before},
+        after_data={
+            "status": data.status.value,
+            "final_price": freight.final_price,
+            "cancel_reason": freight.cancel_reason,
+        },
+        reason=data.note,
+        request=request,
+    )
     db.commit()
     db.refresh(freight)
     return freight

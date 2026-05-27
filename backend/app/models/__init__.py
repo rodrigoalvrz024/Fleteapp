@@ -8,6 +8,7 @@ from app.models.notification import Notification
 from app.models.password_reset import PasswordResetToken
 from app.models.user_consent import UserConsent
 from app.models.driver_review_audit import DriverReviewAudit
+from app.models.audit_event import AuditEvent
 from app.models.data_privacy_request import (
     DataPrivacyRequest,
     DataPrivacyRequestStatus,
