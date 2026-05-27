@@ -816,7 +816,7 @@ class _TabSelector extends StatelessWidget {
             _TabButton(
               selected: index == 1,
               icon: Icons.local_shipping_outlined,
-              label: 'Conductores',
+              label: 'Revision',
               count: driverCount,
               onTap: () => onChanged(1),
             ),
@@ -1005,7 +1005,16 @@ class _DriversPanel extends StatelessWidget {
     }
     return _DataPanel(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _PanelTitle(
+              icon: Icons.fact_check_outlined,
+              title: 'Revision de documentos y solicitudes',
+            ),
+          ),
+          const SizedBox(height: 10),
           for (var i = 0; i < drivers.length; i++) ...[
             _DriverRow(
               driver: drivers[i],
@@ -1182,13 +1191,29 @@ class _DriverDocuments extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final docs = [
-      _DocumentLink('Licencia', driver.licenseImageUrl),
       _DocumentLink(
-        'Permiso',
-        driver.circulationPermitUrl ?? driver.vehicleDocUrl,
+        label: 'Licencia',
+        type: 'license_image',
+        available: driver.documents['license_image'] == true,
       ),
-      _DocumentLink('Revision', driver.technicalReviewUrl),
-      _DocumentLink('SOAP', driver.soapUrl),
+      _DocumentLink(
+        label: 'Permiso',
+        type: driver.documents['circulation_permit'] == true
+            ? 'circulation_permit'
+            : 'vehicle_doc',
+        available: driver.documents['circulation_permit'] == true ||
+            driver.documents['vehicle_doc'] == true,
+      ),
+      _DocumentLink(
+        label: 'Revision',
+        type: 'technical_review',
+        available: driver.documents['technical_review'] == true,
+      ),
+      _DocumentLink(
+        label: 'SOAP',
+        type: 'soap',
+        available: driver.documents['soap'] == true,
+      ),
     ];
 
     return Wrap(
@@ -1197,8 +1222,10 @@ class _DriverDocuments extends StatelessWidget {
       children: docs
           .map(
             (doc) => _DocumentChip(
+              driverId: driver.id,
               label: doc.label,
-              url: doc.url,
+              type: doc.type,
+              available: doc.available,
             ),
           )
           .toList(),
@@ -1207,14 +1234,24 @@ class _DriverDocuments extends StatelessWidget {
 }
 
 class _DocumentChip extends StatelessWidget {
+  final int driverId;
   final String label;
-  final String? url;
+  final String type;
+  final bool available;
 
-  const _DocumentChip({required this.label, required this.url});
+  const _DocumentChip({
+    required this.driverId,
+    required this.label,
+    required this.type,
+    required this.available,
+  });
 
   Future<void> _open() async {
-    final value = url;
-    if (value == null || value.isEmpty) return;
+    if (!available) return;
+    final value = await AdminService().getDriverDocumentViewUrl(
+      driverId: driverId,
+      documentType: type,
+    );
     final uri = Uri.tryParse(value);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -1222,7 +1259,6 @@ class _DocumentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final available = url != null && url!.isNotEmpty;
     return InkWell(
       onTap: available ? _open : null,
       borderRadius: BorderRadius.circular(999),
@@ -1265,9 +1301,14 @@ class _DocumentChip extends StatelessWidget {
 
 class _DocumentLink {
   final String label;
-  final String? url;
+  final String type;
+  final bool available;
 
-  const _DocumentLink(this.label, this.url);
+  const _DocumentLink({
+    required this.label,
+    required this.type,
+    required this.available,
+  });
 }
 
 class _VehicleLine extends StatelessWidget {

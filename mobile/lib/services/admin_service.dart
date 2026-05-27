@@ -152,11 +152,7 @@ class AdminDriver {
   final String phone;
   final String status;
   final String createdAt;
-  final String? licenseImageUrl;
-  final String? vehicleDocUrl;
-  final String? circulationPermitUrl;
-  final String? technicalReviewUrl;
-  final String? soapUrl;
+  final Map<String, bool> documents;
   final String? rejectionReason;
   final List<AdminVehicle> vehicles;
 
@@ -168,33 +164,44 @@ class AdminDriver {
     required this.phone,
     required this.status,
     required this.createdAt,
-    this.licenseImageUrl,
-    this.vehicleDocUrl,
-    this.circulationPermitUrl,
-    this.technicalReviewUrl,
-    this.soapUrl,
+    required this.documents,
     this.rejectionReason,
     required this.vehicles,
   });
 
-  factory AdminDriver.fromJson(Map<String, dynamic> json) => AdminDriver(
-        id: json['driver_id'] ?? json['id'],
-        userId: json['user_id'] ?? 0,
-        fullName: json['full_name'] ?? '',
-        email: json['email'] ?? '',
-        phone: json['phone'] ?? '',
-        status: json['status'] ?? '',
-        createdAt: json['created_at'] ?? '',
-        licenseImageUrl: json['license_image_url'],
-        vehicleDocUrl: json['vehicle_doc_url'],
-        circulationPermitUrl: json['circulation_permit_url'],
-        technicalReviewUrl: json['technical_review_url'],
-        soapUrl: json['soap_url'],
-        rejectionReason: json['rejection_reason'],
-        vehicles: ((json['vehicles'] ?? []) as List)
-            .map((item) => AdminVehicle.fromJson(item))
-            .toList(),
-      );
+  factory AdminDriver.fromJson(Map<String, dynamic> json) {
+    final documents = (json['documents'] as Map<String, dynamic>? ?? {}).map(
+      (key, value) => MapEntry(key, value == true),
+    );
+    bool legacyHas(String key) {
+      final value = json[key];
+      return value is String && value.isNotEmpty;
+    }
+
+    return AdminDriver(
+      id: json['driver_id'] ?? json['id'],
+      userId: json['user_id'] ?? 0,
+      fullName: json['full_name'] ?? '',
+      email: json['email'] ?? '',
+      phone: json['phone'] ?? '',
+      status: json['status'] ?? '',
+      createdAt: json['created_at'] ?? '',
+      documents: {
+        'license_image':
+            documents['license_image'] ?? legacyHas('license_image_url'),
+        'vehicle_doc': documents['vehicle_doc'] ?? legacyHas('vehicle_doc_url'),
+        'circulation_permit': documents['circulation_permit'] ??
+            legacyHas('circulation_permit_url'),
+        'technical_review':
+            documents['technical_review'] ?? legacyHas('technical_review_url'),
+        'soap': documents['soap'] ?? legacyHas('soap_url'),
+      },
+      rejectionReason: json['rejection_reason'],
+      vehicles: ((json['vehicles'] ?? []) as List)
+          .map((item) => AdminVehicle.fromJson(item))
+          .toList(),
+    );
+  }
 }
 
 class AdminService {
@@ -223,5 +230,15 @@ class AdminService {
 
   Future<void> rejectDriver(int driverId, String reason) async {
     await _api.put('/admin/drivers/$driverId/reject', {'reason': reason});
+  }
+
+  Future<String> getDriverDocumentViewUrl({
+    required int driverId,
+    required String documentType,
+  }) async {
+    final res = await _api.get(
+      '/admin/drivers/$driverId/documents/$documentType/view-url',
+    );
+    return res.data['url'] as String;
   }
 }

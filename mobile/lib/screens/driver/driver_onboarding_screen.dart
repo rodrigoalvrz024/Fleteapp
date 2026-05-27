@@ -650,9 +650,8 @@ class _DocumentStep extends StatelessWidget {
                 ),
               ),
               child: imageUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
-                      child: Image.network(imageUrl!, fit: BoxFit.cover),
+                  ? _UploadedDocumentPreview(
+                      imageUrl: _isPreviewableUrl(imageUrl!) ? imageUrl : null,
                     )
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -717,6 +716,42 @@ class _DocumentStep extends StatelessWidget {
           ),
         ],
       );
+}
+
+bool _isPreviewableUrl(String value) =>
+    value.startsWith('http://') || value.startsWith('https://');
+
+class _UploadedDocumentPreview extends StatelessWidget {
+  final String? imageUrl;
+
+  const _UploadedDocumentPreview({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Image.network(imageUrl!, fit: BoxFit.cover),
+      );
+    }
+
+    return const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.verified_rounded, size: 44, color: AppTheme.success),
+        SizedBox(height: 10),
+        Text(
+          'Documento almacenado de forma privada',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            color: AppTheme.success,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _VehicleStep extends StatefulWidget {

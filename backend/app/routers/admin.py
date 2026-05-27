@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
+from app.core.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.models.driver import Driver, DriverStatus
@@ -10,11 +11,25 @@ from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus
 from app.schemas.user import UserResponse
 from app.core.security import require_role
+from app.services.storage_service import (
+    create_driver_document_view_token,
+    decode_driver_document_view_token,
+    is_external_document_ref,
+    stream_private_document,
+)
 
 router = APIRouter(prefix="/admin", tags=["Administración"])
 
 class RejectBody(BaseModel):
     reason: str
+
+DOCUMENT_FIELDS = {
+    "license_image": "license_image_url",
+    "vehicle_doc": "vehicle_doc_url",
+    "circulation_permit": "circulation_permit_url",
+    "technical_review": "technical_review_url",
+    "soap": "soap_url",
+}
 
 def _enum_key(value):
     return value.value if hasattr(value, "value") else str(value)
@@ -89,12 +104,15 @@ def list_drivers(
             "status":             d.status.value
                                   if hasattr(d.status, 'value')
                                   else d.status,
-            "profile_image_url":  getattr(d, "profile_image_url", None),
-            "license_image_url":  getattr(d, "license_image_url", None),
-            "vehicle_doc_url":    getattr(d, "vehicle_doc_url", None),
-            "circulation_permit_url": getattr(d, "circulation_permit_url", None),
-            "technical_review_url": getattr(d, "technical_review_url", None),
-            "soap_url": getattr(d, "soap_url", None),
+            "documents": {
+                "license_image": bool(getattr(d, "license_image_url", None)),
+                "vehicle_doc": bool(getattr(d, "vehicle_doc_url", None)),
+                "circulation_permit": bool(
+                    getattr(d, "circulation_permit_url", None)
+                ),
+                "technical_review": bool(getattr(d, "technical_review_url", None)),
+                "soap": bool(getattr(d, "soap_url", None)),
+            },
             "rejection_reason":   getattr(d, "rejection_reason", None),
             "vehicles":           [
                 {
@@ -152,6 +170,67 @@ def reject_driver(
         driver.rejection_reason = body.reason
     db.commit()
     return {"message": f"Conductor {driver_id} rechazado"}
+
+
+@router.get("/drivers/{driver_id}/documents/{document_type}/view-url")
+def get_driver_document_view_url(
+    driver_id: int,
+    document_type: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    document_field = DOCUMENT_FIELDS.get(document_type)
+    if not document_field:
+        raise HTTPException(404, "Documento no encontrado")
+
+    driver = db.query(Driver).filter(Driver.id == driver_id).first()
+    if not driver:
+        raise HTTPException(404, "Conductor no encontrado")
+
+    document_ref = getattr(driver, document_field, None)
+    if not document_ref:
+        raise HTTPException(404, "Documento no encontrado")
+
+    if is_external_document_ref(document_ref):
+        return {"url": document_ref, "expires_at": None}
+
+    token, expires_at = create_driver_document_view_token(
+        driver_id=driver.id,
+        document_type=document_type,
+        document_ref=document_ref,
+    )
+    base_url = (
+        settings.PUBLIC_API_URL.rstrip("/")
+        if settings.PUBLIC_API_URL
+        else str(request.base_url).rstrip("/")
+    )
+    return {
+        "url": f"{base_url}/admin/driver-documents/{token}",
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+@router.get("/driver-documents/{token}", name="view_driver_document")
+def view_driver_document(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    payload = decode_driver_document_view_token(token)
+    document_type = payload.get("document_type")
+    document_field = DOCUMENT_FIELDS.get(document_type)
+    if not document_field:
+        raise HTTPException(404, "Documento no disponible")
+
+    driver = db.query(Driver).filter(Driver.id == payload.get("driver_id")).first()
+    if not driver:
+        raise HTTPException(404, "Documento no disponible")
+
+    document_ref = getattr(driver, document_field, None)
+    if not document_ref or document_ref != payload.get("document_ref"):
+        raise HTTPException(404, "Documento no disponible")
+
+    return stream_private_document(document_ref)
 
 # ── Métricas ───────────────────────────────────────────────
 
