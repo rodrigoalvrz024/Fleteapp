@@ -278,6 +278,7 @@ def _audit_event_to_dict(event: AuditEvent, actor_name: str | None = None) -> di
         "after_data": event.after_data,
         "reason": event.reason,
         "ip_address": event.ip_address,
+        "user_agent": event.user_agent,
         "request_id": event.request_id,
         "metadata": event.event_metadata,
     }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1721,7 +1723,13 @@ class _AuditEventsPanel extends StatelessWidget {
               )
             else
               for (var i = 0; i < events.length; i++) ...[
-                _AuditEventRow(event: events[i]),
+                _AuditEventRow(
+                  event: events[i],
+                  onOpen: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _AuditEventDialog(event: events[i]),
+                  ),
+                ),
                 if (i != events.length - 1) const Divider(),
               ],
           ],
@@ -2043,8 +2051,12 @@ class _InlineEmptyState extends StatelessWidget {
 
 class _AuditEventRow extends StatelessWidget {
   final AdminAuditEvent event;
+  final VoidCallback onOpen;
 
-  const _AuditEventRow({required this.event});
+  const _AuditEventRow({
+    required this.event,
+    required this.onOpen,
+  });
 
   Color get _eventColor {
     if (event.eventType.startsWith('driver.')) return AppTheme.success;
@@ -2176,6 +2188,25 @@ class _AuditEventRow extends StatelessWidget {
                           _AuditMetaChip(
                             label: 'Despues ${event.afterData.length}',
                           ),
+                        OutlinedButton.icon(
+                          onPressed: onOpen,
+                          icon: const Icon(Icons.visibility_outlined, size: 16),
+                          label: const Text('Ver'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 32),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 0,
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -2207,6 +2238,295 @@ class _AuditMetaChip extends StatelessWidget {
             color: AppTheme.slate400,
             fontSize: 11,
             fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+}
+
+class _AuditEventDialog extends StatelessWidget {
+  final AdminAuditEvent event;
+
+  const _AuditEventDialog({required this.event});
+
+  String _formatDate(String? value) {
+    if (value == null || value.isEmpty) return '';
+    try {
+      return DateFormat('dd/MM/yyyy HH:mm:ss').format(
+        DateTime.parse(value).toLocal(),
+      );
+    } catch (_) {
+      return value;
+    }
+  }
+
+  String _prettyJson(Map<String, dynamic> data) {
+    if (data.isEmpty) return '{}';
+    return const JsonEncoder.withIndent('  ').convert(data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final occurredAt = _formatDate(event.occurredAt);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(18),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 840, maxHeight: 760),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 10, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _PanelTitle(
+                      icon: Icons.manage_search_rounded,
+                      title: 'Detalle de evento #${event.id}',
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(18),
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _StatusPill(
+                        label: event.targetLabel,
+                        color: AppTheme.primary,
+                      ),
+                      _StatusPill(
+                        label: event.eventLabel,
+                        color: AppTheme.midnight,
+                      ),
+                      _AuditMetaChip(label: event.actorLabel),
+                      if (occurredAt.isNotEmpty)
+                        _AuditMetaChip(label: occurredAt),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _AuditInfoGrid(event: event),
+                  if ((event.reason ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _AuditDetailSection(
+                      title: 'Motivo',
+                      child: SelectableText(
+                        event.reason!,
+                        style: const TextStyle(
+                          color: AppTheme.slate600,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 720;
+                      final before = _AuditJsonSection(
+                        title: 'Antes',
+                        value: _prettyJson(event.beforeData),
+                      );
+                      final after = _AuditJsonSection(
+                        title: 'Despues',
+                        value: _prettyJson(event.afterData),
+                      );
+                      if (compact) {
+                        return Column(
+                          children: [
+                            before,
+                            const SizedBox(height: 12),
+                            after,
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: before),
+                          const SizedBox(width: 12),
+                          Expanded(child: after),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _AuditJsonSection(
+                    title: 'Metadata',
+                    value: _prettyJson(event.metadata),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AuditInfoGrid extends StatelessWidget {
+  final AdminAuditEvent event;
+
+  const _AuditInfoGrid({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      _AuditInfoItem('Entidad', event.entityType),
+      _AuditInfoItem('ID entidad', event.entityId ?? ''),
+      _AuditInfoItem('Accion', event.eventType),
+      _AuditInfoItem('Actor', event.actorLabel),
+      _AuditInfoItem('IP', event.ipAddress ?? ''),
+      _AuditInfoItem('Request', event.requestId ?? ''),
+      _AuditInfoItem('User agent', event.userAgent ?? ''),
+    ].where((item) => item.value.trim().isNotEmpty).toList();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > 700 ? 2 : 1;
+        return GridView.builder(
+          itemCount: items.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: columns == 1 ? 6.4 : 4.3,
+          ),
+          itemBuilder: (_, index) => _AuditInfoTile(item: items[index]),
+        );
+      },
+    );
+  }
+}
+
+class _AuditInfoItem {
+  final String label;
+  final String value;
+
+  const _AuditInfoItem(this.label, this.value);
+}
+
+class _AuditInfoTile extends StatelessWidget {
+  final _AuditInfoItem item;
+
+  const _AuditInfoTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.slate400,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            SelectableText(
+              item.value,
+              maxLines: 2,
+              style: const TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _AuditDetailSection extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const _AuditDetailSection({
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
+      );
+}
+
+class _AuditJsonSection extends StatelessWidget {
+  final String title;
+  final String value;
+
+  const _AuditJsonSection({
+    required this.title,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) => _AuditDetailSection(
+        title: title,
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 260),
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppTheme.midnight,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: 'monospace',
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
           ),
         ),
       );

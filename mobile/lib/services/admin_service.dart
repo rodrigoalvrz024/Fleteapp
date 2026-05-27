@@ -190,6 +190,8 @@ class AdminAuditEvent {
   final Map<String, dynamic> beforeData;
   final Map<String, dynamic> afterData;
   final String? reason;
+  final String? ipAddress;
+  final String? userAgent;
   final String? requestId;
   final Map<String, dynamic> metadata;
 
@@ -205,6 +207,8 @@ class AdminAuditEvent {
     required this.beforeData,
     required this.afterData,
     this.reason,
+    this.ipAddress,
+    this.userAgent,
     this.requestId,
     required this.metadata,
   });
@@ -232,6 +236,8 @@ class AdminAuditEvent {
       beforeData: asMap(json['before_data']),
       afterData: asMap(json['after_data']),
       reason: json['reason'],
+      ipAddress: json['ip_address'],
+      userAgent: json['user_agent'],
       requestId: json['request_id'],
       metadata: asMap(json['metadata']),
     );
