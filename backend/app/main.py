@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
+from app.db_migrations import run_startup_migrations
 from app.routers import auth, users, drivers, freights, payments, ratings, admin
 
 Base.metadata.create_all(bind=engine)
+run_startup_migrations(engine)
 
 app = FastAPI(
     title="FleteApp API",

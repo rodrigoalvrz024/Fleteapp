@@ -107,6 +107,21 @@ def is_external_document_ref(document_ref: str) -> bool:
     return document_ref.startswith("http://") or document_ref.startswith("https://")
 
 
+def delete_private_document(document_ref: str | None) -> dict:
+    if not document_ref:
+        return {"deleted": False, "reason": "empty"}
+    if is_external_document_ref(document_ref):
+        return {"deleted": False, "reason": "external"}
+
+    object_name = _normalize_document_ref(document_ref)
+    blob = _bucket().blob(object_name)
+    if not blob.exists():
+        return {"deleted": False, "reason": "not_found", "object": object_name}
+
+    blob.delete()
+    return {"deleted": True, "object": object_name}
+
+
 def stream_private_document(document_ref: str) -> StreamingResponse:
     _ensure_storage_configured()
     object_name = _normalize_document_ref(document_ref)

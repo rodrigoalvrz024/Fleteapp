@@ -58,6 +58,10 @@ class ApiService {
     return await _dio.put(path, data: data);
   }
 
+  Future<Response> delete(String path, [Map<String, dynamic>? data]) async {
+    return await _dio.delete(path, data: data);
+  }
+
   Future<Response> uploadForm(String path, FormData data) async {
     return await _dio.post(
       path,

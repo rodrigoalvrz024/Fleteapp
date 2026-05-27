@@ -55,6 +55,8 @@ class DriverResponse(BaseModel):
     soap_url: Optional[str] = None
     rejection_reason: Optional[str] = None
     submitted_at: Optional[datetime] = None
+    documents_retention_until: Optional[datetime] = None
+    documents_deleted_at: Optional[datetime] = None
     rating_average: float
     rating_count: int
     total_trips: int

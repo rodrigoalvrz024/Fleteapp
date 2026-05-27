@@ -153,6 +153,8 @@ class AdminDriver {
   final String status;
   final String createdAt;
   final Map<String, bool> documents;
+  final String? documentsRetentionUntil;
+  final String? documentsDeletedAt;
   final String? rejectionReason;
   final List<AdminDriverReview> reviewHistory;
   final List<AdminVehicle> vehicles;
@@ -166,6 +168,8 @@ class AdminDriver {
     required this.status,
     required this.createdAt,
     required this.documents,
+    this.documentsRetentionUntil,
+    this.documentsDeletedAt,
     this.rejectionReason,
     this.reviewHistory = const [],
     required this.vehicles,
@@ -198,6 +202,8 @@ class AdminDriver {
             documents['technical_review'] ?? legacyHas('technical_review_url'),
         'soap': documents['soap'] ?? legacyHas('soap_url'),
       },
+      documentsRetentionUntil: json['documents_retention_until'],
+      documentsDeletedAt: json['documents_deleted_at'],
       rejectionReason: json['rejection_reason'],
       reviewHistory: ((json['review_history'] ?? []) as List)
           .map((item) => AdminDriverReview.fromJson(item))
@@ -207,6 +213,11 @@ class AdminDriver {
           .toList(),
     );
   }
+
+  bool get hasAnyDocument => documents.values.any((value) => value);
+  bool get isPending => status == 'pending';
+  bool get isApproved => status == 'approved';
+  bool get isSuspended => status == 'suspended';
 }
 
 class AdminDriverReview {
@@ -253,6 +264,7 @@ class AdminDriverReview {
   String get actionLabel => switch (action) {
         'approved' => 'Aprobado',
         'rejected' => 'Rechazado',
+        'documents_deleted' => 'Docs eliminados',
         _ => action,
       };
 }
@@ -283,6 +295,15 @@ class AdminService {
 
   Future<void> rejectDriver(int driverId, String reason) async {
     await _api.put('/admin/drivers/$driverId/reject', {'reason': reason});
+  }
+
+  Future<void> deleteDriverDocuments(int driverId, {String? reason}) async {
+    await _api.delete(
+      '/admin/drivers/$driverId/documents',
+      {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
   }
 
   Future<String> getDriverDocumentViewUrl({

@@ -25,6 +25,8 @@ class Driver(Base):
     soap_url = Column(String, nullable=True)
     rejection_reason = Column(String, nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
+    documents_retention_until = Column(DateTime(timezone=True), nullable=True)
+    documents_deleted_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(Enum(DriverStatus), default=DriverStatus.pending)
     is_available = Column(Boolean, default=False)
     rating_average = Column(Float, default=0.0)

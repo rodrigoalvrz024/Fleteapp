@@ -99,6 +99,21 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  Future<void> _deleteDocuments(AdminDriver driver) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _DeleteDocumentsDialog(),
+    );
+    if (reason == null) return;
+    await _runDriverAction(
+      success: 'Documentos de ${driver.fullName} eliminados',
+      action: () => _service.deleteDriverDocuments(
+        driver.id,
+        reason: reason.trim(),
+      ),
+    );
+  }
+
   Future<void> _runDriverAction({
     required String success,
     required Future<void> Function() action,
@@ -207,6 +222,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               actionLoading: _actionLoading,
                               onApprove: _approve,
                               onReject: _reject,
+                              onDeleteDocuments: _deleteDocuments,
                             ),
                         ],
                       ),
@@ -987,12 +1003,14 @@ class _DriversPanel extends StatelessWidget {
   final bool actionLoading;
   final ValueChanged<AdminDriver> onApprove;
   final ValueChanged<AdminDriver> onReject;
+  final ValueChanged<AdminDriver> onDeleteDocuments;
 
   const _DriversPanel({
     required this.drivers,
     required this.actionLoading,
     required this.onApprove,
     required this.onReject,
+    required this.onDeleteDocuments,
   });
 
   @override
@@ -1021,6 +1039,7 @@ class _DriversPanel extends StatelessWidget {
               actionLoading: actionLoading,
               onApprove: onApprove,
               onReject: onReject,
+              onDeleteDocuments: onDeleteDocuments,
             ),
             if (i != drivers.length - 1) const Divider(),
           ],
@@ -1035,16 +1054,15 @@ class _DriverRow extends StatelessWidget {
   final bool actionLoading;
   final ValueChanged<AdminDriver> onApprove;
   final ValueChanged<AdminDriver> onReject;
+  final ValueChanged<AdminDriver> onDeleteDocuments;
 
   const _DriverRow({
     required this.driver,
     required this.actionLoading,
     required this.onApprove,
     required this.onReject,
+    required this.onDeleteDocuments,
   });
-
-  bool get _pending => driver.status == 'pending';
-  bool get _approved => driver.status == 'approved';
 
   @override
   Widget build(BuildContext context) {
@@ -1087,6 +1105,11 @@ class _DriverRow extends StatelessWidget {
               _VehicleLine(vehicle: vehicle),
               const SizedBox(height: 10),
               _DriverDocuments(driver: driver),
+              if (driver.documentsRetentionUntil != null ||
+                  driver.documentsDeletedAt != null) ...[
+                const SizedBox(height: 10),
+                _DriverDocumentRetention(driver: driver),
+              ],
               if (driver.reviewHistory.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 _DriverReviewHistory(reviews: driver.reviewHistory),
@@ -1095,11 +1118,14 @@ class _DriverRow extends StatelessWidget {
           );
 
           final actions = _DriverActions(
-            pending: _pending,
-            approved: _approved,
+            pending: driver.isPending,
+            approved: driver.isApproved,
+            suspended: driver.isSuspended,
+            hasDocuments: driver.hasAnyDocument,
             loading: actionLoading,
             onApprove: () => onApprove(driver),
             onReject: () => onReject(driver),
+            onDeleteDocuments: () => onDeleteDocuments(driver),
           );
 
           if (compact) {
@@ -1129,23 +1155,61 @@ class _DriverRow extends StatelessWidget {
 class _DriverActions extends StatelessWidget {
   final bool pending;
   final bool approved;
+  final bool suspended;
+  final bool hasDocuments;
   final bool loading;
   final VoidCallback onApprove;
   final VoidCallback onReject;
+  final VoidCallback onDeleteDocuments;
 
   const _DriverActions({
     required this.pending,
     required this.approved,
+    required this.suspended,
+    required this.hasDocuments,
     required this.loading,
     required this.onApprove,
     required this.onReject,
+    required this.onDeleteDocuments,
   });
 
   @override
   Widget build(BuildContext context) {
     if (!pending) {
+      if (suspended && hasDocuments) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: _StatusPill(
+                label: 'Retener documentos',
+                color: AppTheme.error,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: loading ? null : onDeleteDocuments,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Borrar docs'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.error,
+                minimumSize: const Size(0, 42),
+                side: BorderSide(color: AppTheme.error.withValues(alpha: 0.35)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
       return _StatusPill(
-        label: approved ? 'Listo para operar' : 'Sin acción pendiente',
+        label: approved
+            ? 'Listo para operar'
+            : suspended
+                ? 'Sin docs privados'
+                : 'Sin acción pendiente',
         color: approved ? AppTheme.success : AppTheme.slate400,
       );
     }
@@ -1315,6 +1379,61 @@ class _DocumentLink {
   });
 }
 
+class _DriverDocumentRetention extends StatelessWidget {
+  final AdminDriver driver;
+
+  const _DriverDocumentRetention({required this.driver});
+
+  String _formatDate(String value) {
+    try {
+      return DateFormat('dd/MM/yyyy HH:mm')
+          .format(DateTime.parse(value).toLocal());
+    } catch (_) {
+      return value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final deletedAt = driver.documentsDeletedAt;
+    final retentionUntil = driver.documentsRetentionUntil;
+    final deleted = deletedAt != null;
+    final color = deleted ? AppTheme.slate400 : AppTheme.warning;
+    final icon =
+        deleted ? Icons.delete_outline_rounded : Icons.lock_clock_outlined;
+    final text = deleted
+        ? 'Documentos eliminados ${_formatDate(deletedAt)}'
+        : 'Retencion hasta ${_formatDate(retentionUntil!)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DriverReviewHistory extends StatelessWidget {
   final List<AdminDriverReview> reviews;
 
@@ -1324,7 +1443,12 @@ class _DriverReviewHistory extends StatelessWidget {
   Widget build(BuildContext context) {
     final latest = reviews.first;
     final approved = latest.action == 'approved';
-    final color = approved ? AppTheme.success : AppTheme.error;
+    final deleted = latest.action == 'documents_deleted';
+    final color = approved
+        ? AppTheme.success
+        : deleted
+            ? AppTheme.slate400
+            : AppTheme.error;
     final created = latest.createdAt != null
         ? DateFormat('dd/MM HH:mm').format(DateTime.parse(latest.createdAt!))
         : '';
@@ -1341,7 +1465,11 @@ class _DriverReviewHistory extends StatelessWidget {
           Row(
             children: [
               Icon(
-                approved ? Icons.verified_outlined : Icons.report_outlined,
+                approved
+                    ? Icons.verified_outlined
+                    : deleted
+                        ? Icons.delete_outline_rounded
+                        : Icons.report_outlined,
                 size: 15,
                 color: color,
               ),
@@ -1474,6 +1602,59 @@ class _RejectDriverDialogState extends State<_RejectDriverDialog> {
           FilledButton(
             onPressed: () => Navigator.pop(context, _controller.text),
             child: const Text('Rechazar'),
+          ),
+        ],
+      );
+}
+
+class _DeleteDocumentsDialog extends StatefulWidget {
+  const _DeleteDocumentsDialog();
+
+  @override
+  State<_DeleteDocumentsDialog> createState() => _DeleteDocumentsDialogState();
+}
+
+class _DeleteDocumentsDialogState extends State<_DeleteDocumentsDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Borrar documentos privados'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Esta accion elimina los archivos privados del almacenamiento y deja registro en auditoria.',
+              style: TextStyle(fontSize: 13, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Motivo opcional',
+                hintText: 'Ej: solicitud rechazada y plazo cerrado',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, _controller.text),
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Borrar'),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
           ),
         ],
       );

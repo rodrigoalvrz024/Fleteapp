@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -15,6 +17,7 @@ from app.core.security import require_role
 from app.services.storage_service import (
     create_driver_document_view_token,
     decode_driver_document_view_token,
+    delete_private_document,
     is_external_document_ref,
     stream_private_document,
 )
@@ -23,6 +26,10 @@ router = APIRouter(prefix="/admin", tags=["Administración"])
 
 class RejectBody(BaseModel):
     reason: str
+
+
+class DeleteDocumentsBody(BaseModel):
+    reason: str | None = None
 
 DOCUMENT_FIELDS = {
     "license_image": "license_image_url",
@@ -99,6 +106,8 @@ def _create_review_audit(
     status_before: str,
     status_after: str,
     reason: str | None = None,
+    documents_snapshot: dict | None = None,
+    vehicle_snapshot: dict | None = None,
 ) -> None:
     db.add(
         DriverReviewAudit(
@@ -108,10 +117,18 @@ def _create_review_audit(
             status_before=status_before,
             status_after=status_after,
             reason=reason,
-            documents_snapshot=_documents_snapshot(driver),
-            vehicle_snapshot=_vehicle_snapshot(driver),
+            documents_snapshot=documents_snapshot or _documents_snapshot(driver),
+            vehicle_snapshot=(
+                vehicle_snapshot
+                if vehicle_snapshot is not None
+                else _vehicle_snapshot(driver)
+            ),
         )
     )
+
+
+def _has_driver_documents(driver: Driver) -> bool:
+    return any(getattr(driver, field_name) for field_name in DOCUMENT_FIELDS.values())
 
 @router.get("/users", response_model=List[UserResponse])
 def list_users(
@@ -185,6 +202,16 @@ def list_drivers(
             "phone":              u.phone,
             "status":             _status_value(d.status),
             "documents":          _documents_snapshot(d),
+            "documents_retention_until": (
+                d.documents_retention_until.isoformat()
+                if d.documents_retention_until
+                else None
+            ),
+            "documents_deleted_at": (
+                d.documents_deleted_at.isoformat()
+                if d.documents_deleted_at
+                else None
+            ),
             "review_history":     reviews_by_driver.get(d.id, []),
             "rejection_reason":   getattr(d, "rejection_reason", None),
             "vehicles":           [
@@ -225,6 +252,8 @@ def approve_driver(
     status_before = _status_value(driver.status)
     driver.status           = DriverStatus.approved
     driver.rejection_reason = None
+    driver.documents_retention_until = None
+    driver.documents_deleted_at = None
     _create_review_audit(
         db=db,
         driver=driver,
@@ -255,6 +284,11 @@ def reject_driver(
     driver.status = DriverStatus.suspended
     if hasattr(driver, "rejection_reason"):
         driver.rejection_reason = reason
+    if _has_driver_documents(driver):
+        driver.documents_retention_until = datetime.now(timezone.utc) + timedelta(
+            days=settings.DRIVER_REJECTED_DOCUMENT_RETENTION_DAYS
+        )
+        driver.documents_deleted_at = None
     _create_review_audit(
         db=db,
         driver=driver,
@@ -266,6 +300,54 @@ def reject_driver(
     )
     db.commit()
     return {"message": f"Conductor {driver_id} rechazado"}
+
+
+@router.delete("/drivers/{driver_id}/documents")
+def delete_driver_documents(
+    driver_id: int,
+    body: DeleteDocumentsBody | None = None,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_role("admin")),
+):
+    driver = db.query(Driver).filter(Driver.id == driver_id).first()
+    if not driver:
+        raise HTTPException(404, "Conductor no encontrado")
+
+    if driver.status != DriverStatus.suspended:
+        raise HTTPException(
+            400,
+            "Solo se pueden borrar documentos de conductores suspendidos",
+        )
+
+    documents_snapshot = _documents_snapshot(driver)
+    if not any(documents_snapshot.values()):
+        raise HTTPException(400, "El conductor no tiene documentos para borrar")
+
+    vehicle_snapshot = _vehicle_snapshot(driver)
+    deletion_results = {}
+    for document_type, field_name in DOCUMENT_FIELDS.items():
+        document_ref = getattr(driver, field_name, None)
+        deletion_results[document_type] = delete_private_document(document_ref)
+        setattr(driver, field_name, None)
+
+    driver.documents_deleted_at = datetime.now(timezone.utc)
+    driver.documents_retention_until = None
+    _create_review_audit(
+        db=db,
+        driver=driver,
+        admin=current_admin,
+        action="documents_deleted",
+        status_before=_status_value(driver.status),
+        status_after=_status_value(driver.status),
+        reason=(body.reason.strip() if body and body.reason else None),
+        documents_snapshot=documents_snapshot,
+        vehicle_snapshot=vehicle_snapshot,
+    )
+    db.commit()
+    return {
+        "message": f"Documentos del conductor {driver_id} eliminados",
+        "results": deletion_results,
+    }
 
 
 @router.get("/drivers/{driver_id}/documents/{document_type}/view-url")

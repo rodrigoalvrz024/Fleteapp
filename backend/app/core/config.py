@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     DRIVER_DOCUMENTS_BUCKET: str = ""
     DRIVER_DOCUMENT_MAX_MB: int = 5
     DRIVER_DOCUMENT_VIEW_EXPIRE_MINUTES: int = 10
+    DRIVER_REJECTED_DOCUMENT_RETENTION_DAYS: int = 90
     PUBLIC_API_URL: str = ""
 
     class Config:
