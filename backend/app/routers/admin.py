@@ -1,6 +1,9 @@
-from datetime import datetime, timedelta, timezone
+import csv
+import io
+import json
+from datetime import datetime, time, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
@@ -14,6 +17,7 @@ from app.models.data_privacy_request import (
 from app.models.audit_event import AuditEvent
 from app.models.driver_review_audit import DriverReviewAudit
 from app.models.user import User
+from app.models.user_consent import UserConsent
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus
@@ -68,6 +72,32 @@ def _datetime_or_none(value: datetime | None) -> str | None:
 
 def _status_value(status) -> str:
     return status.value if hasattr(status, "value") else str(status)
+
+
+def _parse_datetime_filter(value: str | None, *, end_of_day: bool = False) -> datetime | None:
+    if not value:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    try:
+        if len(cleaned) == 10:
+            day = datetime.fromisoformat(cleaned).date()
+            if end_of_day:
+                return datetime.combine(day + timedelta(days=1), time.min, timezone.utc)
+            return datetime.combine(day, time.min, timezone.utc)
+        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except ValueError as exc:
+        raise HTTPException(400, "Fecha de historial invalida") from exc
+
+
+def _normalize_audit_entity_type(entity_type: str | None) -> str | None:
+    if entity_type == "privacy_request":
+        return "data_privacy_request"
+    return entity_type
 
 
 def _documents_snapshot(driver: Driver) -> dict:
@@ -222,11 +252,24 @@ def _privacy_request_to_dict(request: DataPrivacyRequest, user: User) -> dict:
     }
 
 
-def _audit_event_to_dict(event: AuditEvent) -> dict:
+def _audit_actor_names(db: Session, events: list[AuditEvent]) -> dict[int, str]:
+    actor_ids = sorted(
+        {event.actor_user_id for event in events if event.actor_user_id is not None}
+    )
+    if not actor_ids:
+        return {}
+    return {
+        user.id: user.full_name
+        for user in db.query(User).filter(User.id.in_(actor_ids)).all()
+    }
+
+
+def _audit_event_to_dict(event: AuditEvent, actor_name: str | None = None) -> dict:
     return {
         "id": event.id,
         "occurred_at": _datetime_or_none(event.occurred_at),
         "actor_user_id": event.actor_user_id,
+        "actor_name": actor_name,
         "actor_role": event.actor_role,
         "entity_type": event.entity_type,
         "entity_id": event.entity_id,
@@ -240,28 +283,277 @@ def _audit_event_to_dict(event: AuditEvent) -> dict:
     }
 
 
-@router.get("/audit-events")
-def list_audit_events(
+def _build_audit_query(
+    db: Session,
     entity_type: str | None = None,
     entity_id: str | None = None,
     event_type: str | None = None,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    _=Depends(require_role("admin")),
+    actor_user_id: int | None = None,
+    actor_role: str | None = None,
+    occurred_from: str | None = None,
+    occurred_to: str | None = None,
 ):
     query = db.query(AuditEvent)
+    entity_type = _normalize_audit_entity_type(entity_type)
     if entity_type:
         query = query.filter(AuditEvent.entity_type == entity_type)
     if entity_id:
         query = query.filter(AuditEvent.entity_id == entity_id)
     if event_type:
         query = query.filter(AuditEvent.event_type == event_type)
+    if actor_user_id is not None:
+        query = query.filter(AuditEvent.actor_user_id == actor_user_id)
+    if actor_role:
+        query = query.filter(AuditEvent.actor_role == actor_role)
+
+    from_dt = _parse_datetime_filter(occurred_from)
+    to_dt = _parse_datetime_filter(occurred_to, end_of_day=True)
+    if from_dt:
+        query = query.filter(AuditEvent.occurred_at >= from_dt)
+    if to_dt:
+        query = query.filter(AuditEvent.occurred_at < to_dt)
+    return query
+
+
+@router.get("/audit-events")
+def list_audit_events(
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    event_type: str | None = None,
+    actor_user_id: int | None = None,
+    actor_role: str | None = None,
+    occurred_from: str | None = None,
+    occurred_to: str | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    query = _build_audit_query(
+        db,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        event_type=event_type,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+    )
     events = (
         query.order_by(AuditEvent.occurred_at.desc())
         .limit(min(max(limit, 1), 500))
         .all()
     )
-    return [_audit_event_to_dict(event) for event in events]
+    actor_names = _audit_actor_names(db, events)
+    return [
+        _audit_event_to_dict(event, actor_names.get(event.actor_user_id))
+        for event in events
+    ]
+
+
+@router.get("/audit-events/export")
+def export_audit_events(
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    event_type: str | None = None,
+    actor_user_id: int | None = None,
+    actor_role: str | None = None,
+    occurred_from: str | None = None,
+    occurred_to: str | None = None,
+    limit: int = 1000,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    events = (
+        _build_audit_query(
+            db,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=event_type,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            occurred_from=occurred_from,
+            occurred_to=occurred_to,
+        )
+        .order_by(AuditEvent.occurred_at.desc())
+        .limit(min(max(limit, 1), 5000))
+        .all()
+    )
+    actor_names = _audit_actor_names(db, events)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "occurred_at",
+            "actor_user_id",
+            "actor_name",
+            "actor_role",
+            "entity_type",
+            "entity_id",
+            "event_type",
+            "reason",
+            "ip_address",
+            "request_id",
+            "before_data",
+            "after_data",
+            "metadata",
+        ]
+    )
+    for event in events:
+        writer.writerow(
+            [
+                event.id,
+                _datetime_or_none(event.occurred_at) or "",
+                event.actor_user_id or "",
+                actor_names.get(event.actor_user_id, ""),
+                event.actor_role or "",
+                event.entity_type,
+                event.entity_id,
+                event.event_type,
+                event.reason or "",
+                event.ip_address or "",
+                event.request_id or "",
+                json.dumps(event.before_data or {}, ensure_ascii=False),
+                json.dumps(event.after_data or {}, ensure_ascii=False),
+                json.dumps(event.event_metadata or {}, ensure_ascii=False),
+            ]
+        )
+    filename = f"fleteapp_audit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _legal_consent_to_dict(consent: UserConsent, user: User) -> dict:
+    return {
+        "id": consent.id,
+        "user_id": consent.user_id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "role": _status_value(user.role),
+        "consent_type": consent.consent_type,
+        "version": consent.version,
+        "ip_address": consent.ip_address,
+        "user_agent": consent.user_agent,
+        "accepted_at": _datetime_or_none(consent.accepted_at),
+    }
+
+
+@router.get("/legal-consents")
+def list_legal_consents(
+    consent_type: str | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    query = db.query(UserConsent, User).join(User, UserConsent.user_id == User.id)
+    if consent_type:
+        query = query.filter(UserConsent.consent_type == consent_type)
+    rows = (
+        query.order_by(UserConsent.accepted_at.desc())
+        .limit(min(max(limit, 1), 500))
+        .all()
+    )
+    return [_legal_consent_to_dict(consent, user) for consent, user in rows]
+
+
+def _alert(
+    severity: str,
+    title: str,
+    message: str,
+    count: int,
+    action: str,
+) -> dict:
+    return {
+        "severity": severity,
+        "title": title,
+        "message": message,
+        "count": count,
+        "action": action,
+    }
+
+
+@router.get("/operational-alerts")
+def list_operational_alerts(
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    now = datetime.now(timezone.utc)
+    alerts = []
+    backend_errors_24h = db.query(AuditEvent).filter(
+        AuditEvent.event_type == "system.backend_error",
+        AuditEvent.occurred_at >= now - timedelta(hours=24),
+    ).count()
+    pending_drivers = db.query(Driver).filter(
+        Driver.status == DriverStatus.pending
+    ).count()
+    stale_pending_drivers = db.query(Driver).filter(
+        Driver.status == DriverStatus.pending,
+        Driver.created_at <= now - timedelta(hours=48),
+    ).count()
+    pending_privacy_requests = db.query(DataPrivacyRequest).filter(
+        DataPrivacyRequest.status.in_(
+            [
+                DataPrivacyRequestStatus.pending,
+                DataPrivacyRequestStatus.in_review,
+            ]
+        )
+    ).count()
+
+    if backend_errors_24h:
+        alerts.append(
+            _alert(
+                "critical",
+                "Errores backend 24h",
+                "Hay respuestas 500 registradas en la bitacora.",
+                backend_errors_24h,
+                "Revisar Historial filtrando accion system.backend_error",
+            )
+        )
+    if stale_pending_drivers:
+        alerts.append(
+            _alert(
+                "warning",
+                "Conductores esperando mas de 48h",
+                "Hay solicitudes de conductor antiguas sin resolver.",
+                stale_pending_drivers,
+                "Revisar pestaña Revision",
+            )
+        )
+    elif pending_drivers:
+        alerts.append(
+            _alert(
+                "info",
+                "Conductores esperando aprobacion",
+                "Hay solicitudes de conductor listas para revisar.",
+                pending_drivers,
+                "Revisar pestaña Revision",
+            )
+        )
+    if pending_privacy_requests:
+        alerts.append(
+            _alert(
+                "warning",
+                "Solicitudes de datos pendientes",
+                "Hay solicitudes legales o de privacidad abiertas.",
+                pending_privacy_requests,
+                "Revisar pestaña Datos",
+            )
+        )
+
+    if not alerts:
+        alerts.append(
+            _alert(
+                "success",
+                "Operacion sin alertas",
+                "No hay errores recientes ni pendientes criticos.",
+                0,
+                "Mantener monitoreo diario",
+            )
+        )
+    return alerts
 
 
 @router.get("/privacy-requests")

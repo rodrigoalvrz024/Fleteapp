@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
+import '../../utils/file_download.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -20,6 +21,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   final _service = AdminService();
   final _money = NumberFormat('#,##0', 'es_CL');
   final _auditEntityIdController = TextEditingController();
+  final _auditActorIdController = TextEditingController();
   bool _loading = true;
   bool _auditLoading = false;
   bool _actionLoading = false;
@@ -29,8 +31,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   List<AdminDriver> _drivers = [];
   List<AdminPrivacyRequest> _privacyRequests = [];
   List<AdminAuditEvent> _auditEvents = [];
+  List<AdminOperationalAlert> _alerts = [];
+  List<AdminLegalConsent> _legalConsents = [];
   String _auditEntityType = '';
   String _auditEventType = '';
+  String _auditActorRole = '';
+  DateTime? _auditFromDate;
+  DateTime? _auditToDate;
   int _tabIndex = 0;
 
   @override
@@ -42,6 +49,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   @override
   void dispose() {
     _auditEntityIdController.dispose();
+    _auditActorIdController.dispose();
     super.dispose();
   }
 
@@ -60,6 +68,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     await _load();
   }
 
+  String? _auditDateParam(DateTime? value) {
+    if (value == null) return null;
+    return DateFormat('yyyy-MM-dd').format(value);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -72,11 +85,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _service.listUsers(),
         _service.listDrivers(),
         _service.listPrivacyRequests(),
+        _service.listOperationalAlerts(),
+        _service.listLegalConsents(),
         _service.listAuditEvents(
           limit: 100,
           entityType: _auditEntityType,
           entityId: _auditEntityIdController.text.trim(),
           eventType: _auditEventType,
+          actorUserId: _auditActorIdController.text.trim(),
+          actorRole: _auditActorRole,
+          occurredFrom: _auditDateParam(_auditFromDate),
+          occurredTo: _auditDateParam(_auditToDate),
         ),
       ]);
       if (!mounted) return;
@@ -85,7 +104,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _users = results[1] as List<AdminUser>;
         _drivers = results[2] as List<AdminDriver>;
         _privacyRequests = results[3] as List<AdminPrivacyRequest>;
-        _auditEvents = results[4] as List<AdminAuditEvent>;
+        _alerts = results[4] as List<AdminOperationalAlert>;
+        _legalConsents = results[5] as List<AdminLegalConsent>;
+        _auditEvents = results[6] as List<AdminAuditEvent>;
       });
     } catch (_) {
       if (mounted) {
@@ -108,6 +129,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         entityType: _auditEntityType,
         entityId: _auditEntityIdController.text.trim(),
         eventType: _auditEventType,
+        actorUserId: _auditActorIdController.text.trim(),
+        actorRole: _auditActorRole,
+        occurredFrom: _auditDateParam(_auditFromDate),
+        occurredTo: _auditDateParam(_auditToDate),
       );
       if (!mounted) return;
       setState(() => _auditEvents = events);
@@ -122,11 +147,79 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
   Future<void> _clearAuditFilters() async {
     _auditEntityIdController.clear();
+    _auditActorIdController.clear();
     setState(() {
       _auditEntityType = '';
       _auditEventType = '';
+      _auditActorRole = '';
+      _auditFromDate = null;
+      _auditToDate = null;
     });
     await _loadAuditEvents();
+  }
+
+  Future<void> _pickAuditDate({required bool from}) async {
+    final now = DateTime.now();
+    final current = from ? _auditFromDate : _auditToDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(2025),
+      lastDate: DateTime(now.year + 1, 12, 31),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (from) {
+        _auditFromDate = picked;
+        if (_auditToDate != null && _auditToDate!.isBefore(picked)) {
+          _auditToDate = picked;
+        }
+      } else {
+        _auditToDate = picked;
+        if (_auditFromDate != null && _auditFromDate!.isAfter(picked)) {
+          _auditFromDate = picked;
+        }
+      }
+    });
+  }
+
+  Future<void> _exportAuditEvents() async {
+    setState(() => _auditLoading = true);
+    try {
+      final csv = await _service.exportAuditEventsCsv(
+        limit: 5000,
+        entityType: _auditEntityType,
+        entityId: _auditEntityIdController.text.trim(),
+        eventType: _auditEventType,
+        actorUserId: _auditActorIdController.text.trim(),
+        actorRole: _auditActorRole,
+        occurredFrom: _auditDateParam(_auditFromDate),
+        occurredTo: _auditDateParam(_auditToDate),
+      );
+      final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await downloadTextFile(
+        filename: 'fleteapp_historial_$stamp.csv',
+        content: csv,
+        mimeType: 'text/csv;charset=utf-8',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Historial exportado en CSV'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo exportar el historial'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _auditLoading = false);
+    }
   }
 
   Future<void> _logout() async {
@@ -280,6 +373,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               money: _money,
                             ),
                           ],
+                          if (!_loading) ...[
+                            const SizedBox(height: 12),
+                            _OperationalAlertsPanel(alerts: _alerts),
+                          ],
                           const SizedBox(height: 16),
                           _TabSelector(
                             index: _tabIndex,
@@ -287,6 +384,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             driverCount: _drivers.length,
                             privacyCount: _privacyRequests.length,
                             auditCount: _auditEvents.length,
+                            legalCount: _legalConsents.length,
                             onChanged: (value) =>
                                 setState(() => _tabIndex = value),
                           ),
@@ -309,22 +407,34 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               actionLoading: _actionLoading,
                               onUpdate: _updatePrivacyRequest,
                             )
-                          else
+                          else if (_tabIndex == 3)
                             _AuditEventsPanel(
                               events: _auditEvents,
                               loading: _auditLoading,
                               selectedEntityType: _auditEntityType,
                               selectedEventType: _auditEventType,
+                              selectedActorRole: _auditActorRole,
+                              fromDate: _auditFromDate,
+                              toDate: _auditToDate,
                               entityIdController: _auditEntityIdController,
+                              actorIdController: _auditActorIdController,
                               onEntityTypeChanged: (value) => setState(
                                 () => _auditEntityType = value ?? '',
                               ),
                               onEventTypeChanged: (value) => setState(
                                 () => _auditEventType = value ?? '',
                               ),
+                              onActorRoleChanged: (value) => setState(
+                                () => _auditActorRole = value ?? '',
+                              ),
+                              onPickFromDate: () => _pickAuditDate(from: true),
+                              onPickToDate: () => _pickAuditDate(from: false),
                               onApplyFilters: _loadAuditEvents,
                               onClearFilters: _clearAuditFilters,
-                            ),
+                              onExportCsv: _exportAuditEvents,
+                            )
+                          else
+                            _LegalConsentsPanel(consents: _legalConsents),
                         ],
                       ),
                     ),
@@ -715,6 +825,123 @@ class _MonitoringPanel extends StatelessWidget {
   }
 }
 
+class _OperationalAlertsPanel extends StatelessWidget {
+  final List<AdminOperationalAlert> alerts;
+
+  const _OperationalAlertsPanel({required this.alerts});
+
+  Color _color(String severity) => switch (severity) {
+        'critical' => AppTheme.error,
+        'warning' => AppTheme.warning,
+        'success' => AppTheme.success,
+        _ => AppTheme.primary,
+      };
+
+  IconData _icon(String severity) => switch (severity) {
+        'critical' => Icons.error_outline_rounded,
+        'warning' => Icons.warning_amber_rounded,
+        'success' => Icons.check_circle_outline_rounded,
+        _ => Icons.info_outline_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: _adminBox(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _PanelTitle(
+              icon: Icons.monitor_heart_outlined,
+              title: 'Alertas operacionales',
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < alerts.length; i++) ...[
+              _OperationalAlertRow(
+                alert: alerts[i],
+                color: _color(alerts[i].severity),
+                icon: _icon(alerts[i].severity),
+              ),
+              if (i != alerts.length - 1) const Divider(height: 18),
+            ],
+          ],
+        ),
+      );
+}
+
+class _OperationalAlertRow extends StatelessWidget {
+  final AdminOperationalAlert alert;
+  final Color color;
+  final IconData icon;
+
+  const _OperationalAlertRow({
+    required this.alert,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        alert.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.midnight,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    _StatusPill(label: '${alert.count}', color: color),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  alert.message,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                if (alert.action.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    alert.action,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
 class _BreakdownItem {
   final String label;
   final int count;
@@ -913,6 +1140,7 @@ class _TabSelector extends StatelessWidget {
   final int driverCount;
   final int privacyCount;
   final int auditCount;
+  final int legalCount;
   final ValueChanged<int> onChanged;
 
   const _TabSelector({
@@ -921,6 +1149,7 @@ class _TabSelector extends StatelessWidget {
     required this.driverCount,
     required this.privacyCount,
     required this.auditCount,
+    required this.legalCount,
     required this.onChanged,
   });
 
@@ -960,6 +1189,13 @@ class _TabSelector extends StatelessWidget {
               label: 'Historial',
               count: auditCount,
               onTap: () => onChanged(3),
+            ),
+            _TabButton(
+              selected: index == 4,
+              icon: Icons.verified_user_outlined,
+              label: 'Legal',
+              count: legalCount,
+              onTap: () => onChanged(4),
             ),
           ],
         ),
@@ -1394,22 +1630,38 @@ class _AuditEventsPanel extends StatelessWidget {
   final bool loading;
   final String selectedEntityType;
   final String selectedEventType;
+  final String selectedActorRole;
+  final DateTime? fromDate;
+  final DateTime? toDate;
   final TextEditingController entityIdController;
+  final TextEditingController actorIdController;
   final ValueChanged<String?> onEntityTypeChanged;
   final ValueChanged<String?> onEventTypeChanged;
+  final ValueChanged<String?> onActorRoleChanged;
+  final VoidCallback onPickFromDate;
+  final VoidCallback onPickToDate;
   final VoidCallback onApplyFilters;
   final VoidCallback onClearFilters;
+  final VoidCallback onExportCsv;
 
   const _AuditEventsPanel({
     required this.events,
     required this.loading,
     required this.selectedEntityType,
     required this.selectedEventType,
+    required this.selectedActorRole,
+    required this.fromDate,
+    required this.toDate,
     required this.entityIdController,
+    required this.actorIdController,
     required this.onEntityTypeChanged,
     required this.onEventTypeChanged,
+    required this.onActorRoleChanged,
+    required this.onPickFromDate,
+    required this.onPickToDate,
     required this.onApplyFilters,
     required this.onClearFilters,
+    required this.onExportCsv,
   });
 
   @override
@@ -1446,11 +1698,19 @@ class _AuditEventsPanel extends StatelessWidget {
               child: _AuditFiltersBar(
                 selectedEntityType: selectedEntityType,
                 selectedEventType: selectedEventType,
+                selectedActorRole: selectedActorRole,
+                fromDate: fromDate,
+                toDate: toDate,
                 entityIdController: entityIdController,
+                actorIdController: actorIdController,
                 onEntityTypeChanged: onEntityTypeChanged,
                 onEventTypeChanged: onEventTypeChanged,
+                onActorRoleChanged: onActorRoleChanged,
+                onPickFromDate: onPickFromDate,
+                onPickToDate: onPickToDate,
                 onApplyFilters: onApplyFilters,
                 onClearFilters: onClearFilters,
+                onExportCsv: onExportCsv,
               ),
             ),
             if (loading) const LinearProgressIndicator(minHeight: 2),
@@ -1477,7 +1737,9 @@ class _AuditFiltersBar extends StatelessWidget {
     'vehicle': 'Vehiculos',
     'freight': 'Fletes',
     'payment': 'Pagos',
-    'privacy_request': 'Privacidad',
+    'data_privacy_request': 'Privacidad',
+    'user_consent': 'Legal',
+    'system': 'Sistema',
   };
 
   static const _eventOptions = <String, String>{
@@ -1501,57 +1763,129 @@ class _AuditFiltersBar extends StatelessWidget {
     'payment.authorized': 'Pago autorizado',
     'privacy_request.created': 'Solicitud creada',
     'privacy_request.status_changed': 'Solicitud actualizada',
+    'legal.terms_accepted': 'Terminos aceptados',
+    'legal.privacy_accepted': 'Privacidad aceptada',
+    'legal.driver_document_verification_accepted': 'Docs conductor aceptados',
+    'system.backend_error': 'Error backend',
+  };
+
+  static const _actorOptions = <String, String>{
+    '': 'Todos',
+    'admin': 'Admin',
+    'client': 'Cliente',
+    'driver': 'Conductor',
   };
 
   final String selectedEntityType;
   final String selectedEventType;
+  final String selectedActorRole;
+  final DateTime? fromDate;
+  final DateTime? toDate;
   final TextEditingController entityIdController;
+  final TextEditingController actorIdController;
   final ValueChanged<String?> onEntityTypeChanged;
   final ValueChanged<String?> onEventTypeChanged;
+  final ValueChanged<String?> onActorRoleChanged;
+  final VoidCallback onPickFromDate;
+  final VoidCallback onPickToDate;
   final VoidCallback onApplyFilters;
   final VoidCallback onClearFilters;
+  final VoidCallback onExportCsv;
 
   const _AuditFiltersBar({
     required this.selectedEntityType,
     required this.selectedEventType,
+    required this.selectedActorRole,
+    required this.fromDate,
+    required this.toDate,
     required this.entityIdController,
+    required this.actorIdController,
     required this.onEntityTypeChanged,
     required this.onEventTypeChanged,
+    required this.onActorRoleChanged,
+    required this.onPickFromDate,
+    required this.onPickToDate,
     required this.onApplyFilters,
     required this.onClearFilters,
+    required this.onExportCsv,
   });
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 760;
-          final entityFilter = _AuditDropdown(
-            label: 'Entidad',
-            value: _entityOptions.containsKey(selectedEntityType)
-                ? selectedEntityType
-                : '',
-            options: _entityOptions,
-            onChanged: onEntityTypeChanged,
-          );
-          final eventFilter = _AuditDropdown(
-            label: 'Accion',
-            value: _eventOptions.containsKey(selectedEventType)
-                ? selectedEventType
-                : '',
-            options: _eventOptions,
-            onChanged: onEventTypeChanged,
-          );
-          final idFilter = TextField(
-            controller: entityIdController,
-            textInputAction: TextInputAction.search,
-            keyboardType: TextInputType.text,
-            onSubmitted: (_) => onApplyFilters(),
-            decoration: _auditInputDecoration(
-              label: 'ID',
-              icon: Icons.tag_rounded,
+  Widget build(BuildContext context) => Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 170,
+            child: _AuditDropdown(
+              label: 'Entidad',
+              value: _entityOptions.containsKey(selectedEntityType)
+                  ? selectedEntityType
+                  : '',
+              options: _entityOptions,
+              onChanged: onEntityTypeChanged,
             ),
-          );
-          final filterButton = ElevatedButton.icon(
+          ),
+          SizedBox(
+            width: 250,
+            child: _AuditDropdown(
+              label: 'Accion',
+              value: _eventOptions.containsKey(selectedEventType)
+                  ? selectedEventType
+                  : '',
+              options: _eventOptions,
+              onChanged: onEventTypeChanged,
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: TextField(
+              controller: entityIdController,
+              textInputAction: TextInputAction.search,
+              keyboardType: TextInputType.text,
+              onSubmitted: (_) => onApplyFilters(),
+              decoration: _auditInputDecoration(
+                label: 'ID entidad',
+                icon: Icons.tag_rounded,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: _AuditDropdown(
+              label: 'Actor',
+              value: _actorOptions.containsKey(selectedActorRole)
+                  ? selectedActorRole
+                  : '',
+              options: _actorOptions,
+              onChanged: onActorRoleChanged,
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: TextField(
+              controller: actorIdController,
+              textInputAction: TextInputAction.search,
+              keyboardType: TextInputType.number,
+              onSubmitted: (_) => onApplyFilters(),
+              decoration: _auditInputDecoration(
+                label: 'ID actor',
+                icon: Icons.badge_outlined,
+              ),
+            ),
+          ),
+          _AuditDateButton(
+            label: 'Desde',
+            date: fromDate,
+            onPressed: onPickFromDate,
+          ),
+          _AuditDateButton(
+            label: 'Hasta',
+            date: toDate,
+            onPressed: onPickToDate,
+          ),
+          ElevatedButton.icon(
             onPressed: onApplyFilters,
             icon: const Icon(Icons.filter_alt_outlined, size: 18),
             label: const Text('Filtrar'),
@@ -1561,8 +1895,19 @@ class _AuditFiltersBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-          );
-          final clearButton = IconButton.outlined(
+          ),
+          OutlinedButton.icon(
+            onPressed: onExportCsv,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('CSV'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          IconButton.outlined(
             tooltip: 'Limpiar filtros',
             onPressed: onClearFilters,
             icon: const Icon(Icons.filter_alt_off_outlined),
@@ -1572,43 +1917,46 @@ class _AuditFiltersBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-          );
-          final actions = Row(
-            mainAxisSize: compact ? MainAxisSize.max : MainAxisSize.min,
-            children: [
-              if (compact) Expanded(child: filterButton) else filterButton,
-              const SizedBox(width: 8),
-              clearButton,
-            ],
-          );
-
-          if (compact) {
-            return Column(
-              children: [
-                entityFilter,
-                const SizedBox(height: 10),
-                eventFilter,
-                const SizedBox(height: 10),
-                idFilter,
-                const SizedBox(height: 10),
-                actions,
-              ],
-            );
-          }
-
-          return Row(
-            children: [
-              SizedBox(width: 170, child: entityFilter),
-              const SizedBox(width: 10),
-              Expanded(child: eventFilter),
-              const SizedBox(width: 10),
-              SizedBox(width: 110, child: idFilter),
-              const SizedBox(width: 10),
-              actions,
-            ],
-          );
-        },
+          ),
+        ],
       );
+}
+
+class _AuditDateButton extends StatelessWidget {
+  final String label;
+  final DateTime? date;
+  final VoidCallback onPressed;
+
+  const _AuditDateButton({
+    required this.label,
+    required this.date,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final text = date == null ? label : DateFormat('dd/MM/yyyy').format(date!);
+    return SizedBox(
+      width: 132,
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.calendar_today_outlined, size: 17),
+        label: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: date == null ? AppTheme.slate400 : AppTheme.midnight,
+          side: const BorderSide(color: AppTheme.slate200),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AuditDropdown extends StatelessWidget {
@@ -1703,6 +2051,8 @@ class _AuditEventRow extends StatelessWidget {
     if (event.eventType.startsWith('freight.')) return AppTheme.primary;
     if (event.eventType.startsWith('payment.')) return AppTheme.midnight;
     if (event.eventType.startsWith('privacy_request.')) return AppTheme.error;
+    if (event.eventType.startsWith('legal.')) return AppTheme.success;
+    if (event.eventType.startsWith('system.')) return AppTheme.error;
     if (event.eventType.startsWith('user.')) return AppTheme.warning;
     return AppTheme.slate400;
   }
@@ -1715,6 +2065,12 @@ class _AuditEventRow extends StatelessWidget {
     if (event.eventType.startsWith('payment.')) return Icons.payments_outlined;
     if (event.eventType.startsWith('privacy_request.')) {
       return Icons.privacy_tip_outlined;
+    }
+    if (event.eventType.startsWith('legal.')) {
+      return Icons.verified_user_outlined;
+    }
+    if (event.eventType.startsWith('system.')) {
+      return Icons.error_outline_rounded;
     }
     if (event.eventType.startsWith('user.')) return Icons.person_outline;
     return Icons.history_rounded;
@@ -1854,6 +2210,151 @@ class _AuditMetaChip extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _LegalConsentsPanel extends StatelessWidget {
+  final List<AdminLegalConsent> consents;
+
+  const _LegalConsentsPanel({required this.consents});
+
+  @override
+  Widget build(BuildContext context) {
+    if (consents.isEmpty) {
+      return const _EmptyPanel(
+        icon: Icons.verified_user_outlined,
+        text: 'Sin consentimientos registrados',
+      );
+    }
+    return _DataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _PanelTitle(
+              icon: Icons.verified_user_outlined,
+              title: 'Aceptaciones legales',
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < consents.length; i++) ...[
+            _LegalConsentRow(consent: consents[i]),
+            if (i != consents.length - 1) const Divider(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LegalConsentRow extends StatelessWidget {
+  final AdminLegalConsent consent;
+
+  const _LegalConsentRow({required this.consent});
+
+  String _formatDate(String? value) {
+    if (value == null || value.isEmpty) return '';
+    try {
+      return DateFormat('dd/MM/yyyy HH:mm').format(
+        DateTime.parse(value).toLocal(),
+      );
+    } catch (_) {
+      return value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final acceptedAt = _formatDate(consent.acceptedAt);
+    final subtitle = [
+      consent.email,
+      if (acceptedAt.isNotEmpty) acceptedAt,
+      if ((consent.ipAddress ?? '').isNotEmpty) 'IP ${consent.ipAddress}',
+    ].join(' - ');
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      consent.fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _RoleBadge(role: consent.role),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 12,
+                ),
+              ),
+              if ((consent.userAgent ?? '').isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  consent.userAgent!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.slate400,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
+          );
+
+          final legalTags = Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            alignment: compact ? WrapAlignment.start : WrapAlignment.end,
+            children: [
+              _StatusPill(label: consent.typeLabel, color: AppTheme.success),
+              _AuditMetaChip(label: 'v${consent.version}'),
+              _AuditMetaChip(label: 'Usuario #${consent.userId}'),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                details,
+                const SizedBox(height: 10),
+                legalTags,
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 16),
+              SizedBox(width: 320, child: legalTags),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _DriversPanel extends StatelessWidget {

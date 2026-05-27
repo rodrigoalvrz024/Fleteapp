@@ -54,6 +54,17 @@ class ApiService {
     return await _dio.get(path, queryParameters: params);
   }
 
+  Future<Response<String>> getText(
+    String path, {
+    Map<String, dynamic>? params,
+  }) async {
+    return await _dio.get<String>(
+      path,
+      queryParameters: params,
+      options: Options(responseType: ResponseType.plain),
+    );
+  }
+
   Future<Response> put(String path, [Map<String, dynamic>? data]) async {
     return await _dio.put(path, data: data);
   }

@@ -116,6 +116,20 @@ def _record_registration_consents(
             )
         )
     db.add_all(consents)
+    db.flush()
+    for consent in consents:
+        record_audit_event(
+            db,
+            actor=user,
+            entity_type="user_consent",
+            entity_id=consent.id,
+            event_type=f"legal.{consent.consent_type}_accepted",
+            after_data={
+                "consent_type": consent.consent_type,
+                "version": consent.version,
+            },
+            request=request,
+        )
     db.commit()
 
 

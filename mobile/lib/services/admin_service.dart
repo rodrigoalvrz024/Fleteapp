@@ -90,6 +90,31 @@ class AdminMetrics {
   }
 }
 
+class AdminOperationalAlert {
+  final String severity;
+  final String title;
+  final String message;
+  final int count;
+  final String action;
+
+  const AdminOperationalAlert({
+    required this.severity,
+    required this.title,
+    required this.message,
+    required this.count,
+    required this.action,
+  });
+
+  factory AdminOperationalAlert.fromJson(Map<String, dynamic> json) =>
+      AdminOperationalAlert(
+        severity: json['severity'] ?? 'info',
+        title: json['title'] ?? '',
+        message: json['message'] ?? '',
+        count: json['count'] ?? 0,
+        action: json['action'] ?? '',
+      );
+}
+
 class AdminPrivacyRequest {
   final int id;
   final int userId;
@@ -157,6 +182,7 @@ class AdminAuditEvent {
   final int id;
   final String? occurredAt;
   final int? actorUserId;
+  final String? actorName;
   final String? actorRole;
   final String entityType;
   final String? entityId;
@@ -171,6 +197,7 @@ class AdminAuditEvent {
     required this.id,
     this.occurredAt,
     this.actorUserId,
+    this.actorName,
     this.actorRole,
     required this.entityType,
     this.entityId,
@@ -197,6 +224,7 @@ class AdminAuditEvent {
       id: json['id'] ?? 0,
       occurredAt: json['occurred_at'],
       actorUserId: asInt(json['actor_user_id']),
+      actorName: json['actor_name'],
       actorRole: json['actor_role'],
       entityType: json['entity_type'] ?? '',
       entityId: json['entity_id']?.toString(),
@@ -215,7 +243,10 @@ class AdminAuditEvent {
         'vehicle' => 'Vehiculo',
         'freight' => 'Flete',
         'payment' => 'Pago',
+        'system' => 'Sistema',
         'privacy_request' => 'Privacidad',
+        'data_privacy_request' => 'Privacidad',
+        'user_consent' => 'Consentimiento',
         _ => entityType.isEmpty ? 'Sistema' : entityType,
       };
 
@@ -239,6 +270,11 @@ class AdminAuditEvent {
         'payment.authorized' => 'Pago autorizado',
         'privacy_request.created' => 'Solicitud creada',
         'privacy_request.status_changed' => 'Solicitud actualizada',
+        'legal.terms_accepted' => 'Terminos aceptados',
+        'legal.privacy_accepted' => 'Privacidad aceptada',
+        'legal.driver_document_verification_accepted' =>
+          'Revision documentos aceptada',
+        'system.backend_error' => 'Error backend',
         _ => eventType,
       };
 
@@ -254,6 +290,9 @@ class AdminAuditEvent {
       'client' => 'Cliente',
       _ => actorRole!,
     };
+    if (actorName != null && actorName!.isNotEmpty) {
+      return '$label - $actorName';
+    }
     return actorUserId == null ? label : '$label #$actorUserId';
   }
 
@@ -277,6 +316,53 @@ class AdminAuditEvent {
 
     return '';
   }
+}
+
+class AdminLegalConsent {
+  final int id;
+  final int userId;
+  final String fullName;
+  final String email;
+  final String role;
+  final String consentType;
+  final String version;
+  final String? ipAddress;
+  final String? userAgent;
+  final String? acceptedAt;
+
+  const AdminLegalConsent({
+    required this.id,
+    required this.userId,
+    required this.fullName,
+    required this.email,
+    required this.role,
+    required this.consentType,
+    required this.version,
+    this.ipAddress,
+    this.userAgent,
+    this.acceptedAt,
+  });
+
+  factory AdminLegalConsent.fromJson(Map<String, dynamic> json) =>
+      AdminLegalConsent(
+        id: json['id'] ?? 0,
+        userId: json['user_id'] ?? 0,
+        fullName: json['full_name'] ?? '',
+        email: json['email'] ?? '',
+        role: json['role'] ?? '',
+        consentType: json['consent_type'] ?? '',
+        version: json['version'] ?? '',
+        ipAddress: json['ip_address'],
+        userAgent: json['user_agent'],
+        acceptedAt: json['accepted_at'],
+      );
+
+  String get typeLabel => switch (consentType) {
+        'terms' => 'Terminos y condiciones',
+        'privacy' => 'Politica de privacidad',
+        'driver_document_verification' => 'Revision de documentos',
+        _ => consentType,
+      };
 }
 
 class AdminUser {
@@ -464,6 +550,31 @@ class AdminDriverReview {
 class AdminService {
   final _api = ApiService();
 
+  Map<String, dynamic> _auditParams({
+    int limit = 100,
+    String? entityType,
+    String? entityId,
+    String? eventType,
+    String? actorUserId,
+    String? actorRole,
+    String? occurredFrom,
+    String? occurredTo,
+  }) =>
+      {
+        'limit': limit,
+        if (entityType != null && entityType.isNotEmpty)
+          'entity_type': entityType,
+        if (entityId != null && entityId.isNotEmpty) 'entity_id': entityId,
+        if (eventType != null && eventType.isNotEmpty) 'event_type': eventType,
+        if (actorUserId != null && actorUserId.isNotEmpty)
+          'actor_user_id': actorUserId,
+        if (actorRole != null && actorRole.isNotEmpty) 'actor_role': actorRole,
+        if (occurredFrom != null && occurredFrom.isNotEmpty)
+          'occurred_from': occurredFrom,
+        if (occurredTo != null && occurredTo.isNotEmpty)
+          'occurred_to': occurredTo,
+      };
+
   Future<AdminMetrics> getMetrics() async {
     final res = await _api.get('/admin/metrics');
     return AdminMetrics.fromJson(res.data);
@@ -493,16 +604,66 @@ class AdminService {
     String? entityType,
     String? entityId,
     String? eventType,
+    String? actorUserId,
+    String? actorRole,
+    String? occurredFrom,
+    String? occurredTo,
   }) async {
-    final res = await _api.get('/admin/audit-events', params: {
-      'limit': limit,
-      if (entityType != null && entityType.isNotEmpty)
-        'entity_type': entityType,
-      if (entityId != null && entityId.isNotEmpty) 'entity_id': entityId,
-      if (eventType != null && eventType.isNotEmpty) 'event_type': eventType,
-    });
+    final res = await _api.get(
+      '/admin/audit-events',
+      params: _auditParams(
+        limit: limit,
+        entityType: entityType,
+        entityId: entityId,
+        eventType: eventType,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+        occurredFrom: occurredFrom,
+        occurredTo: occurredTo,
+      ),
+    );
     return (res.data as List)
         .map((item) => AdminAuditEvent.fromJson(item))
+        .toList();
+  }
+
+  Future<String> exportAuditEventsCsv({
+    int limit = 1000,
+    String? entityType,
+    String? entityId,
+    String? eventType,
+    String? actorUserId,
+    String? actorRole,
+    String? occurredFrom,
+    String? occurredTo,
+  }) async {
+    final res = await _api.getText(
+      '/admin/audit-events/export',
+      params: _auditParams(
+        limit: limit,
+        entityType: entityType,
+        entityId: entityId,
+        eventType: eventType,
+        actorUserId: actorUserId,
+        actorRole: actorRole,
+        occurredFrom: occurredFrom,
+        occurredTo: occurredTo,
+      ),
+    );
+    return res.data ?? '';
+  }
+
+  Future<List<AdminOperationalAlert>> listOperationalAlerts() async {
+    final res = await _api.get('/admin/operational-alerts');
+    return (res.data as List)
+        .map((item) => AdminOperationalAlert.fromJson(item))
+        .toList();
+  }
+
+  Future<List<AdminLegalConsent>> listLegalConsents() async {
+    final res = await _api.get('/admin/legal-consents', params: {'limit': 100});
+    return (res.data as List)
+        .map((item) => AdminLegalConsent.fromJson(item))
         .toList();
   }
 
