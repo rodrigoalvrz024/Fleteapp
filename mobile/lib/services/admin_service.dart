@@ -488,8 +488,19 @@ class AdminService {
         .toList();
   }
 
-  Future<List<AdminAuditEvent>> listAuditEvents({int limit = 100}) async {
-    final res = await _api.get('/admin/audit-events', params: {'limit': limit});
+  Future<List<AdminAuditEvent>> listAuditEvents({
+    int limit = 100,
+    String? entityType,
+    String? entityId,
+    String? eventType,
+  }) async {
+    final res = await _api.get('/admin/audit-events', params: {
+      'limit': limit,
+      if (entityType != null && entityType.isNotEmpty)
+        'entity_type': entityType,
+      if (entityId != null && entityId.isNotEmpty) 'entity_id': entityId,
+      if (eventType != null && eventType.isNotEmpty) 'event_type': eventType,
+    });
     return (res.data as List)
         .map((item) => AdminAuditEvent.fromJson(item))
         .toList();

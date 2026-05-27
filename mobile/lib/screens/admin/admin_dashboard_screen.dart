@@ -19,7 +19,9 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   final _service = AdminService();
   final _money = NumberFormat('#,##0', 'es_CL');
+  final _auditEntityIdController = TextEditingController();
   bool _loading = true;
+  bool _auditLoading = false;
   bool _actionLoading = false;
   String? _error;
   AdminMetrics? _metrics;
@@ -27,12 +29,20 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   List<AdminDriver> _drivers = [];
   List<AdminPrivacyRequest> _privacyRequests = [];
   List<AdminAuditEvent> _auditEvents = [];
+  String _auditEntityType = '';
+  String _auditEventType = '';
   int _tabIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _start();
+  }
+
+  @override
+  void dispose() {
+    _auditEntityIdController.dispose();
+    super.dispose();
   }
 
   Future<void> _start() async {
@@ -62,7 +72,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _service.listUsers(),
         _service.listDrivers(),
         _service.listPrivacyRequests(),
-        _service.listAuditEvents(limit: 100),
+        _service.listAuditEvents(
+          limit: 100,
+          entityType: _auditEntityType,
+          entityId: _auditEntityIdController.text.trim(),
+          eventType: _auditEventType,
+        ),
       ]);
       if (!mounted) return;
       setState(() {
@@ -79,6 +94,39 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadAuditEvents() async {
+    setState(() {
+      _auditLoading = true;
+      _error = null;
+    });
+
+    try {
+      final events = await _service.listAuditEvents(
+        limit: 100,
+        entityType: _auditEntityType,
+        entityId: _auditEntityIdController.text.trim(),
+        eventType: _auditEventType,
+      );
+      if (!mounted) return;
+      setState(() => _auditEvents = events);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'No se pudo cargar el historial.');
+      }
+    } finally {
+      if (mounted) setState(() => _auditLoading = false);
+    }
+  }
+
+  Future<void> _clearAuditFilters() async {
+    _auditEntityIdController.clear();
+    setState(() {
+      _auditEntityType = '';
+      _auditEventType = '';
+    });
+    await _loadAuditEvents();
   }
 
   Future<void> _logout() async {
@@ -262,7 +310,21 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               onUpdate: _updatePrivacyRequest,
                             )
                           else
-                            _AuditEventsPanel(events: _auditEvents),
+                            _AuditEventsPanel(
+                              events: _auditEvents,
+                              loading: _auditLoading,
+                              selectedEntityType: _auditEntityType,
+                              selectedEventType: _auditEventType,
+                              entityIdController: _auditEntityIdController,
+                              onEntityTypeChanged: (value) => setState(
+                                () => _auditEntityType = value ?? '',
+                              ),
+                              onEventTypeChanged: (value) => setState(
+                                () => _auditEventType = value ?? '',
+                              ),
+                              onApplyFilters: _loadAuditEvents,
+                              onClearFilters: _clearAuditFilters,
+                            ),
                         ],
                       ),
                     ),
@@ -1329,37 +1391,306 @@ class _PrivacyRequestActions extends StatelessWidget {
 
 class _AuditEventsPanel extends StatelessWidget {
   final List<AdminAuditEvent> events;
+  final bool loading;
+  final String selectedEntityType;
+  final String selectedEventType;
+  final TextEditingController entityIdController;
+  final ValueChanged<String?> onEntityTypeChanged;
+  final ValueChanged<String?> onEventTypeChanged;
+  final VoidCallback onApplyFilters;
+  final VoidCallback onClearFilters;
 
-  const _AuditEventsPanel({required this.events});
+  const _AuditEventsPanel({
+    required this.events,
+    required this.loading,
+    required this.selectedEntityType,
+    required this.selectedEventType,
+    required this.entityIdController,
+    required this.onEntityTypeChanged,
+    required this.onEventTypeChanged,
+    required this.onApplyFilters,
+    required this.onClearFilters,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    if (events.isEmpty) {
-      return const _EmptyPanel(
-        icon: Icons.history_rounded,
-        text: 'Sin eventos auditados',
-      );
-    }
-    return _DataPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
-            child: _PanelTitle(
-              icon: Icons.history_rounded,
-              title: 'Historial operacional',
+  Widget build(BuildContext context) => _DataPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: _PanelTitle(
+                      icon: Icons.history_rounded,
+                      title: 'Historial operacional',
+                    ),
+                  ),
+                  if (loading)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    _StatusPill(
+                      label: '${events.length} eventos',
+                      color: AppTheme.slate400,
+                    ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < events.length; i++) ...[
-            _AuditEventRow(event: events[i]),
-            if (i != events.length - 1) const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+              child: _AuditFiltersBar(
+                selectedEntityType: selectedEntityType,
+                selectedEventType: selectedEventType,
+                entityIdController: entityIdController,
+                onEntityTypeChanged: onEntityTypeChanged,
+                onEventTypeChanged: onEventTypeChanged,
+                onApplyFilters: onApplyFilters,
+                onClearFilters: onClearFilters,
+              ),
+            ),
+            if (loading) const LinearProgressIndicator(minHeight: 2),
+            if (events.isEmpty)
+              const _InlineEmptyState(
+                icon: Icons.history_rounded,
+                text: 'Sin eventos para estos filtros',
+              )
+            else
+              for (var i = 0; i < events.length; i++) ...[
+                _AuditEventRow(event: events[i]),
+                if (i != events.length - 1) const Divider(),
+              ],
           ],
-        ],
+        ),
+      );
+}
+
+class _AuditFiltersBar extends StatelessWidget {
+  static const _entityOptions = <String, String>{
+    '': 'Todas',
+    'user': 'Usuarios',
+    'driver': 'Conductores',
+    'vehicle': 'Vehiculos',
+    'freight': 'Fletes',
+    'payment': 'Pagos',
+    'privacy_request': 'Privacidad',
+  };
+
+  static const _eventOptions = <String, String>{
+    '': 'Todas',
+    'user.registered': 'Usuario registrado',
+    'user.updated': 'Perfil actualizado',
+    'user.suspended': 'Usuario suspendido',
+    'user.activated': 'Usuario activado',
+    'driver.registered': 'Conductor registrado',
+    'driver.updated': 'Conductor actualizado',
+    'driver.approved': 'Conductor aprobado',
+    'driver.rejected': 'Conductor rechazado',
+    'driver.document_uploaded': 'Documento subido',
+    'driver.submitted_for_review': 'Enviado a revision',
+    'driver.documents_deleted': 'Documentos eliminados',
+    'vehicle.created': 'Vehiculo creado',
+    'freight.created': 'Flete creado',
+    'freight.accepted': 'Flete aceptado',
+    'freight.status_changed': 'Estado de flete',
+    'payment.initiated': 'Pago iniciado',
+    'payment.authorized': 'Pago autorizado',
+    'privacy_request.created': 'Solicitud creada',
+    'privacy_request.status_changed': 'Solicitud actualizada',
+  };
+
+  final String selectedEntityType;
+  final String selectedEventType;
+  final TextEditingController entityIdController;
+  final ValueChanged<String?> onEntityTypeChanged;
+  final ValueChanged<String?> onEventTypeChanged;
+  final VoidCallback onApplyFilters;
+  final VoidCallback onClearFilters;
+
+  const _AuditFiltersBar({
+    required this.selectedEntityType,
+    required this.selectedEventType,
+    required this.entityIdController,
+    required this.onEntityTypeChanged,
+    required this.onEventTypeChanged,
+    required this.onApplyFilters,
+    required this.onClearFilters,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 760;
+          final entityFilter = _AuditDropdown(
+            label: 'Entidad',
+            value: _entityOptions.containsKey(selectedEntityType)
+                ? selectedEntityType
+                : '',
+            options: _entityOptions,
+            onChanged: onEntityTypeChanged,
+          );
+          final eventFilter = _AuditDropdown(
+            label: 'Accion',
+            value: _eventOptions.containsKey(selectedEventType)
+                ? selectedEventType
+                : '',
+            options: _eventOptions,
+            onChanged: onEventTypeChanged,
+          );
+          final idFilter = TextField(
+            controller: entityIdController,
+            textInputAction: TextInputAction.search,
+            keyboardType: TextInputType.text,
+            onSubmitted: (_) => onApplyFilters(),
+            decoration: _auditInputDecoration(
+              label: 'ID',
+              icon: Icons.tag_rounded,
+            ),
+          );
+          final filterButton = ElevatedButton.icon(
+            onPressed: onApplyFilters,
+            icon: const Icon(Icons.filter_alt_outlined, size: 18),
+            label: const Text('Filtrar'),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+          final clearButton = IconButton.outlined(
+            tooltip: 'Limpiar filtros',
+            onPressed: onClearFilters,
+            icon: const Icon(Icons.filter_alt_off_outlined),
+            style: IconButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          );
+          final actions = Row(
+            mainAxisSize: compact ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              if (compact) Expanded(child: filterButton) else filterButton,
+              const SizedBox(width: 8),
+              clearButton,
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              children: [
+                entityFilter,
+                const SizedBox(height: 10),
+                eventFilter,
+                const SizedBox(height: 10),
+                idFilter,
+                const SizedBox(height: 10),
+                actions,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              SizedBox(width: 170, child: entityFilter),
+              const SizedBox(width: 10),
+              Expanded(child: eventFilter),
+              const SizedBox(width: 10),
+              SizedBox(width: 110, child: idFilter),
+              const SizedBox(width: 10),
+              actions,
+            ],
+          );
+        },
+      );
+}
+
+class _AuditDropdown extends StatelessWidget {
+  final String label;
+  final String value;
+  final Map<String, String> options;
+  final ValueChanged<String?> onChanged;
+
+  const _AuditDropdown({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<String>(
+        key: ValueKey('$label-$value'),
+        initialValue: value,
+        isExpanded: true,
+        decoration: _auditInputDecoration(
+          label: label,
+          icon: Icons.tune_rounded,
+        ),
+        items: options.entries
+            .map(
+              (option) => DropdownMenuItem(
+                value: option.key,
+                child: Text(
+                  option.value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+      );
+}
+
+InputDecoration _auditInputDecoration({
+  required String label,
+  required IconData icon,
+}) =>
+    InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, size: 18),
+      isDense: true,
+      filled: true,
+      fillColor: AppTheme.background,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppTheme.slate200),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppTheme.slate200),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: AppTheme.primary),
       ),
     );
-  }
+
+class _InlineEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _InlineEmptyState({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 150,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: AppTheme.slate400, size: 34),
+            const SizedBox(height: 10),
+            Text(text, style: const TextStyle(color: AppTheme.slate400)),
+          ],
+        ),
+      );
 }
 
 class _AuditEventRow extends StatelessWidget {
