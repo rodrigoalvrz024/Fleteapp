@@ -18,6 +18,10 @@ void main() async {
 Future<void> _initializeFirebaseServices() async {
   try {
     if (kIsWeb) {
+      if (!DefaultFirebaseOptions.isWebConfigured) {
+        debugPrint('Firebase web config missing; notifications disabled');
+        return;
+      }
       await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
     } else {
       await Firebase.initializeApp();
