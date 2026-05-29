@@ -47,13 +47,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       builder: (_) => _DriverProfileMenu(
         onProfile: () {
           Navigator.pop(context);
-          context.push('/profile');
+          context.push('/app/profile');
         },
         onLogout: () async {
           Navigator.pop(context);
           await ref.read(driverProvider.notifier).goOffline();
           await ref.read(authProvider.notifier).logout();
-          if (mounted) context.go('/login');
+          if (mounted) context.go('/auth/login');
         },
         onSupport: () {
           Navigator.pop(context);
@@ -285,7 +285,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                       .read(driverProvider.notifier)
                       .updateFreightStatus(driver.activeFreight!.id, status),
                   onViewRoute: () => context
-                      .push('/driver/freights/${driver.activeFreight!.id}'),
+                      .push('/app/driver/freights/${driver.activeFreight!.id}'),
                 ),
                 const SizedBox(height: 14),
               ],
@@ -326,7 +326,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 isOnline: driver.isOnline,
                 count: driver.availableFreights.length,
                 onTap: driver.isOnline
-                    ? () => context.push('/driver/available')
+                    ? () => context.push('/app/driver/available')
                     : null,
               ),
               const SizedBox(height: 20),
@@ -338,7 +338,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               // CTA principal
               GestureDetector(
                 onTap: driver.isOnline
-                    ? () => context.push('/driver/available')
+                    ? () => context.push('/app/driver/available')
                     : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -413,7 +413,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                 icon: Icons.history_rounded,
                 label: 'Mis viajes',
                 subtitle: 'Fletes aceptados y completados',
-                onTap: () => context.push('/driver/available'),
+                onTap: () => context.push('/app/driver/available'),
                 color: AppTheme.slate600,
               ),
               const SizedBox(height: 10),

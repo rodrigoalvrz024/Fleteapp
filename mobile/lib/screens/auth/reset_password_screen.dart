@@ -72,7 +72,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => context.go('/login'),
+            onPressed: () => context.go('/auth/login'),
           ),
           title: const Text('Nueva contraseña'),
         ),
@@ -156,7 +156,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () => context.go('/login'),
+                    onPressed: () => context.go('/auth/login'),
                     child: Text(_message == null ? 'Volver' : 'Iniciar sesión'),
                   ),
                 ],

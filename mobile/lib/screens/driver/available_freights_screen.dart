@@ -62,7 +62,7 @@ class _AvailableFreightsScreenState extends State<AvailableFreightsScreen> {
                       itemBuilder: (_, i) => _AvailableCard(
                           freight: _freights[i],
                           onAccept: () => context
-                              .push('/driver/freights/${_freights[i].id}')),
+                              .push('/app/driver/freights/${_freights[i].id}')),
                     ),
                   ),
       );

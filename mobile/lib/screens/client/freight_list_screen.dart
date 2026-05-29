@@ -45,7 +45,7 @@ class _FreightListScreenState extends State<FreightListScreen> {
               ))
             : _freights.isEmpty
                 ? _EmptyState(
-                    onTap: () => context.push('/client/create-freight'))
+                    onTap: () => context.push('/app/client/create-freight'))
                 : RefreshIndicator(
                     color: AppTheme.primary,
                     onRefresh: _load,
@@ -57,7 +57,7 @@ class _FreightListScreenState extends State<FreightListScreen> {
                     ),
                   ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => context.push('/client/create-freight'),
+          onPressed: () => context.push('/app/client/create-freight'),
           backgroundColor: AppTheme.primary,
           elevation: 0,
           icon: const Icon(Icons.add, color: Colors.white),
@@ -79,7 +79,7 @@ class FreightCard extends StatelessWidget {
     final isUrgent = freight.isUrgent ?? false;
 
     return GestureDetector(
-      onTap: () => context.push('/client/freights/${freight.id}'),
+      onTap: () => context.push('/app/client/freights/${freight.id}'),
       child: Container(
         decoration:
             isUrgent ? AppTheme.urgentDecoration() : AppTheme.cardDecoration(),

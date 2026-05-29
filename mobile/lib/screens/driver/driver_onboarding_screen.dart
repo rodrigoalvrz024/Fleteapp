@@ -460,7 +460,7 @@ class _StatusScreen extends StatelessWidget {
             const SizedBox(height: 24),
             if (driver.isApproved)
               ElevatedButton(
-                onPressed: () => context.go('/driver'),
+                onPressed: () => context.go('/app/driver'),
                 child: const Text('Ir al panel'),
               )
             else if (onRetry != null)

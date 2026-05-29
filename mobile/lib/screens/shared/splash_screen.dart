@@ -76,7 +76,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     // No autenticado → login
     if (!auth.isAuthenticated) {
-      context.go('/login');
+      context.go('/auth/login');
       return;
     }
 
@@ -87,7 +87,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     }
 
     if (role != 'driver') {
-      context.go('/client');
+      context.go('/app/client');
       return;
     }
 
@@ -96,9 +96,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     try {
       final driver = await DriverOnboardingService().getMyDriver();
       if (!mounted) return;
-      context.go(driver.isApproved ? '/driver' : '/driver/onboarding');
+      context.go(
+        driver.isApproved ? '/app/driver' : '/app/driver/onboarding',
+      );
     } catch (_) {
-      if (mounted) context.go('/driver/onboarding');
+      if (mounted) context.go('/app/driver/onboarding');
     }
   }
 

@@ -100,7 +100,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           onConfirm: () async {
             Navigator.pop(ctx);
             await ref.read(authProvider.notifier).logout();
-            if (mounted) context.go('/login');
+            if (mounted) context.go('/auth/login');
           },
         ),
       );

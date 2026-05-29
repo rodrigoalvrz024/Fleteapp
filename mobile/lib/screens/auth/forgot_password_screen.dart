@@ -58,7 +58,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => context.go('/login'),
+            onPressed: () => context.go('/auth/login'),
           ),
           title: const Text('Recuperar contraseña'),
         ),
@@ -123,7 +123,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextButton(
-                    onPressed: () => context.go('/login'),
+                    onPressed: () => context.go('/auth/login'),
                     child: const Text('Volver al inicio de sesión'),
                   ),
                 ],

@@ -55,8 +55,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       final role = ref.read(authProvider).user?.role;
       context.go(switch (role) {
         'admin' => '/admin',
-        'driver' => '/driver',
-        _ => '/client',
+        'driver' => '/app/driver',
+        _ => '/app/client',
       });
     }
   }
@@ -193,7 +193,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           child: TextButton(
                             onPressed: auth.isLoading
                                 ? null
-                                : () => context.push('/forgot-password'),
+                                : () => context.push('/auth/forgot-password'),
                             style: TextButton.styleFrom(
                               foregroundColor: AppTheme.primary,
                               padding: const EdgeInsets.only(top: 6, bottom: 2),
@@ -296,7 +296,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             color: AppTheme.slate400,
                           )),
                       GestureDetector(
-                        onTap: () => context.push('/register'),
+                        onTap: () => context.push('/auth/register'),
                         child: const Text('Regístrate',
                             style: TextStyle(
                               fontSize: 14,

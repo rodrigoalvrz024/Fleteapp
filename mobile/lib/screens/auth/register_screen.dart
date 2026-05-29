@@ -52,7 +52,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           acceptsDriverDocuments: _role == 'driver' && _acceptDriverDocuments,
         );
     if (!mounted) return;
-    if (ok) context.go(_role == 'driver' ? '/driver/onboarding' : '/client');
+    if (ok) {
+      context.go(
+        _role == 'driver' ? '/app/driver/onboarding' : '/app/client',
+      );
+    }
   }
 
   void _showError(String message) {

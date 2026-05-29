@@ -1,48 +1,36 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../screens/admin/admin_dashboard_screen.dart';
+import '../../screens/auth/forgot_password_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
-import '../../screens/auth/forgot_password_screen.dart';
 import '../../screens/auth/reset_password_screen.dart';
-import '../../screens/legal/legal_document_screen.dart';
 import '../../screens/client/client_home_screen.dart';
 import '../../screens/client/create_freight_screen.dart';
-import '../../screens/client/freight_list_screen.dart';
 import '../../screens/client/freight_detail_screen.dart';
-import '../../screens/admin/admin_dashboard_screen.dart';
-import '../../screens/driver/driver_home_screen.dart';
+import '../../screens/client/freight_list_screen.dart';
 import '../../screens/driver/available_freights_screen.dart';
 import '../../screens/driver/driver_freight_detail_screen.dart';
+import '../../screens/driver/driver_home_screen.dart';
+import '../../screens/driver/driver_onboarding_screen.dart';
+import '../../screens/legal/legal_document_screen.dart';
+import '../../screens/public/public_home_screen.dart';
 import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
-import '../../screens/driver/driver_onboarding_screen.dart';
 
-// ── Router como singleton — NO recrea en cada rebuild ──────
+String _withQuery(String path, GoRouterState state) {
+  final query = state.uri.query;
+  return query.isEmpty ? path : '$path?$query';
+}
+
 final _router = GoRouter(
-  initialLocation: '/splash',
+  initialLocation: '/',
   routes: [
-    // ── Auth ───────────────────────────────────────
+    // Public web.
     GoRoute(
-      path: '/splash',
-      builder: (_, __) => const SplashScreen(),
-    ),
-    GoRoute(
-      path: '/login',
-      builder: (_, __) => const LoginScreen(),
-    ),
-    GoRoute(
-      path: '/register',
-      builder: (_, __) => const RegisterScreen(),
-    ),
-    GoRoute(
-      path: '/forgot-password',
-      builder: (_, __) => const ForgotPasswordScreen(),
-    ),
-    GoRoute(
-      path: '/reset-password',
-      builder: (_, state) => ResetPasswordScreen(
-        token: state.uri.queryParameters['token'],
-      ),
+      path: '/',
+      builder: (_, __) => const PublicHomeScreen(),
     ),
     GoRoute(
       path: '/legal/terms',
@@ -57,23 +45,47 @@ final _router = GoRouter(
       ),
     ),
 
-    // ── Cliente ────────────────────────────────────
+    // Auth web.
     GoRoute(
-      path: '/client',
+      path: '/auth/login',
+      builder: (_, __) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/auth/register',
+      builder: (_, __) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/auth/forgot-password',
+      builder: (_, __) => const ForgotPasswordScreen(),
+    ),
+    GoRoute(
+      path: '/auth/reset-password',
+      builder: (_, state) => ResetPasswordScreen(
+        token: state.uri.queryParameters['token'],
+      ),
+    ),
+
+    // App web.
+    GoRoute(
+      path: '/app/splash',
+      builder: (_, __) => const SplashScreen(),
+    ),
+    GoRoute(
+      path: '/app/client',
       builder: (_, __) => const ClientHomeScreen(),
     ),
     GoRoute(
-      path: '/client/freights',
+      path: '/app/client/freights',
       builder: (_, __) => const FreightListScreen(),
     ),
     GoRoute(
-      path: '/client/freights/:id',
+      path: '/app/client/freights/:id',
       builder: (_, state) => FreightDetailScreen(
         freightId: int.parse(state.pathParameters['id']!),
       ),
     ),
     GoRoute(
-      path: '/client/create-freight',
+      path: '/app/client/create-freight',
       builder: (context, state) {
         final q = state.uri.queryParameters;
         return CreateFreightScreen(
@@ -86,38 +98,99 @@ final _router = GoRouter(
         );
       },
     ),
-
-    // ── Perfil ─────────────────────────────────────
     GoRoute(
-      path: '/profile',
+      path: '/app/profile',
       builder: (_, __) => const ProfileScreen(),
     ),
     GoRoute(
-      path: '/admin',
-      builder: (_, __) => const AdminDashboardScreen(),
-    ),
-
-    // ── Conductor ──────────────────────────────────
-    GoRoute(
-      path: '/driver',
+      path: '/app/driver',
       builder: (_, __) => const DriverHomeScreen(),
     ),
     GoRoute(
-      path: '/driver/available',
+      path: '/app/driver/available',
       builder: (_, __) => const AvailableFreightsScreen(),
     ),
     GoRoute(
-      path: '/driver/freights/:id',
+      path: '/app/driver/freights/:id',
       builder: (_, state) => DriverFreightDetailScreen(
         freightId: int.parse(state.pathParameters['id']!),
       ),
     ),
     GoRoute(
-      path: '/driver/onboarding',
+      path: '/app/driver/onboarding',
       builder: (_, __) => const DriverOnboardingScreen(),
+    ),
+
+    // Admin web.
+    GoRoute(
+      path: '/admin',
+      builder: (_, __) => const AdminDashboardScreen(),
+    ),
+
+    // Legacy redirects.
+    GoRoute(
+      path: '/splash',
+      redirect: (_, state) => _withQuery('/app/splash', state),
+    ),
+    GoRoute(
+      path: '/login',
+      redirect: (_, state) => _withQuery('/auth/login', state),
+    ),
+    GoRoute(
+      path: '/register',
+      redirect: (_, state) => _withQuery('/auth/register', state),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      redirect: (_, state) => _withQuery('/auth/forgot-password', state),
+    ),
+    GoRoute(
+      path: '/reset-password',
+      redirect: (_, state) => _withQuery('/auth/reset-password', state),
+    ),
+    GoRoute(
+      path: '/client',
+      redirect: (_, state) => _withQuery('/app/client', state),
+    ),
+    GoRoute(
+      path: '/client/freights',
+      redirect: (_, state) => _withQuery('/app/client/freights', state),
+    ),
+    GoRoute(
+      path: '/client/freights/:id',
+      redirect: (_, state) => _withQuery(
+        '/app/client/freights/${state.pathParameters['id']}',
+        state,
+      ),
+    ),
+    GoRoute(
+      path: '/client/create-freight',
+      redirect: (_, state) => _withQuery('/app/client/create-freight', state),
+    ),
+    GoRoute(
+      path: '/profile',
+      redirect: (_, state) => _withQuery('/app/profile', state),
+    ),
+    GoRoute(
+      path: '/driver',
+      redirect: (_, state) => _withQuery('/app/driver', state),
+    ),
+    GoRoute(
+      path: '/driver/available',
+      redirect: (_, state) => _withQuery('/app/driver/available', state),
+    ),
+    GoRoute(
+      path: '/driver/freights/:id',
+      redirect: (_, state) => _withQuery(
+        '/app/driver/freights/${state.pathParameters['id']}',
+        state,
+      ),
+    ),
+    GoRoute(
+      path: '/driver/onboarding',
+      redirect: (_, state) => _withQuery('/app/driver/onboarding', state),
     ),
   ],
 );
 
-// Provider retorna siempre el mismo router
 final routerProvider = Provider<GoRouter>((_) => _router);

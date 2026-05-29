@@ -343,7 +343,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ));
-      context.go('/client/freights');
+      context.go('/app/client/freights');
     } catch (_) {
       setState(() => _error = 'Error al crear el flete. Intenta de nuevo.');
     } finally {

@@ -226,7 +226,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
   Future<void> _logout() async {
     await ref.read(authProvider.notifier).logout();
-    if (mounted) context.go('/login');
+    if (mounted) context.go('/auth/login');
   }
 
   Future<void> _approve(AdminDriver driver) async {
@@ -343,7 +343,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1120),
               child: !isAdmin && !_loading
-                  ? _AccessDenied(onLogin: () => context.go('/login'))
+                  ? _AccessDenied(onLogin: () => context.go('/auth/login'))
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(

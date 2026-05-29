@@ -263,7 +263,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
   }) {
     HapticFeedback.mediumImpact();
     final uri = Uri(
-      path: '/client/create-freight',
+      path: '/app/client/create-freight',
       queryParameters: {
         if (destAddress.isNotEmpty) 'dest_address': destAddress,
         if (destLat != null) 'dest_lat': destLat.toString(),
@@ -327,20 +327,20 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
       builder: (_) => _ProfileMenu(
         onProfile: () {
           Navigator.pop(context);
-          context.push('/profile');
+          context.push('/app/profile');
         },
         onFreights: () {
           Navigator.pop(context);
-          context.push('/client/freights');
+          context.push('/app/client/freights');
         },
         onAddresses: () {
           Navigator.pop(context);
-          context.push('/profile');
+          context.push('/app/profile');
         },
         onLogout: () async {
           Navigator.pop(context);
           await ref.read(authProvider.notifier).logout();
-          if (mounted) context.go('/login');
+          if (mounted) context.go('/auth/login');
         },
       ),
     );
