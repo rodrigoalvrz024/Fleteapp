@@ -1,3 +1,5 @@
+import { StartRequestPanel } from './start-request-panel';
+
 const trustItems = [
   'Conductores revisados',
   'Documentos privados',
@@ -48,22 +50,28 @@ export default function Home() {
           </div>
         </nav>
 
-        <div className="heroContent" id="inicio">
-          <p className="eyebrow">Fletes urbanos en Chile</p>
-          <h1>FleteApp</h1>
-          <p className="heroText">
-            Una plataforma para pedir, aceptar y monitorear fletes con
-            conductores verificados, documentos resguardados e historial
-            operativo desde el primer viaje.
-          </p>
-          <div className="heroActions">
-            <a className="primaryAction" href="https://fleteapp-8d8f7.web.app/#/register">
-              Crear cuenta
-            </a>
-            <a className="secondaryAction" href="#soluciones">
-              Ver como funciona
-            </a>
+        <div className="heroContent heroGrid" id="inicio">
+          <div>
+            <p className="eyebrow">Fletes urbanos en Chile</p>
+            <h1>FleteApp</h1>
+            <p className="heroText">
+              Una plataforma para pedir, aceptar y monitorear fletes con
+              conductores verificados, documentos resguardados e historial
+              operativo desde el primer viaje.
+            </p>
+            <div className="heroActions">
+              <a
+                className="primaryAction"
+                href="https://fleteapp-8d8f7.web.app/#/login"
+              >
+                Ingresar
+              </a>
+              <a className="secondaryAction" href="#soluciones">
+                Ver como funciona
+              </a>
+            </div>
           </div>
+          <StartRequestPanel />
         </div>
       </section>
 

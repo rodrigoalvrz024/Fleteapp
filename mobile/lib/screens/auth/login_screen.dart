@@ -6,7 +6,10 @@ import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  final String? redirectPath;
+
+  const LoginScreen({super.key, this.redirectPath});
+
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
@@ -53,12 +56,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (!mounted) return;
     if (ok) {
       final role = ref.read(authProvider).user?.role;
-      context.go(switch (role) {
-        'admin' => '/admin',
-        'driver' => '/app/driver',
-        _ => '/app/client',
-      });
+      context.go(_destinationFor(role));
     }
+  }
+
+  String _destinationFor(String? role) {
+    final safeRedirect = _safeClientRedirect(widget.redirectPath);
+    if (role == 'client' && safeRedirect != null) return safeRedirect;
+
+    return switch (role) {
+      'admin' => '/admin',
+      'driver' => '/app/driver',
+      _ => '/app/client',
+    };
+  }
+
+  String? _safeClientRedirect(String? value) {
+    final path = value?.trim();
+    if (path == null || path.isEmpty) return null;
+    final isClientRoute = path == '/app/client' ||
+        path.startsWith('/app/client/') ||
+        path.startsWith('/app/client?');
+    if (!isClientRoute) return null;
+    if (path.contains('://') || path.startsWith('//')) return null;
+    return path;
+  }
+
+  String get _registerPath {
+    final safeRedirect = _safeClientRedirect(widget.redirectPath);
+    if (safeRedirect == null) return '/auth/register';
+    return Uri(
+      path: '/auth/register',
+      queryParameters: {'next': safeRedirect},
+    ).toString();
   }
 
   @override
@@ -296,7 +326,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             color: AppTheme.slate400,
                           )),
                       GestureDetector(
-                        onTap: () => context.push('/auth/register'),
+                        onTap: () => context.push(_registerPath),
                         child: const Text('Regístrate',
                             style: TextStyle(
                               fontSize: 14,

@@ -7,7 +7,9 @@ import '../../providers/auth_provider.dart';
 import 'widgets/auth_widgets.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
-  const RegisterScreen({super.key});
+  final String? redirectPath;
+
+  const RegisterScreen({super.key, this.redirectPath});
 
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
@@ -58,10 +60,33 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         );
     if (!mounted) return;
     if (ok) {
-      context.go(
-        _role == 'driver' ? '/app/driver/onboarding' : '/app/client',
-      );
+      context.go(_destinationAfterRegister);
     }
+  }
+
+  String get _destinationAfterRegister {
+    if (_role == 'driver') return '/app/driver/onboarding';
+    return _safeClientRedirect(widget.redirectPath) ?? '/app/client';
+  }
+
+  String? _safeClientRedirect(String? value) {
+    final path = value?.trim();
+    if (path == null || path.isEmpty) return null;
+    final isClientRoute = path == '/app/client' ||
+        path.startsWith('/app/client/') ||
+        path.startsWith('/app/client?');
+    if (!isClientRoute) return null;
+    if (path.contains('://') || path.startsWith('//')) return null;
+    return path;
+  }
+
+  String get _loginPath {
+    final safeRedirect = _safeClientRedirect(widget.redirectPath);
+    if (safeRedirect == null) return '/auth/login';
+    return Uri(
+      path: '/auth/login',
+      queryParameters: {'next': safeRedirect},
+    ).toString();
   }
 
   void _showError(String message) {
@@ -76,7 +101,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     return AuthShell(
       appBarTitle: 'Crear cuenta',
-      onBack: () => context.go('/auth/login'),
+      onBack: () => context.go(_loginPath),
       title: 'Empieza con FleteApp',
       subtitle:
           'Crea tu cuenta como cliente o conductor para gestionar fletes.',

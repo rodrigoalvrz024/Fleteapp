@@ -94,6 +94,9 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.destAddress?.isNotEmpty ?? false) {
         _destCtrl.text = widget.destAddress!;
+        if (widget.destLat == null || widget.destLng == null) {
+          _destLatLng = null;
+        }
       }
       if (widget.destLat != null && widget.destLng != null) {
         setState(() {
@@ -102,6 +105,9 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       }
       if (widget.originAddress?.isNotEmpty ?? false) {
         _originCtrl.text = widget.originAddress!;
+        if (widget.originLat == null || widget.originLng == null) {
+          _originLatLng = null;
+        }
       }
       if (widget.originLat != null && widget.originLng != null) {
         setState(() {
@@ -109,6 +115,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         });
       }
       _initMarkers();
+      setState(() {});
       _estimatePrice();
     });
   }
@@ -165,13 +172,15 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         final pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
         );
-        setState(() {
-          _originLatLng = LatLng(pos.latitude, pos.longitude);
-          _originCtrl.text = 'Lat: ${pos.latitude.toStringAsFixed(4)}, '
-              'Lng: ${pos.longitude.toStringAsFixed(4)}';
-        });
-        _initMarkers();
-        _estimatePrice();
+        if (!(widget.originAddress?.isNotEmpty ?? false)) {
+          setState(() {
+            _originLatLng = LatLng(pos.latitude, pos.longitude);
+            _originCtrl.text = 'Lat: ${pos.latitude.toStringAsFixed(4)}, '
+                'Lng: ${pos.longitude.toStringAsFixed(4)}';
+          });
+          _initMarkers();
+          _estimatePrice();
+        }
       } catch (_) {}
     }
     _estimatePrice();
@@ -285,12 +294,26 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     return h < 8 || h >= 21;
   }
 
+  bool get _routeReady => _originLatLng != null && _destLatLng != null;
+
+  bool get _cargoReady =>
+      _cargoCtrl.text.trim().isNotEmpty &&
+      (double.tryParse(_weightCtrl.text) ?? 0) > 0;
+
+  bool get _timingReady =>
+      _isUrgent || (_scheduledDate != null && _scheduledTime != null);
+
+  bool get _priceReady => _clientPays != null;
+
+  int get _activeStep {
+    if (!_routeReady) return 0;
+    if (!_cargoReady) return 1;
+    if (!_timingReady) return 2;
+    return 3;
+  }
+
   bool get _canSubmit {
-    return _originLatLng != null &&
-        _destLatLng != null &&
-        _cargoCtrl.text.isNotEmpty &&
-        (double.tryParse(_weightCtrl.text) ?? 0) > 0 &&
-        (_isUrgent || (_scheduledDate != null && _scheduledTime != null));
+    return _routeReady && _cargoReady && _timingReady;
   }
 
   Future<void> _submit() async {
@@ -358,7 +381,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Nuevo flete'),
+        title: const Text('Solicitar flete'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.midnight,
         elevation: 0,
@@ -372,29 +395,14 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
-            // ── 1. Tipo de flete ─────────────────────────
-            _ModeSelector(controller: _modeTab),
-            const SizedBox(height: 16),
-
-            // ── 2. Urgente — info de tarifa ──────────────
-            if (_isUrgent) ...[
-              _TarifaBanner(isNight: _isNight),
-              const SizedBox(height: 16),
-            ],
-
-            // ── 3. Fecha y hora (solo programado) ────────
-            if (!_isUrgent) ...[
-              _SectionCard(
-                title: 'Cuándo',
-                icon: Icons.schedule_rounded,
-                child: _DateTimePicker(
-                  label: _scheduledLabel,
-                  isSet: _scheduledDate != null && _scheduledTime != null,
-                  onTap: _pickDate,
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
+            _RequestProgressHeader(
+              activeStep: _activeStep,
+              routeReady: _routeReady,
+              cargoReady: _cargoReady,
+              timingReady: _timingReady,
+              priceReady: _priceReady,
+            ),
+            const SizedBox(height: 14),
 
             // ── 4. Origen y destino ──────────────────────
             _SectionCard(
@@ -504,7 +512,10 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                         final n = double.tryParse(v ?? '');
                         return (n != null && n > 0) ? null : 'Ingresa el peso';
                       },
-                      onChanged: (_) => _estimatePrice(),
+                      onChanged: (_) {
+                        setState(() {});
+                        _estimatePrice();
+                      },
                     ),
                   ),
                 ]),
@@ -547,6 +558,26 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                     _estimatePrice();
                   },
                 ),
+              ]),
+            ),
+            const SizedBox(height: 16),
+
+            _SectionCard(
+              title: 'Tiempo',
+              icon: Icons.schedule_rounded,
+              child: Column(children: [
+                _ModeSelector(controller: _modeTab),
+                if (_isUrgent) ...[
+                  const SizedBox(height: 12),
+                  _TarifaBanner(isNight: _isNight),
+                ] else ...[
+                  const SizedBox(height: 12),
+                  _DateTimePicker(
+                    label: _scheduledLabel,
+                    isSet: _scheduledDate != null && _scheduledTime != null,
+                    onTap: _pickDate,
+                  ),
+                ],
               ]),
             ),
             const SizedBox(height: 16),
@@ -621,6 +652,143 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
 }
 
 // ── Widgets ────────────────────────────────────────────────
+
+class _RequestProgressHeader extends StatelessWidget {
+  final int activeStep;
+  final bool routeReady;
+  final bool cargoReady;
+  final bool timingReady;
+  final bool priceReady;
+
+  const _RequestProgressHeader({
+    required this.activeStep,
+    required this.routeReady,
+    required this.cargoReady,
+    required this.timingReady,
+    required this.priceReady,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = [
+      _RequestStepData(
+        label: 'Ruta',
+        icon: Icons.route_rounded,
+        done: routeReady,
+      ),
+      _RequestStepData(
+        label: 'Carga',
+        icon: Icons.inventory_2_outlined,
+        done: cargoReady,
+      ),
+      _RequestStepData(
+        label: 'Tiempo',
+        icon: Icons.schedule_rounded,
+        done: timingReady,
+      ),
+      _RequestStepData(
+        label: 'Precio',
+        icon: Icons.payments_outlined,
+        done: priceReady,
+      ),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.slate200, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < steps.length; i++) ...[
+            Expanded(
+              child: _RequestStepChip(
+                data: steps[i],
+                isActive: i == activeStep,
+              ),
+            ),
+            if (i < steps.length - 1)
+              Container(
+                width: 10,
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                color: AppTheme.slate200,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestStepData {
+  final String label;
+  final IconData icon;
+  final bool done;
+
+  const _RequestStepData({
+    required this.label,
+    required this.icon,
+    required this.done,
+  });
+}
+
+class _RequestStepChip extends StatelessWidget {
+  final _RequestStepData data;
+  final bool isActive;
+
+  const _RequestStepChip({
+    required this.data,
+    required this.isActive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = data.done
+        ? AppTheme.success
+        : isActive
+            ? AppTheme.primary
+            : AppTheme.slate400;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: data.done || isActive ? 0.12 : 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color:
+                  color.withValues(alpha: data.done || isActive ? 0.32 : 0.18),
+              width: 0.5,
+            ),
+          ),
+          child: Icon(
+            data.done ? Icons.check_rounded : data.icon,
+            size: 16,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          data.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight:
+                isActive || data.done ? FontWeight.w700 : FontWeight.w500,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _ModeSelector extends StatelessWidget {
   final TabController controller;

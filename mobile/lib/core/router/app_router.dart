@@ -48,11 +48,15 @@ final _router = GoRouter(
     // Auth web.
     GoRoute(
       path: '/auth/login',
-      builder: (_, __) => const LoginScreen(),
+      builder: (_, state) => LoginScreen(
+        redirectPath: state.uri.queryParameters['next'],
+      ),
     ),
     GoRoute(
       path: '/auth/register',
-      builder: (_, __) => const RegisterScreen(),
+      builder: (_, state) => RegisterScreen(
+        redirectPath: state.uri.queryParameters['next'],
+      ),
     ),
     GoRoute(
       path: '/auth/forgot-password',

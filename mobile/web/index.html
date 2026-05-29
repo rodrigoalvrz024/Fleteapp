@@ -41,8 +41,10 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script src="config.js"></script>
   <script>
-    window.FLETEAPP_GOOGLE_MAPS_API_KEY = '{{GOOGLE_MAPS_API_KEY}}';
+    window.FLETEAPP_GOOGLE_MAPS_API_KEY =
+      window.FLETEAPP_GOOGLE_MAPS_API_KEY || '{{GOOGLE_MAPS_API_KEY}}';
     if (window.FLETEAPP_GOOGLE_MAPS_API_KEY.startsWith('{{')) {
       window.FLETEAPP_GOOGLE_MAPS_API_KEY = '';
     }
