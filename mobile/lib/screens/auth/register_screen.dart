@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../providers/auth_provider.dart';
+
 import '../../core/theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
+import 'widgets/auth_widgets.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
+
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
@@ -32,15 +35,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _register() async {
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     if (!_acceptTerms || !_acceptPrivacy) {
-      _showError('Debes aceptar los terminos y la politica de privacidad.');
+      _showError('Debes aceptar los términos y la política de privacidad.');
       return;
     }
     if (_role == 'driver' && !_acceptDriverDocuments) {
-      _showError('Debes autorizar la revision de documentos de conductor.');
+      _showError('Debes autorizar la revisión de documentos de conductor.');
       return;
     }
+
     final ok = await ref.read(authProvider.notifier).register(
           _emailCtrl.text.trim(),
           _phoneCtrl.text.trim(),
@@ -68,102 +73,108 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Crear cuenta')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
+
+    return AuthShell(
+      appBarTitle: 'Crear cuenta',
+      onBack: () => context.go('/auth/login'),
+      title: 'Empieza con FleteApp',
+      subtitle:
+          'Crea tu cuenta como cliente o conductor para gestionar fletes.',
+      children: [
+        Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (auth.error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFFFEBEE),
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Text(auth.error!,
-                      style:
-                          const TextStyle(color: AppTheme.error, fontSize: 13)),
-                ),
+                AuthStatusMessage(message: auth.error!, isError: true),
                 const SizedBox(height: 16),
               ],
-              TextFormField(
+              AuthTextField(
                 controller: _nameCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Nombre completo',
-                    prefixIcon: Icon(Icons.person_outline)),
-                validator: (v) =>
-                    (v?.length ?? 0) > 2 ? null : 'Ingresa tu nombre',
+                label: 'Nombre completo',
+                icon: Icons.person_outline_rounded,
+                textInputAction: TextInputAction.next,
+                validator: (value) =>
+                    (value?.length ?? 0) > 2 ? null : 'Ingresa tu nombre',
               ),
               const SizedBox(height: 14),
-              TextFormField(
+              AuthTextField(
                 controller: _emailCtrl,
+                label: 'Correo electrónico',
+                icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                    labelText: 'Correo electrónico',
-                    prefixIcon: Icon(Icons.email_outlined)),
-                validator: (v) =>
-                    (v?.contains('@') ?? false) ? null : 'Correo inválido',
+                textInputAction: TextInputAction.next,
+                validator: (value) =>
+                    (value?.contains('@') ?? false) ? null : 'Correo inválido',
               ),
               const SizedBox(height: 14),
-              TextFormField(
+              AuthTextField(
                 controller: _phoneCtrl,
+                label: 'Teléfono (+56...)',
+                icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                    labelText: 'Teléfono (+56...)',
-                    prefixIcon: Icon(Icons.phone_outlined)),
-                validator: (v) =>
-                    (v?.length ?? 0) >= 9 ? null : 'Teléfono inválido',
+                textInputAction: TextInputAction.next,
+                validator: (value) =>
+                    (value?.length ?? 0) >= 9 ? null : 'Teléfono inválido',
               ),
               const SizedBox(height: 14),
-              TextFormField(
+              AuthTextField(
                 controller: _passCtrl,
+                label: 'Contraseña',
+                icon: Icons.lock_outline_rounded,
                 obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: 'Contraseña',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                      icon: Icon(
-                          _obscure ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscure = !_obscure)),
+                validator: (value) =>
+                    (value?.length ?? 0) >= 8 ? null : 'Mínimo 8 caracteres',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
                 ),
-                validator: (v) =>
-                    (v?.length ?? 0) >= 8 ? null : 'Mínimo 8 caracteres',
               ),
-              const SizedBox(height: 20),
-              const Text('Tipo de cuenta',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 22),
+              const Text(
+                'Tipo de cuenta',
+                style: TextStyle(
+                  color: AppTheme.midnight,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                      child: _RoleCard(
-                          label: 'Cliente',
-                          icon: Icons.person,
-                          value: 'client',
-                          selected: _role == 'client',
-                          onTap: () => setState(() {
-                                _role = 'client';
-                                _acceptDriverDocuments = false;
-                              }))),
+                    child: _RoleCard(
+                      label: 'Cliente',
+                      icon: Icons.person_rounded,
+                      selected: _role == 'client',
+                      onTap: () => setState(() {
+                        _role = 'client';
+                        _acceptDriverDocuments = false;
+                      }),
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
-                      child: _RoleCard(
-                          label: 'Conductor',
-                          icon: Icons.drive_eta,
-                          value: 'driver',
-                          selected: _role == 'driver',
-                          onTap: () => setState(() => _role = 'driver'))),
+                    child: _RoleCard(
+                      label: 'Conductor',
+                      icon: Icons.drive_eta_rounded,
+                      selected: _role == 'driver',
+                      onTap: () => setState(() => _role = 'driver'),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               _ConsentRow(
                 value: _acceptTerms,
                 onChanged: (value) =>
                     setState(() => _acceptTerms = value ?? false),
-                text: 'Acepto los terminos y condiciones',
+                text: 'Acepto los términos y condiciones',
                 linkText: 'Ver',
                 onLink: () => context.push('/legal/terms'),
               ),
@@ -171,7 +182,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 value: _acceptPrivacy,
                 onChanged: (value) =>
                     setState(() => _acceptPrivacy = value ?? false),
-                text: 'Acepto la politica de privacidad',
+                text: 'Acepto la política de privacidad',
                 linkText: 'Ver',
                 onLink: () => context.push('/legal/privacy'),
               ),
@@ -181,23 +192,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   onChanged: (value) =>
                       setState(() => _acceptDriverDocuments = value ?? false),
                   text:
-                      'Autorizo a FleteApp a revisar mi licencia y documentos del vehiculo para validar mi cuenta',
+                      'Autorizo a FleteApp a revisar mi licencia y documentos del vehículo para validar mi cuenta',
                 ),
-              const SizedBox(height: 28),
-              ElevatedButton(
-                onPressed: auth.isLoading ? null : _register,
-                child: auth.isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text('Crear cuenta'),
+              const SizedBox(height: 26),
+              AuthPrimaryButton(
+                label: 'Crear cuenta',
+                isLoading: auth.isLoading,
+                onPressed: _register,
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -205,44 +211,53 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 class _RoleCard extends StatelessWidget {
   final String label;
   final IconData icon;
-  final String value;
   final bool selected;
   final VoidCallback onTap;
 
-  const _RoleCard(
-      {required this.label,
-      required this.icon,
-      required this.value,
-      required this.selected,
-      required this.onTap});
+  const _RoleCard({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: selected ? AppTheme.primary : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: selected ? AppTheme.primary : const Color(0xFFE0E0E0),
-                width: selected ? 2 : 1),
-          ),
-          child: Column(
-            children: [
-              Icon(icon,
-                  color: selected ? Colors.white : AppTheme.textSecondary,
-                  size: 28),
-              const SizedBox(height: 6),
-              Text(label,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: selected ? Colors.white : AppTheme.textPrimary)),
-            ],
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: 92,
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.primary : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppTheme.primary : AppTheme.slate200,
+            width: selected ? 1.4 : 0.8,
           ),
         ),
-      );
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: selected ? Colors.white : AppTheme.slate600,
+              size: 26,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppTheme.midnight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ConsentRow extends StatelessWidget {
@@ -261,61 +276,63 @@ class _ConsentRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Checkbox(
-                value: value,
-                onChanged: onChanged,
-                activeColor: AppTheme.primary,
-              ),
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: Checkbox(
+              value: value,
+              onChanged: onChanged,
+              activeColor: AppTheme.primary,
             ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 6,
-                  runSpacing: 2,
-                  children: [
-                    Text(
-                      text,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary,
-                        height: 1.35,
-                      ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.slate600,
+                      height: 1.35,
                     ),
-                    if (linkText != null && onLink != null)
-                      InkWell(
-                        onTap: onLink,
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 1,
-                          ),
-                          child: Text(
-                            linkText!,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primary,
-                            ),
+                  ),
+                  if (linkText != null && onLink != null)
+                    InkWell(
+                      onTap: onLink,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 1,
+                        ),
+                        child: Text(
+                          linkText!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primary,
                           ),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }

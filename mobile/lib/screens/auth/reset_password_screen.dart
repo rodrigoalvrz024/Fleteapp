@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
+import 'widgets/auth_widgets.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String? token;
@@ -56,8 +56,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       setState(() => _message = message);
     } catch (_) {
       if (!mounted) return;
-      setState(() =>
-          _error = 'El enlace expiró o no es válido. Solicita uno nuevo.');
+      setState(
+        () => _error = 'El enlace expiró o no es válido. Solicita uno nuevo.',
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -65,144 +66,72 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        backgroundColor: AppTheme.background,
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () => context.go('/auth/login'),
-          ),
-          title: const Text('Nueva contraseña'),
-        ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 24),
-                  const Icon(
-                    Icons.lock_reset_rounded,
-                    size: 58,
-                    color: AppTheme.primary,
+    return AuthShell(
+      appBarTitle: 'Nueva contraseña',
+      onBack: () => context.go('/auth/login'),
+      icon: Icons.lock_reset_rounded,
+      title: 'Crea una contraseña segura',
+      subtitle: 'Actualiza tu acceso para volver a entrar a tu cuenta.',
+      children: [
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AuthTextField(
+                controller: _passwordCtrl,
+                label: 'Nueva contraseña',
+                icon: Icons.lock_outline_rounded,
+                obscureText: _obscure,
+                validator: (value) =>
+                    (value?.length ?? 0) >= 8 ? null : 'Mínimo 8 caracteres',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Crea una contraseña segura para volver a entrar a tu cuenta.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppTheme.slate600,
-                      fontSize: 15,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  TextFormField(
-                    controller: _passwordCtrl,
-                    obscureText: _obscure,
-                    validator: (value) => (value?.length ?? 0) >= 8
-                        ? null
-                        : 'Mínimo 8 caracteres',
-                    decoration: InputDecoration(
-                      labelText: 'Nueva contraseña',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscure
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                        ),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _confirmCtrl,
-                    obscureText: _obscure,
-                    validator: (value) => value == _passwordCtrl.text
-                        ? null
-                        : 'Las contraseñas no coinciden',
-                    decoration: const InputDecoration(
-                      labelText: 'Confirmar contraseña',
-                      prefixIcon: Icon(Icons.lock_outline_rounded),
-                    ),
-                    onFieldSubmitted: (_) => _loading ? null : _submit(),
-                  ),
-                  if (_message != null || _error != null) ...[
-                    const SizedBox(height: 16),
-                    _StatusMessage(
-                      message: _message ?? _error!,
-                      isError: _error != null,
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _loading || _message != null ? null : _submit,
-                    child: _loading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Actualizar contraseña'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => context.go('/auth/login'),
-                    child: Text(_message == null ? 'Volver' : 'Iniciar sesión'),
-                  ),
-                ],
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
               ),
-            ),
+              const SizedBox(height: 14),
+              AuthTextField(
+                controller: _confirmCtrl,
+                label: 'Confirmar contraseña',
+                icon: Icons.lock_outline_rounded,
+                obscureText: _obscure,
+                textInputAction: TextInputAction.done,
+                validator: (value) => value == _passwordCtrl.text
+                    ? null
+                    : 'Las contraseñas no coinciden',
+                onFieldSubmitted: (_) => _loading ? null : _submit(),
+              ),
+              if (_message != null || _error != null) ...[
+                const SizedBox(height: 16),
+                AuthStatusMessage(
+                  message: _message ?? _error!,
+                  isError: _error != null,
+                ),
+              ],
+              const SizedBox(height: 24),
+              AuthPrimaryButton(
+                label: 'Actualizar contraseña',
+                isLoading: _loading,
+                onPressed: _message == null ? _submit : null,
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => context.go('/auth/login'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                child: Text(_message == null ? 'Volver' : 'Iniciar sesión'),
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _StatusMessage extends StatelessWidget {
-  final String message;
-  final bool isError;
-
-  const _StatusMessage({required this.message, required this.isError});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isError ? AppTheme.error : AppTheme.success;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isError
-                ? Icons.error_outline_rounded
-                : Icons.check_circle_outline_rounded,
-            color: color,
-            size: 18,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(color: color, fontSize: 13, height: 1.35),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
