@@ -100,257 +100,267 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Scaffold(
         backgroundColor: const Color(0xFFF9FAFB),
         body: SafeArea(
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── Logo minimal ──────────────────────────
-                  const SizedBox(height: 52),
-                  Row(children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.local_shipping_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text('FleteApp',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.slate400,
-                          letterSpacing: 0.2,
-                        )),
-                  ]),
-
-                  // ── Título principal ──────────────────────
-                  const SizedBox(height: 48),
-                  const Text('Bienvenido\nde vuelta',
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.midnight,
-                        letterSpacing: -1.0,
-                        height: 1.05,
-                      )),
-                  const SizedBox(height: 10),
-                  const Text('Ingresa para gestionar tus fletes',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: AppTheme.slate400,
-                        letterSpacing: 0.1,
-                        height: 1.4,
-                      )),
-
-                  // ── Card formulario ───────────────────────
-                  const SizedBox(height: 36),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFFF0F2F5),
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color:
-                              const Color(0xFF1A1A2E).withValues(alpha: 0.06),
-                          blurRadius: 40,
-                          spreadRadius: 0,
-                          offset: const Offset(0, 12),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ── Logo minimal ──────────────────────────
+                      const SizedBox(height: 52),
+                      Row(children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.local_shipping_rounded,
+                              color: Colors.white, size: 18),
                         ),
-                        BoxShadow(
-                          color:
-                              const Color(0xFF1A1A2E).withValues(alpha: 0.03),
-                          blurRadius: 8,
-                          spreadRadius: 0,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // Error banner
-                        if (auth.error != null) ...[
-                          _ErrorBanner(message: auth.error!),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Email
-                        _PremiumField(
-                          controller: _emailCtrl,
-                          hint: 'Correo electrónico',
-                          icon: Icons.mail_outline_rounded,
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (v) => (v?.contains('@') ?? false)
-                              ? null
-                              : 'Correo inválido',
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Password
-                        _PremiumField(
-                          controller: _passCtrl,
-                          hint: 'Contraseña',
-                          icon: Icons.lock_outline_rounded,
-                          obscureText: _obscure,
-                          validator: (v) => (v?.length ?? 0) >= 8
-                              ? null
-                              : 'Mínimo 8 caracteres',
-                          suffix: GestureDetector(
-                            onTap: () => setState(() => _obscure = !_obscure),
-                            child: Icon(
-                              _obscure
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              size: 17,
+                        const SizedBox(width: 8),
+                        const Text('FleteApp',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
                               color: AppTheme.slate400,
-                            ),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: auth.isLoading
-                                ? null
-                                : () => context.push('/auth/forgot-password'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppTheme.primary,
-                              padding: const EdgeInsets.only(top: 6, bottom: 2),
-                              textStyle: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            child: const Text('¿Olvidaste tu contraseña?'),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
+                              letterSpacing: 0.2,
+                            )),
+                      ]),
 
-                        // Botón principal con scale + gradiente
-                        ScaleTransition(
-                          scale: _btnScale,
-                          child: GestureDetector(
-                            onTapDown: (_) => _btnCtrl.forward(),
-                            onTapUp: (_) => _btnCtrl.reverse(),
-                            onTapCancel: () => _btnCtrl.reverse(),
-                            child: Container(
-                              height: 52,
-                              decoration: BoxDecoration(
-                                gradient: auth.isLoading
-                                    ? null
-                                    : const LinearGradient(
-                                        colors: [
-                                          Color(0xFF4F94F8),
-                                          Color(0xFF2563EB),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                color: auth.isLoading
-                                    ? AppTheme.primary.withValues(alpha: 0.6)
-                                    : null,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: auth.isLoading
-                                    ? []
-                                    : [
-                                        BoxShadow(
-                                          color: const Color(0xFF2563EB)
-                                              .withValues(alpha: 0.35),
-                                          blurRadius: 20,
-                                          spreadRadius: 0,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                        BoxShadow(
-                                          color: const Color(0xFF2563EB)
-                                              .withValues(alpha: 0.15),
-                                          blurRadius: 6,
-                                          spreadRadius: 0,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
+                      // ── Título principal ──────────────────────
+                      const SizedBox(height: 48),
+                      const Text('Bienvenido\nde vuelta',
+                          style: TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.midnight,
+                            letterSpacing: -1.0,
+                            height: 1.05,
+                          )),
+                      const SizedBox(height: 10),
+                      const Text('Ingresa para gestionar tus fletes',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: AppTheme.slate400,
+                            letterSpacing: 0.1,
+                            height: 1.4,
+                          )),
+
+                      // ── Card formulario ───────────────────────
+                      const SizedBox(height: 36),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFF0F2F5),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1A1A2E)
+                                  .withValues(alpha: 0.06),
+                              blurRadius: 40,
+                              spreadRadius: 0,
+                              offset: const Offset(0, 12),
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFF1A1A2E)
+                                  .withValues(alpha: 0.03),
+                              blurRadius: 8,
+                              spreadRadius: 0,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Error banner
+                            if (auth.error != null) ...[
+                              _ErrorBanner(message: auth.error!),
+                              const SizedBox(height: 16),
+                            ],
+
+                            // Email
+                            _PremiumField(
+                              controller: _emailCtrl,
+                              hint: 'Correo electrónico',
+                              icon: Icons.mail_outline_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (v) => (v?.contains('@') ?? false)
+                                  ? null
+                                  : 'Correo inválido',
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Password
+                            _PremiumField(
+                              controller: _passCtrl,
+                              hint: 'Contraseña',
+                              icon: Icons.lock_outline_rounded,
+                              obscureText: _obscure,
+                              validator: (v) => (v?.length ?? 0) >= 8
+                                  ? null
+                                  : 'Mínimo 8 caracteres',
+                              suffix: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _obscure = !_obscure),
+                                child: Icon(
+                                  _obscure
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 17,
+                                  color: AppTheme.slate400,
+                                ),
                               ),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
-                                  onTap: auth.isLoading ? null : _login,
-                                  splashColor:
-                                      Colors.white.withValues(alpha: 0.15),
-                                  highlightColor:
-                                      Colors.white.withValues(alpha: 0.05),
-                                  child: Center(
-                                    child: auth.isLoading
-                                        ? const SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child: CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2.5,
-                                            ))
-                                        : const Text('Iniciar sesión',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: 0.3,
-                                            )),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: auth.isLoading
+                                    ? null
+                                    : () =>
+                                        context.push('/auth/forgot-password'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppTheme.primary,
+                                  padding:
+                                      const EdgeInsets.only(top: 6, bottom: 2),
+                                  textStyle: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                child: const Text('¿Olvidaste tu contraseña?'),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Botón principal con scale + gradiente
+                            ScaleTransition(
+                              scale: _btnScale,
+                              child: GestureDetector(
+                                onTapDown: (_) => _btnCtrl.forward(),
+                                onTapUp: (_) => _btnCtrl.reverse(),
+                                onTapCancel: () => _btnCtrl.reverse(),
+                                child: Container(
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    gradient: auth.isLoading
+                                        ? null
+                                        : const LinearGradient(
+                                            colors: [
+                                              Color(0xFF4F94F8),
+                                              Color(0xFF2563EB),
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                    color: auth.isLoading
+                                        ? AppTheme.primary
+                                            .withValues(alpha: 0.6)
+                                        : null,
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: auth.isLoading
+                                        ? []
+                                        : [
+                                            BoxShadow(
+                                              color: const Color(0xFF2563EB)
+                                                  .withValues(alpha: 0.35),
+                                              blurRadius: 20,
+                                              spreadRadius: 0,
+                                              offset: const Offset(0, 8),
+                                            ),
+                                            BoxShadow(
+                                              color: const Color(0xFF2563EB)
+                                                  .withValues(alpha: 0.15),
+                                              blurRadius: 6,
+                                              spreadRadius: 0,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(14),
+                                      onTap: auth.isLoading ? null : _login,
+                                      splashColor:
+                                          Colors.white.withValues(alpha: 0.15),
+                                      highlightColor:
+                                          Colors.white.withValues(alpha: 0.05),
+                                      child: Center(
+                                        child: auth.isLoading
+                                            ? const SizedBox(
+                                                height: 20,
+                                                width: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                  strokeWidth: 2.5,
+                                                ))
+                                            : const Text('Iniciar sesión',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w600,
+                                                  letterSpacing: 0.3,
+                                                )),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-
-                  // ── Registro ──────────────────────────────
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('¿No tienes cuenta? ',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.slate400,
-                          )),
-                      GestureDetector(
-                        onTap: () => context.push(_registerPath),
-                        child: const Text('Regístrate',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primary,
-                            )),
                       ),
+
+                      // ── Registro ──────────────────────────────
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('¿No tienes cuenta? ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppTheme.slate400,
+                              )),
+                          GestureDetector(
+                            onTap: () => context.push(_registerPath),
+                            child: const Text('Regístrate',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.primary,
+                                )),
+                          ),
+                        ],
+                      ),
+
+                      // ── Pie de página ─────────────────────────
+                      const SizedBox(height: 48),
+                      const Text(
+                        'Al continuar aceptas los Términos de uso\ny la Política de privacidad',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFBDC5CE),
+                          height: 1.7,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
-
-                  // ── Pie de página ─────────────────────────
-                  const SizedBox(height: 48),
-                  const Text(
-                    'Al continuar aceptas los Términos de uso\ny la Política de privacidad',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFFBDC5CE),
-                      height: 1.7,
-                      letterSpacing: 0.1,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                ),
               ),
             ),
           ),

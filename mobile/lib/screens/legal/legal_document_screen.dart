@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../shared/web_layout.dart';
 
 enum LegalDocumentType { terms, privacy }
 
@@ -15,29 +16,25 @@ class LegalDocumentScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final sections = _isTerms ? _termsSections : _privacySections;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(
-            _isTerms ? 'Terminos y condiciones' : 'Politica de privacidad'),
-      ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(20),
-        itemCount: sections.length + 1,
-        separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return _Header(
-              title:
-                  _isTerms ? 'Terminos de uso FleteApp' : 'Privacidad FleteApp',
-              subtitle: _isTerms
-                  ? 'Version 2026-05-26. Estos terminos regulan el uso de la plataforma.'
-                  : 'Version 2026-05-26. Este documento explica como cuidamos tus datos.',
-            );
-          }
-          final section = sections[index - 1];
-          return _Section(title: section.title, body: section.body);
-        },
+    return WebPageScaffold(
+      title: _isTerms ? 'Terminos y condiciones' : 'Politica de privacidad',
+      subtitle: 'Version 2026-05-26',
+      child: WebPageBody(
+        maxWidth: 880,
+        children: [
+          _Header(
+            title:
+                _isTerms ? 'Terminos de uso FleteApp' : 'Privacidad FleteApp',
+            subtitle: _isTerms
+                ? 'Estos terminos regulan el uso de la plataforma.'
+                : 'Este documento explica como cuidamos tus datos.',
+          ),
+          const SizedBox(height: 14),
+          for (final section in sections) ...[
+            _Section(title: section.title, body: section.body),
+            const SizedBox(height: 14),
+          ],
+        ],
       ),
     );
   }

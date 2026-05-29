@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/privacy_service.dart';
+import 'web_layout.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -187,20 +188,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final initials =
         name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Mi perfil'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppTheme.midnight,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(0.5),
-          child: Container(height: 0.5, color: AppTheme.slate200),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+    return WebPageScaffold(
+      title: 'Mi perfil',
+      subtitle: 'Cuenta, privacidad, soporte y seguridad',
+      child: WebPageBody(
+        maxWidth: 780,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
         children: [
           // ── Avatar ───────────────────────────────────
           Center(

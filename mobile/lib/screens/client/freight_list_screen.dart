@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
+import '../shared/web_layout.dart';
 import 'widgets/freight_widgets.dart';
 
 class FreightListScreen extends StatefulWidget {
@@ -43,35 +44,9 @@ class _FreightListScreenState extends State<FreightListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mis fletes')),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.primary,
-              ),
-            )
-          : _freights.isEmpty
-              ? ClientEmptyState(
-                  icon: Icons.local_shipping_outlined,
-                  title: 'Sin fletes aún',
-                  description:
-                      'Solicita tu primer flete y lo gestionamos por ti.',
-                  actionLabel: 'Solicitar flete',
-                  onAction: _createFreight,
-                )
-              : RefreshIndicator(
-                  color: AppTheme.primary,
-                  onRefresh: _load,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                    itemCount: _freights.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, index) =>
-                        FreightCard(freight: _freights[index]),
-                  ),
-                ),
+    return WebPageScaffold(
+      title: 'Mis fletes',
+      subtitle: 'Revisa solicitudes, estados y precios',
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createFreight,
         backgroundColor: AppTheme.primary,
@@ -82,6 +57,31 @@ class _FreightListScreenState extends State<FreightListScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ),
+      child: _loading
+          ? const WebLoadingState()
+          : _freights.isEmpty
+              ? WebPageBody(
+                  children: [
+                    WebEmptyState(
+                      icon: Icons.local_shipping_outlined,
+                      title: 'Sin fletes aun',
+                      description:
+                          'Solicita tu primer flete y lo gestionamos por ti.',
+                      actionLabel: 'Solicitar flete',
+                      onAction: _createFreight,
+                    ),
+                  ],
+                )
+              : WebPageBody(
+                  onRefresh: _load,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+                  children: [
+                    for (final freight in _freights) ...[
+                      FreightCard(freight: freight),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
     );
   }
 }
@@ -165,7 +165,8 @@ class FreightCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   if ((freight.requiresHelpers ?? 0) > 0)
                     FreightPill(
-                      '${freight.requiresHelpers} peoneta${freight.requiresHelpers! > 1 ? "s" : ""}',
+                      '${freight.requiresHelpers} peoneta'
+                      '${freight.requiresHelpers! > 1 ? "s" : ""}',
                     ),
                   const Spacer(),
                   const Icon(

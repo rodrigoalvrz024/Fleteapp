@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
+import '../../core/theme/app_theme.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
-import '../../core/theme/app_theme.dart';
+import '../shared/web_layout.dart';
 
 class AvailableFreightsScreen extends StatefulWidget {
   const AvailableFreightsScreen({super.key});
+
   @override
   State<AvailableFreightsScreen> createState() =>
       _AvailableFreightsScreenState();
@@ -26,121 +29,185 @@ class _AvailableFreightsScreenState extends State<AvailableFreightsScreen> {
   Future<void> _load() async {
     try {
       final data = await _service.listFreights(status: 'available');
+      if (!mounted) return;
       setState(() {
         _freights = data;
         _loading = false;
       });
     } catch (_) {
-      setState(() {
-        _loading = false;
-      });
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Fletes disponibles')),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _freights.isEmpty
-                ? const Center(
-                    child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inbox, size: 64, color: Colors.grey),
-                      SizedBox(height: 12),
-                      Text('No hay fletes disponibles ahora',
-                          style: TextStyle(color: AppTheme.textSecondary)),
-                    ],
-                  ))
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _freights.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _AvailableCard(
-                          freight: _freights[i],
-                          onAccept: () => context
-                              .push('/app/driver/freights/${_freights[i].id}')),
+  Widget build(BuildContext context) {
+    return WebPageScaffold(
+      title: 'Fletes disponibles',
+      subtitle: 'Solicitudes que puedes revisar y aceptar',
+      child: _loading
+          ? const WebLoadingState()
+          : _freights.isEmpty
+              ? const WebPageBody(
+                  children: [
+                    WebEmptyState(
+                      icon: Icons.inbox_outlined,
+                      title: 'No hay fletes disponibles',
+                      description:
+                          'Cuando haya nuevas solicitudes aprobadas para conductores apareceran aqui.',
                     ),
-                  ),
-      );
+                  ],
+                )
+              : WebPageBody(
+                  onRefresh: _load,
+                  children: [
+                    for (final freight in _freights) ...[
+                      _AvailableCard(
+                        freight: freight,
+                        onAccept: () => context.push(
+                          '/app/driver/freights/${freight.id}',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
+    );
+  }
 }
 
 class _AvailableCard extends StatelessWidget {
   final FreightModel freight;
   final VoidCallback onAccept;
-  const _AvailableCard({required this.freight, required this.onAccept});
+
+  const _AvailableCard({
+    required this.freight,
+    required this.onAccept,
+  });
 
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##0', 'es_CL');
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: const [
-            BoxShadow(
-                color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))
-          ]),
+    return WebPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            const Icon(Icons.my_location, size: 15, color: AppTheme.success),
-            const SizedBox(width: 6),
-            Expanded(
-                child: Text(freight.originAddress,
-                    style: const TextStyle(fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis)),
-          ]),
-          const SizedBox(height: 4),
-          Row(children: [
-            const Icon(Icons.location_on, size: 15, color: AppTheme.error),
-            const SizedBox(width: 6),
-            Expanded(
-                child: Text(freight.destinationAddress,
-                    style: const TextStyle(fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis)),
-          ]),
-          const Divider(height: 16),
-          Row(
+          _RouteLine(
+            icon: Icons.my_location_rounded,
+            color: AppTheme.success,
+            text: freight.originAddress,
+          ),
+          const SizedBox(height: 8),
+          _RouteLine(
+            icon: Icons.location_on_rounded,
+            color: AppTheme.error,
+            text: freight.destinationAddress,
+          ),
+          const Divider(height: 22),
+          Wrap(
+            spacing: 14,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text('${freight.cargoWeightKg} kg',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppTheme.textSecondary)),
-              if (freight.distanceKm != null) ...[
-                const SizedBox(width: 12),
-                Text('${freight.distanceKm!.toStringAsFixed(1)} km',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppTheme.textSecondary)),
-              ],
-              const Spacer(),
-              if (freight.estimatedPrice != null)
-                Text('\$${fmt.format(freight.estimatedPrice)}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: AppTheme.primary)),
+              _Meta(
+                  icon: Icons.scale_outlined,
+                  label: '${freight.cargoWeightKg} kg'),
+              if (freight.distanceKm != null)
+                _Meta(
+                  icon: Icons.route_rounded,
+                  label: '${freight.distanceKm!.toStringAsFixed(1)} km',
+                ),
+              if ((freight.requiresHelpers ?? 0) > 0)
+                _Meta(
+                  icon: Icons.people_outline_rounded,
+                  label: '${freight.requiresHelpers} peoneta',
+                ),
             ],
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: onAccept,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.success,
-                  minimumSize: const Size(double.infinity, 44)),
-              child: const Text('Ver y aceptar'),
-            ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  freight.estimatedPrice == null
+                      ? 'Precio por confirmar'
+                      : '\$${fmt.format(freight.estimatedPrice)} CLP',
+                  style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: onAccept,
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: const Text('Ver y aceptar'),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RouteLine extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  const _RouteLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.midnight,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Meta extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _Meta({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppTheme.slate400),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.slate600,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
