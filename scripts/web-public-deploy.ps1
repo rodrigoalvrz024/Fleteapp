@@ -10,7 +10,7 @@ function Get-FirebaseCli {
     return $command.Source
   }
 
-  throw 'No se encontro el comando firebase en PowerShell. Si estas en el prompt > de Firebase/Firepit, ejecuta firebase deploy manualmente ahi; no ejecutes powershell -File dentro de ese prompt.'
+  return $null
 }
 
 $firebase = Get-FirebaseCli
@@ -20,4 +20,13 @@ if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
 
-& $firebase deploy --only hosting:public --project $projectId
+if ($firebase) {
+  & $firebase deploy --only hosting:public --project $projectId
+  exit $LASTEXITCODE
+}
+
+Write-Host ''
+Write-Host 'Build listo, pero Firebase CLI no esta disponible como comando de PowerShell.'
+Write-Host 'Ahora abre o vuelve al prompt > de Firebase/Firepit y ejecuta:'
+Write-Host ''
+Write-Host "firebase deploy --only hosting:public --project $projectId"

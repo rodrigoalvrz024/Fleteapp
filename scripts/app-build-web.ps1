@@ -1,8 +1,8 @@
-$ErrorActionPreference = 'Stop'
-
 param(
   [string]$GoogleMapsApiKey = $env:GOOGLE_MAPS_API_KEY
 )
+
+$ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $mobileDir = Join-Path $repoRoot 'mobile'
