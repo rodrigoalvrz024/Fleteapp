@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../../core/theme/app_theme.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
-import '../../core/theme/app_theme.dart';
 import '../../widgets/common/status_tracker_widget.dart';
+import 'widgets/freight_widgets.dart';
 
 class FreightDetailScreen extends StatefulWidget {
   final int freightId;
+
   const FreightDetailScreen({super.key, required this.freightId});
+
   @override
   State<FreightDetailScreen> createState() => _FreightDetailScreenState();
 }
@@ -25,15 +29,15 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
 
   Future<void> _load() async {
     try {
-      final f = await _service.getFreight(widget.freightId);
+      final freight = await _service.getFreight(widget.freightId);
+      if (!mounted) return;
       setState(() {
-        _freight = f;
+        _freight = freight;
         _loading = false;
       });
     } catch (_) {
-      setState(() {
-        _loading = false;
-      });
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
   }
 
@@ -45,8 +49,9 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
         content: const Text('¿Estás seguro de que deseas cancelar este flete?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
             onPressed: () => Navigator.pop(context, true),
@@ -55,183 +60,171 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
         ],
       ),
     );
-    if (confirm == true) {
-      await _service.updateStatus(widget.freightId, 'cancelled',
-          note: 'Cancelado por cliente');
-      if (mounted) _load();
-    }
+
+    if (confirm != true) return;
+
+    await _service.updateStatus(
+      widget.freightId,
+      'cancelled',
+      note: 'Cancelado por cliente',
+    );
+    if (mounted) _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final freight = _freight;
+
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppTheme.primary,
+          ),
+        ),
+      );
     }
-    if (_freight == null) {
+
+    if (freight == null) {
       return Scaffold(
-          appBar: AppBar(),
-          body: const Center(child: Text('Flete no encontrado')));
+        appBar: AppBar(),
+        body: ClientEmptyState(
+          icon: Icons.search_off_rounded,
+          title: 'Flete no encontrado',
+          description: 'No pudimos encontrar el detalle de este flete.',
+          actionLabel: 'Reintentar',
+          onAction: _load,
+        ),
+      );
     }
-    final f = _freight!;
+
     final fmt = NumberFormat('#,##0', 'es_CL');
+    final canCancel =
+        freight.status == 'pending' || freight.status == 'accepted';
 
     return Scaffold(
-      appBar: AppBar(title: Text('Flete #${f.id}')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(title: Text('Flete #${freight.id}')),
+      body: RefreshIndicator(
+        color: AppTheme.primary,
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
           children: [
-            // Estado
             Center(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                decoration: BoxDecoration(
-                    color: f.statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(30)),
-                child: Text(f.statusLabel,
-                    style: TextStyle(
-                        color: f.statusColor,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
+              child: FreightStatusBadge(
+                status: freight.status,
+                label: freight.statusLabel,
+                color: freight.statusColor,
               ),
             ),
             const SizedBox(height: 24),
-
-            StatusTrackerWidget(currentStatus: f.status),
+            StatusTrackerWidget(currentStatus: freight.status),
             const SizedBox(height: 16),
-
-            _InfoCard(title: 'Ruta', children: [
-              _InfoRow(
-                  icon: Icons.my_location,
+            FreightInfoCard(
+              title: 'Ruta',
+              icon: Icons.route_rounded,
+              children: [
+                FreightInfoRow(
+                  icon: Icons.my_location_rounded,
                   color: AppTheme.success,
                   label: 'Origen',
-                  value: f.originAddress),
-              const SizedBox(height: 8),
-              _InfoRow(
-                  icon: Icons.location_on,
+                  value: freight.originAddress,
+                ),
+                const SizedBox(height: 10),
+                FreightInfoRow(
+                  icon: Icons.location_on_rounded,
                   color: AppTheme.error,
                   label: 'Destino',
-                  value: f.destinationAddress),
-              if (f.distanceKm != null) ...[
-                const SizedBox(height: 8),
-                _InfoRow(
-                    icon: Icons.route,
+                  value: freight.destinationAddress,
+                ),
+                if (freight.distanceKm != null) ...[
+                  const SizedBox(height: 10),
+                  FreightInfoRow(
+                    icon: Icons.social_distance_rounded,
                     color: AppTheme.primary,
                     label: 'Distancia',
-                    value: '${f.distanceKm!.toStringAsFixed(1)} km'),
+                    value: '${freight.distanceKm!.toStringAsFixed(1)} km',
+                  ),
+                ],
               ],
-            ]),
+            ),
             const SizedBox(height: 14),
-
-            _InfoCard(title: 'Carga', children: [
-              _InfoRow(
-                  icon: Icons.inventory_2_outlined,
+            FreightInfoCard(
+              title: 'Carga',
+              icon: Icons.inventory_2_outlined,
+              children: [
+                FreightInfoRow(
+                  icon: Icons.description_outlined,
                   color: AppTheme.accent,
                   label: 'Descripción',
-                  value: f.cargoDescription),
-              const SizedBox(height: 8),
-              _InfoRow(
+                  value: freight.cargoDescription,
+                ),
+                const SizedBox(height: 10),
+                FreightInfoRow(
                   icon: Icons.scale_outlined,
                   color: AppTheme.accent,
                   label: 'Peso',
-                  value: '${f.cargoWeightKg} kg'),
-              if ((f.requiresHelpers ?? 0) > 0) ...[
-                const SizedBox(height: 8),
-                _InfoRow(
-                    icon: Icons.people_outline,
+                  value: '${freight.cargoWeightKg.toStringAsFixed(0)} kg',
+                ),
+                if ((freight.requiresHelpers ?? 0) > 0) ...[
+                  const SizedBox(height: 10),
+                  FreightInfoRow(
+                    icon: Icons.people_outline_rounded,
                     color: AppTheme.accent,
                     label: 'Ayudantes',
-                    value: '${f.requiresHelpers}'),
+                    value: '${freight.requiresHelpers}',
+                  ),
+                ],
               ],
-            ]),
+            ),
             const SizedBox(height: 14),
-
-            _InfoCard(title: 'Precio', children: [
-              if (f.estimatedPrice != null)
-                _InfoRow(
-                    icon: Icons.attach_money,
+            FreightInfoCard(
+              title: 'Precio',
+              icon: Icons.payments_outlined,
+              children: [
+                if (freight.estimatedPrice != null)
+                  FreightInfoRow(
+                    icon: Icons.request_quote_outlined,
                     color: AppTheme.primary,
                     label: 'Estimado',
-                    value: '\$${fmt.format(f.estimatedPrice)} CLP'),
-              if (f.finalPrice != null) ...[
-                const SizedBox(height: 8),
-                _InfoRow(
-                    icon: Icons.check_circle_outline,
+                    value: '\$${fmt.format(freight.estimatedPrice)} CLP',
+                  ),
+                if (freight.finalPrice != null) ...[
+                  const SizedBox(height: 10),
+                  FreightInfoRow(
+                    icon: Icons.check_circle_outline_rounded,
                     color: AppTheme.success,
                     label: 'Final',
-                    value: '\$${fmt.format(f.finalPrice)} CLP'),
+                    value: '\$${fmt.format(freight.finalPrice)} CLP',
+                  ),
+                ],
+                if (freight.estimatedPrice == null &&
+                    freight.finalPrice == null)
+                  const Text(
+                    'El precio se informará cuando el flete sea evaluado.',
+                    style: TextStyle(
+                      color: AppTheme.slate600,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
               ],
-            ]),
-            const SizedBox(height: 24),
-
-            if (f.status == 'pending' || f.status == 'accepted')
+            ),
+            if (canCancel) ...[
+              const SizedBox(height: 24),
               ElevatedButton.icon(
-                style:
-                    ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.error,
+                ),
                 onPressed: _cancel,
                 icon: const Icon(Icons.cancel_outlined),
                 label: const Text('Cancelar flete'),
               ),
+            ],
           ],
         ),
       ),
     );
   }
-}
-
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  const _InfoCard({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: AppTheme.primary)),
-            const Divider(height: 16),
-            ...children,
-          ],
-        ),
-      );
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label, value;
-  const _InfoRow(
-      {required this.icon,
-      required this.color,
-      required this.label,
-      required this.value});
-
-  @override
-  Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 10),
-          Text('$label: ',
-              style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-          Expanded(
-              child: Text(value,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w500, fontSize: 13))),
-        ],
-      );
 }
