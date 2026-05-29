@@ -359,6 +359,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     final user = ref.watch(authProvider).user;
     final name = user?.fullName.split(' ').first ?? 'Cliente';
     final size = MediaQuery.of(context).size;
+    final desktop = size.width >= 900;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark,
@@ -393,7 +394,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
-              padding: EdgeInsets.only(bottom: size.height * _snapMin),
+              padding: EdgeInsets.only(
+                left: desktop ? 460 : 0,
+                bottom: desktop ? 0 : size.height * _snapMin,
+              ),
             ),
 
             // ── Header dinámico ──────────────────────────
@@ -497,7 +501,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,
               right: 16,
-              bottom: size.height * _sheetSize + 12,
+              bottom: desktop ? 24 : size.height * _sheetSize + 12,
               child: GestureDetector(
                 onTap: _goToMyLocation,
                 child: Container(
@@ -526,166 +530,181 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                 begin: const Offset(0, 1),
                 end: Offset.zero,
               ).animate(_sheetEntry),
-              child: DraggableScrollableSheet(
-                controller: _sheetCtrl,
-                initialChildSize: _snapMin,
-                minChildSize: _snapMin,
-                maxChildSize: _snapMax,
-                snap: true,
-                snapSizes: const [_snapMin, 0.52, _snapMax],
-                builder: (ctx, scroll) => DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(24)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.10),
-                        blurRadius: 28,
-                        offset: const Offset(0, -6),
-                      ),
-                    ],
-                  ),
-                  child: ListView(
-                    controller: scroll,
-                    padding: EdgeInsets.zero,
-                    physics: const ClampingScrollPhysics(),
-                    children: [
-                      // Handle
-                      Center(
-                        child: Container(
-                          margin: const EdgeInsets.only(top: 10, bottom: 4),
-                          width: 38,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFCDD5DF),
-                            borderRadius: BorderRadius.circular(2),
+              child: Align(
+                alignment:
+                    desktop ? Alignment.bottomLeft : Alignment.bottomCenter,
+                child: SizedBox(
+                  width: desktop ? 430 : double.infinity,
+                  child: DraggableScrollableSheet(
+                    controller: _sheetCtrl,
+                    expand: !desktop,
+                    initialChildSize: desktop ? 0.76 : _snapMin,
+                    minChildSize: desktop ? 0.76 : _snapMin,
+                    maxChildSize: desktop ? 0.76 : _snapMax,
+                    snap: !desktop,
+                    snapSizes:
+                        desktop ? null : const [_snapMin, 0.52, _snapMax],
+                    builder: (ctx, scroll) => DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: desktop
+                            ? BorderRadius.circular(24)
+                            : const BorderRadius.vertical(
+                                top: Radius.circular(24),
+                              ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.10),
+                            blurRadius: 28,
+                            offset: const Offset(0, -6),
                           ),
-                        ),
+                        ],
                       ),
-
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Input búsqueda
-                            _SearchInput(
-                              controller: _searchCtrl,
-                              focusNode: _searchFocus,
-                              onChanged: (v) => setState(() {}),
-                              onClear: () {
-                                _searchCtrl.clear();
-                                setState(() {});
-                              },
+                      child: ListView(
+                        controller: scroll,
+                        padding: EdgeInsets.zero,
+                        physics: const ClampingScrollPhysics(),
+                        children: [
+                          // Handle
+                          Center(
+                            child: Container(
+                              margin: const EdgeInsets.only(top: 10, bottom: 4),
+                              width: 38,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFCDD5DF),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
-                            const SizedBox(height: 14),
+                          ),
 
-                            // CTA solicitar flete
-                            ScaleTransition(
-                              scale: _btnScale,
-                              child: GestureDetector(
-                                onTapDown: (_) => _btnCtrl.forward(),
-                                onTapUp: (_) {
-                                  _btnCtrl.reverse();
-                                  _onSolicitar();
-                                },
-                                onTapCancel: () => _btnCtrl.reverse(),
-                                child: Container(
-                                  height: 54,
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF4F94F8),
-                                        Color(0xFF2563EB),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(14),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF2563EB)
-                                            .withValues(alpha: 0.28),
-                                        blurRadius: 20,
-                                        offset: const Offset(0, 8),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Input búsqueda
+                                _SearchInput(
+                                  controller: _searchCtrl,
+                                  focusNode: _searchFocus,
+                                  onChanged: (v) => setState(() {}),
+                                  onClear: () {
+                                    _searchCtrl.clear();
+                                    setState(() {});
+                                  },
+                                ),
+                                const SizedBox(height: 14),
+
+                                // CTA solicitar flete
+                                ScaleTransition(
+                                  scale: _btnScale,
+                                  child: GestureDetector(
+                                    onTapDown: (_) => _btnCtrl.forward(),
+                                    onTapUp: (_) {
+                                      _btnCtrl.reverse();
+                                      _onSolicitar();
+                                    },
+                                    onTapCancel: () => _btnCtrl.reverse(),
+                                    child: Container(
+                                      height: 54,
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFF4F94F8),
+                                            Color(0xFF2563EB),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        borderRadius: BorderRadius.circular(14),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF2563EB)
+                                                .withValues(alpha: 0.28),
+                                            blurRadius: 20,
+                                            offset: const Offset(0, 8),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.local_shipping_rounded,
-                                          color: Colors.white, size: 20),
-                                      SizedBox(width: 10),
-                                      Text('Solicitar flete',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.2,
-                                          )),
-                                    ],
+                                      child: const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.local_shipping_rounded,
+                                              color: Colors.white, size: 20),
+                                          SizedBox(width: 10),
+                                          Text('Solicitar flete',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.2,
+                                              )),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                const SizedBox(height: 20),
+
+                                // Banner urgente / nocturno
+                                if (_isNight)
+                                  _InfoRow(
+                                    icon: Icons.nightlight_round,
+                                    color: Colors.deepPurple.shade300,
+                                    bg: const Color(0xFF1E1B4B)
+                                        .withValues(alpha: 0.05),
+                                    border: Colors.deepPurple
+                                        .withValues(alpha: 0.15),
+                                    text: 'Tarifa nocturna · Mínimo \$40.000',
+                                    onTap: _onSolicitar,
+                                  )
+                                else
+                                  _InfoRow(
+                                    icon: Icons.flash_on_rounded,
+                                    color: AppTheme.urgent,
+                                    bg: const Color(0xFFFFF7ED),
+                                    border:
+                                        AppTheme.urgent.withValues(alpha: 0.2),
+                                    text: 'Modo urgente · Mínimo \$30.000',
+                                    onTap: _onSolicitar,
+                                  ),
+                                const SizedBox(height: 22),
+
+                                // Ubicación actual
+                                _LocationCurrentTile(
+                                  address: _currentAddress,
+                                  onTap: () {
+                                    _searchCtrl.text = _currentAddress;
+                                    _mapCtrl?.animateCamera(
+                                      CameraUpdate.newLatLngZoom(
+                                          _currentPos, 15),
+                                    );
+                                    _collapseSheet();
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Recientes
+                                const _Label('Recientes'),
+                                const SizedBox(height: 10),
+                                ..._displayRecents.map((d) => _RecentTile(
+                                      place: d,
+                                      onTap: () => _selectPlace(d),
+                                    )),
+                                const SizedBox(height: 22),
+
+                                // Cómo funciona
+                                const _Label('Cómo funciona'),
+                                const SizedBox(height: 12),
+                                const _HowItWorks(),
+                                const SizedBox(height: 32),
+                              ],
                             ),
-                            const SizedBox(height: 20),
-
-                            // Banner urgente / nocturno
-                            if (_isNight)
-                              _InfoRow(
-                                icon: Icons.nightlight_round,
-                                color: Colors.deepPurple.shade300,
-                                bg: const Color(0xFF1E1B4B)
-                                    .withValues(alpha: 0.05),
-                                border:
-                                    Colors.deepPurple.withValues(alpha: 0.15),
-                                text: 'Tarifa nocturna · Mínimo \$40.000',
-                                onTap: _onSolicitar,
-                              )
-                            else
-                              _InfoRow(
-                                icon: Icons.flash_on_rounded,
-                                color: AppTheme.urgent,
-                                bg: const Color(0xFFFFF7ED),
-                                border: AppTheme.urgent.withValues(alpha: 0.2),
-                                text: 'Modo urgente · Mínimo \$30.000',
-                                onTap: _onSolicitar,
-                              ),
-                            const SizedBox(height: 22),
-
-                            // Ubicación actual
-                            _LocationCurrentTile(
-                              address: _currentAddress,
-                              onTap: () {
-                                _searchCtrl.text = _currentAddress;
-                                _mapCtrl?.animateCamera(
-                                  CameraUpdate.newLatLngZoom(_currentPos, 15),
-                                );
-                                _collapseSheet();
-                              },
-                            ),
-                            const SizedBox(height: 16),
-
-                            // Recientes
-                            const _Label('Recientes'),
-                            const SizedBox(height: 10),
-                            ..._displayRecents.map((d) => _RecentTile(
-                                  place: d,
-                                  onTap: () => _selectPlace(d),
-                                )),
-                            const SizedBox(height: 22),
-
-                            // Cómo funciona
-                            const _Label('Cómo funciona'),
-                            const SizedBox(height: 12),
-                            const _HowItWorks(),
-                            const SizedBox(height: 32),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),

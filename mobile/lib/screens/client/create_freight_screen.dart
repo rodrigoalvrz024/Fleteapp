@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../services/freight_service.dart';
 import '../../services/api_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../shared/web_layout.dart';
 
 class CreateFreightScreen extends StatefulWidget {
   final String? destAddress;
@@ -378,22 +379,16 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##0', 'es_CL');
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Solicitar flete'),
-        backgroundColor: Colors.white,
-        foregroundColor: AppTheme.midnight,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(0.5),
-          child: Container(height: 0.5, color: AppTheme.slate200),
-        ),
-      ),
-      body: Form(
+    return WebPageScaffold(
+      title: 'Solicitar flete',
+      subtitle: 'Completa ruta, carga, horario y precio',
+      // The form stays before the floating CTA so this screen reads top-down.
+      // ignore: sort_child_properties_last
+      child: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        child: WebPageBody(
+          maxWidth: 780,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
           children: [
             _RequestProgressHeader(
               activeStep: _activeStep,
@@ -631,20 +626,17 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       ),
 
       // ── CTA sticky ───────────────────────────────────
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.fromLTRB(
-            16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(
-            top: BorderSide(color: AppTheme.slate200, width: 0.5),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 780),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _SubmitButton(
+            isUrgent: _isUrgent,
+            canSubmit: _canSubmit,
+            loading: _loading,
+            onTap: _submit,
           ),
-        ),
-        child: _SubmitButton(
-          isUrgent: _isUrgent,
-          canSubmit: _canSubmit,
-          loading: _loading,
-          onTap: _submit,
         ),
       ),
     );

@@ -10,6 +10,7 @@ class WebPageScaffold extends StatelessWidget {
   final Widget child;
   final List<Widget> actions;
   final Widget? floatingActionButton;
+  final FloatingActionButtonLocation? floatingActionButtonLocation;
 
   const WebPageScaffold({
     super.key,
@@ -18,6 +19,7 @@ class WebPageScaffold extends StatelessWidget {
     this.subtitle,
     this.actions = const [],
     this.floatingActionButton,
+    this.floatingActionButtonLocation,
   });
 
   @override
@@ -31,6 +33,7 @@ class WebPageScaffold extends StatelessWidget {
       ),
       body: SafeArea(child: child),
       floatingActionButton: floatingActionButton,
+      floatingActionButtonLocation: floatingActionButtonLocation,
     );
   }
 }

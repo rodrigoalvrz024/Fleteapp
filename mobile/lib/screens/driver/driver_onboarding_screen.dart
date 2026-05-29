@@ -104,7 +104,12 @@ class _DriverOnboardingScreenState
         child: state.isLoading
             ? const Center(
                 child: CircularProgressIndicator(color: AppTheme.primary))
-            : _buildContent(context, state, driver),
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 780),
+                  child: _buildContent(context, state, driver),
+                ),
+              ),
       ),
     );
   }

@@ -91,341 +91,358 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         child: RefreshIndicator(
           color: AppTheme.primary,
           onRefresh: () => ref.read(driverProvider.notifier).refreshFreights(),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            children: [
-              // ── Header ────────────────────────────
-              Row(children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Hola, $name 👋',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.midnight,
-                          )),
-                      const SizedBox(height: 2),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        child: Text(
-                          driver.isOnline
-                              ? _statusMsgs[_statusIndex]
-                              : 'Estás desconectado',
-                          key: ValueKey(driver.isOnline ? _statusIndex : -1),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: driver.isOnline
-                                ? AppTheme.success
-                                : AppTheme.slate400,
-                          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+                  children: [
+                    // ── Header ────────────────────────────
+                    Row(children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Hola, $name 👋',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.midnight,
+                                )),
+                            const SizedBox(height: 2),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              child: Text(
+                                driver.isOnline
+                                    ? _statusMsgs[_statusIndex]
+                                    : 'Estás desconectado',
+                                key: ValueKey(
+                                    driver.isOnline ? _statusIndex : -1),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: driver.isOnline
+                                      ? AppTheme.success
+                                      : AppTheme.slate400,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: _showProfileMenu,
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.slate200, width: 0.5),
-                    ),
-                    child: const Icon(Icons.person_outline_rounded,
-                        size: 20, color: AppTheme.midnight),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 16),
-
-              // ── Toggle online/offline ──────────────
-              GestureDetector(
-                onTap: driver.isLoading
-                    ? null
-                    : () async {
-                        HapticFeedback.mediumImpact();
-                        if (driver.isOnline) {
-                          await ref.read(driverProvider.notifier).goOffline();
-                        } else {
-                          await ref.read(driverProvider.notifier).goOnline();
-                        }
-                      },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    gradient: driver.isOnline
-                        ? const LinearGradient(
-                            colors: [
-                              Color(0xFF059669),
-                              Color(0xFF10B981),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
-                    color: driver.isOnline ? null : Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: driver.isOnline
-                        ? null
-                        : Border.all(color: AppTheme.slate200, width: 0.5),
-                    boxShadow: driver.isOnline
-                        ? [
-                            BoxShadow(
-                              color: AppTheme.success.withValues(alpha: 0.28),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: Row(children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: driver.isOnline
-                            ? Colors.white.withValues(alpha: 0.18)
-                            : AppTheme.slate100,
-                        shape: BoxShape.circle,
+                      GestureDetector(
+                        onTap: _showProfileMenu,
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: AppTheme.slate200, width: 0.5),
+                          ),
+                          child: const Icon(Icons.person_outline_rounded,
+                              size: 20, color: AppTheme.midnight),
+                        ),
                       ),
-                      child: driver.isLoading
-                          ? Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
+                    ]),
+                    const SizedBox(height: 16),
+
+                    // ── Toggle online/offline ──────────────
+                    GestureDetector(
+                      onTap: driver.isLoading
+                          ? null
+                          : () async {
+                              HapticFeedback.mediumImpact();
+                              if (driver.isOnline) {
+                                await ref
+                                    .read(driverProvider.notifier)
+                                    .goOffline();
+                              } else {
+                                await ref
+                                    .read(driverProvider.notifier)
+                                    .goOnline();
+                              }
+                            },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          gradient: driver.isOnline
+                              ? const LinearGradient(
+                                  colors: [
+                                    Color(0xFF059669),
+                                    Color(0xFF10B981),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: driver.isOnline ? null : Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: driver.isOnline
+                              ? null
+                              : Border.all(
+                                  color: AppTheme.slate200, width: 0.5),
+                          boxShadow: driver.isOnline
+                              ? [
+                                  BoxShadow(
+                                    color: AppTheme.success
+                                        .withValues(alpha: 0.28),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: Row(children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: driver.isOnline
+                                  ? Colors.white.withValues(alpha: 0.18)
+                                  : AppTheme.slate100,
+                              shape: BoxShape.circle,
+                            ),
+                            child: driver.isLoading
+                                ? Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: driver.isOnline
+                                          ? Colors.white
+                                          : AppTheme.slate400,
+                                    ),
+                                  )
+                                : Icon(
+                                    driver.isOnline
+                                        ? Icons.wifi_rounded
+                                        : Icons.wifi_off_rounded,
+                                    size: 22,
+                                    color: driver.isOnline
+                                        ? Colors.white
+                                        : AppTheme.slate400,
+                                  ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  driver.isOnline ? 'En línea' : 'Desconectado',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: driver.isOnline
+                                        ? Colors.white
+                                        : AppTheme.midnight,
+                                  ),
+                                ),
+                                Text(
+                                  driver.isOnline
+                                      ? 'Toca para desconectarte'
+                                      : 'Toca para recibir fletes',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: driver.isOnline
+                                        ? Colors.white.withValues(alpha: 0.75)
+                                        : AppTheme.slate400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Toggle pill
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: 48,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: driver.isOnline
+                                  ? Colors.white.withValues(alpha: 0.28)
+                                  : AppTheme.slate200,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: AnimatedAlign(
+                              duration: const Duration(milliseconds: 300),
+                              alignment: driver.isOnline
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                margin: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  color: driver.isOnline
+                                      ? Colors.white
+                                      : AppTheme.slate400,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // ── Viaje activo ───────────────────────
+                    if (driver.activeFreight != null) ...[
+                      _ActiveFreightCard(
+                        freight: driver.activeFreight!,
+                        fmt: fmt,
+                        onUpdateStatus: (status) => ref
+                            .read(driverProvider.notifier)
+                            .updateFreightStatus(
+                                driver.activeFreight!.id, status),
+                        onViewRoute: () => context.push(
+                            '/app/driver/freights/${driver.activeFreight!.id}'),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    // ── Stats ──────────────────────────────
+                    Row(children: [
+                      Expanded(
+                        child: _StatCard(
+                          icon: Icons.check_circle_outline_rounded,
+                          label: 'Hoy',
+                          value: '${driver.completedToday} fletes',
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          icon: Icons.attach_money_rounded,
+                          label: 'Ganancias',
+                          value: '\$${fmt.format(driver.earningsToday)}',
+                          color: AppTheme.success,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          icon: Icons.star_rounded,
+                          label: 'Rating',
+                          value: '${driver.rating} ★',
+                          color: const Color(0xFFF59E0B),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 14),
+
+                    // ── Fletes disponibles ─────────────────
+                    _FreightsCounter(
+                      isOnline: driver.isOnline,
+                      count: driver.availableFreights.length,
+                      onTap: driver.isOnline
+                          ? () => context.push('/app/driver/available')
+                          : null,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // ── Acciones ───────────────────────────
+                    const _SectionLabel('Acciones'),
+                    const SizedBox(height: 10),
+
+                    // CTA principal
+                    GestureDetector(
+                      onTap: driver.isOnline
+                          ? () => context.push('/app/driver/available')
+                          : null,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        height: 54,
+                        decoration: BoxDecoration(
+                          gradient: driver.isOnline
+                              ? const LinearGradient(
+                                  colors: [
+                                    Color(0xFF4F94F8),
+                                    Color(0xFF2563EB),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          color: driver.isOnline ? null : AppTheme.slate200,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: driver.isOnline
+                              ? [
+                                  BoxShadow(
+                                    color: AppTheme.primary
+                                        .withValues(alpha: 0.28),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ]
+                              : [],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_rounded,
                                 color: driver.isOnline
                                     ? Colors.white
                                     : AppTheme.slate400,
+                                size: 20),
+                            const SizedBox(width: 10),
+                            Text('Ver fletes disponibles',
+                                style: TextStyle(
+                                  color: driver.isOnline
+                                      ? Colors.white
+                                      : AppTheme.slate400,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                )),
+                            if (driver.isOnline &&
+                                driver.availableFreights.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${driver.availableFreights.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
-                            )
-                          : Icon(
-                              driver.isOnline
-                                  ? Icons.wifi_rounded
-                                  : Icons.wifi_off_rounded,
-                              size: 22,
-                              color: driver.isOnline
-                                  ? Colors.white
-                                  : AppTheme.slate400,
-                            ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            driver.isOnline ? 'En línea' : 'Desconectado',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: driver.isOnline
-                                  ? Colors.white
-                                  : AppTheme.midnight,
-                            ),
-                          ),
-                          Text(
-                            driver.isOnline
-                                ? 'Toca para desconectarte'
-                                : 'Toca para recibir fletes',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: driver.isOnline
-                                  ? Colors.white.withValues(alpha: 0.75)
-                                  : AppTheme.slate400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Toggle pill
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: 48,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: driver.isOnline
-                            ? Colors.white.withValues(alpha: 0.28)
-                            : AppTheme.slate200,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: AnimatedAlign(
-                        duration: const Duration(milliseconds: 300),
-                        alignment: driver.isOnline
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          width: 22,
-                          height: 22,
-                          margin: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            color: driver.isOnline
-                                ? Colors.white
-                                : AppTheme.slate400,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ]),
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // ── Viaje activo ───────────────────────
-              if (driver.activeFreight != null) ...[
-                _ActiveFreightCard(
-                  freight: driver.activeFreight!,
-                  fmt: fmt,
-                  onUpdateStatus: (status) => ref
-                      .read(driverProvider.notifier)
-                      .updateFreightStatus(driver.activeFreight!.id, status),
-                  onViewRoute: () => context
-                      .push('/app/driver/freights/${driver.activeFreight!.id}'),
-                ),
-                const SizedBox(height: 14),
-              ],
-
-              // ── Stats ──────────────────────────────
-              Row(children: [
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.check_circle_outline_rounded,
-                    label: 'Hoy',
-                    value: '${driver.completedToday} fletes',
-                    color: AppTheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.attach_money_rounded,
-                    label: 'Ganancias',
-                    value: '\$${fmt.format(driver.earningsToday)}',
-                    color: AppTheme.success,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _StatCard(
-                    icon: Icons.star_rounded,
-                    label: 'Rating',
-                    value: '${driver.rating} ★',
-                    color: const Color(0xFFF59E0B),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 14),
-
-              // ── Fletes disponibles ─────────────────
-              _FreightsCounter(
-                isOnline: driver.isOnline,
-                count: driver.availableFreights.length,
-                onTap: driver.isOnline
-                    ? () => context.push('/app/driver/available')
-                    : null,
-              ),
-              const SizedBox(height: 20),
-
-              // ── Acciones ───────────────────────────
-              const _SectionLabel('Acciones'),
-              const SizedBox(height: 10),
-
-              // CTA principal
-              GestureDetector(
-                onTap: driver.isOnline
-                    ? () => context.push('/app/driver/available')
-                    : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  height: 54,
-                  decoration: BoxDecoration(
-                    gradient: driver.isOnline
-                        ? const LinearGradient(
-                            colors: [
-                              Color(0xFF4F94F8),
-                              Color(0xFF2563EB),
                             ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          )
-                        : null,
-                    color: driver.isOnline ? null : AppTheme.slate200,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: driver.isOnline
-                        ? [
-                            BoxShadow(
-                              color: AppTheme.primary.withValues(alpha: 0.28),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.search_rounded,
-                          color: driver.isOnline
-                              ? Colors.white
-                              : AppTheme.slate400,
-                          size: 20),
-                      const SizedBox(width: 10),
-                      Text('Ver fletes disponibles',
-                          style: TextStyle(
-                            color: driver.isOnline
-                                ? Colors.white
-                                : AppTheme.slate400,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          )),
-                      if (driver.isOnline &&
-                          driver.availableFreights.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${driver.availableFreights.length}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ],
-                  ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    _ActionTile(
+                      icon: Icons.history_rounded,
+                      label: 'Mis viajes',
+                      subtitle: 'Fletes aceptados y completados',
+                      onTap: () => context.push('/app/driver/available'),
+                      color: AppTheme.slate600,
+                    ),
+                    const SizedBox(height: 10),
+
+                    _ActionTile(
+                      icon: Icons.help_outline_rounded,
+                      label: 'Ayuda y soporte',
+                      subtitle: 'Reportar problema o contactarnos',
+                      onTap: _showSupportSheet,
+                      color: AppTheme.slate600,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-
-              _ActionTile(
-                icon: Icons.history_rounded,
-                label: 'Mis viajes',
-                subtitle: 'Fletes aceptados y completados',
-                onTap: () => context.push('/app/driver/available'),
-                color: AppTheme.slate600,
-              ),
-              const SizedBox(height: 10),
-
-              _ActionTile(
-                icon: Icons.help_outline_rounded,
-                label: 'Ayuda y soporte',
-                subtitle: 'Reportar problema o contactarnos',
-                onTap: _showSupportSheet,
-                color: AppTheme.slate600,
-              ),
-            ],
+            ),
           ),
         ),
       ),
