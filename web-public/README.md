@@ -43,3 +43,22 @@ Mantener por ahora Flutter en el hosting actual. Cuando esta web este lista:
 
 - Opcion A: crear un segundo sitio de Firebase Hosting para `web-public`.
 - Opcion B: mover el dominio principal a `web-public` y dejar Flutter en subdominio o ruta de app.
+
+Primer deploy del sitio publico:
+
+```powershell
+C:\Users\casa\Documents\Fleteapp\.local-tools\firebase-tools-instant-win.exe login
+C:\Users\casa\Documents\Fleteapp\scripts\web-public-create-site.ps1
+C:\Users\casa\Documents\Fleteapp\scripts\web-public-deploy.ps1
+```
+
+Si despues del login quedas en un prompt solo con `>`, escribe `exit` para volver a PowerShell antes de ejecutar los scripts.
+Si el comando `firebase` solo existe dentro de ese prompt `>`, ejecuta ahi:
+
+```powershell
+firebase hosting:sites:create fleteapp-public-8d8f7 --project fleteapp-8d8f7
+firebase target:apply hosting public fleteapp-public-8d8f7 --project fleteapp-8d8f7
+firebase deploy --only hosting:public --project fleteapp-8d8f7
+```
+
+La URL esperada es `https://fleteapp-public-8d8f7.web.app`.

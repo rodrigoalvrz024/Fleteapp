@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "fleteapp-8d8f7"
-  }
+  },
+  "targets": {
+    "fleteapp-8d8f7": {
+      "hosting": {
+        "app": [
+          "fleteapp-8d8f7"
+        ],
+        "public": [
+          "fleteapp-public-8d8f7"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

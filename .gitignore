@@ -18,6 +18,7 @@ mobile/android/local.properties
 .DS_Store
 *.log
 firebase-debug.log*
+firepit-log.txt
 .firebase/
 .dart-appdata/
 .local-tools/
