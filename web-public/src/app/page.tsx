@@ -10,13 +10,13 @@ const audienceCards = [
     title: 'Clientes',
     body: 'Solicita un flete, coordina origen y destino, y revisa el estado del servicio desde la app.',
     action: 'Entrar como cliente',
-    href: 'https://fleteapp-8d8f7.web.app/#/auth/login',
+    href: 'https://fleteapp-8d8f7.web.app/#/login',
   },
   {
     title: 'Conductores',
     body: 'Completa tu onboarding, sube documentos y recibe solicitudes cuando tu cuenta este aprobada.',
     action: 'Postular como conductor',
-    href: 'https://fleteapp-8d8f7.web.app/#/auth/register',
+    href: 'https://fleteapp-8d8f7.web.app/#/register',
   },
   {
     title: 'Equipo FleteApp',
@@ -44,7 +44,7 @@ export default function Home() {
           <div className="navLinks">
             <a href="#soluciones">Soluciones</a>
             <a href="#operacion">Operacion</a>
-            <a href="https://fleteapp-8d8f7.web.app/#/auth/login">Ingresar</a>
+            <a href="https://fleteapp-8d8f7.web.app/#/login">Ingresar</a>
           </div>
         </nav>
 
@@ -57,7 +57,7 @@ export default function Home() {
             operativo desde el primer viaje.
           </p>
           <div className="heroActions">
-            <a className="primaryAction" href="https://fleteapp-8d8f7.web.app/#/auth/register">
+            <a className="primaryAction" href="https://fleteapp-8d8f7.web.app/#/register">
               Crear cuenta
             </a>
             <a className="secondaryAction" href="#soluciones">
