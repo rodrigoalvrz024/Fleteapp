@@ -15,7 +15,6 @@ import '../../screens/driver/driver_freight_detail_screen.dart';
 import '../../screens/driver/driver_home_screen.dart';
 import '../../screens/driver/driver_onboarding_screen.dart';
 import '../../screens/legal/legal_document_screen.dart';
-import '../../screens/public/public_home_screen.dart';
 import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
 
@@ -29,10 +28,10 @@ String _withQuery(String path, GoRouterState state) {
 final _router = GoRouter(
   initialLocation: '/',
   routes: [
-    // Public web.
+    // Public marketing lives in the Next.js site. The Flutter app starts here.
     GoRoute(
       path: '/',
-      builder: (_, __) => const PublicHomeScreen(),
+      redirect: (_, state) => _withQuery('/auth/login', state),
     ),
     GoRoute(
       path: '/legal/terms',

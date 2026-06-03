@@ -21,19 +21,21 @@ export function StartRequestPanel() {
       ? `/app/client/create-freight?${freightParams.toString()}`
       : '/app/client/create-freight';
 
-    window.location.href =
-      `${appLoginUrl}?next=${encodeURIComponent(nextPath)}`;
+    window.location.href = `${appLoginUrl}?next=${encodeURIComponent(nextPath)}`;
   }
 
   return (
     <form className="requestPanel" onSubmit={handleSubmit}>
-      <p className="panelKicker">Solicita un flete</p>
+      <div className="panelHeader">
+        <p className="panelKicker">Solicita un flete</p>
+        <span>Completa ruta y continúa en la app.</span>
+      </div>
       <label>
         <span>Origen</span>
         <input
           value={origin}
           onChange={(event) => setOrigin(event.target.value)}
-          placeholder="Direccion de retiro"
+          placeholder="Dirección de retiro"
           autoComplete="street-address"
         />
       </label>
@@ -42,12 +44,17 @@ export function StartRequestPanel() {
         <input
           value={destination}
           onChange={(event) => setDestination(event.target.value)}
-          placeholder="Direccion de entrega"
+          placeholder="Dirección de entrega"
           autoComplete="street-address"
         />
       </label>
       <button type="submit">Continuar</button>
-      <a href="https://fleteapp-8d8f7.web.app/#/auth/register">Crear cuenta</a>
+      <div className="panelFooter">
+        <span>¿Aún no tienes cuenta?</span>
+        <a href="https://fleteapp-8d8f7.web.app/#/auth/register">
+          Crear cuenta
+        </a>
+      </div>
     </form>
   );
 }
