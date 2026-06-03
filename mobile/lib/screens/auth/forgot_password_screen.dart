@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
-import 'widgets/auth_widgets.dart';
+import 'widgets/recovery_auth_widgets.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -30,6 +31,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
+    HapticFeedback.lightImpact();
+
     setState(() {
       _loading = true;
       _message = null;
@@ -52,22 +55,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AuthShell(
-      appBarTitle: 'Recuperar contraseña',
-      onBack: () => context.go('/auth/login'),
-      icon: Icons.mark_email_read_outlined,
-      title: 'Recupera tu acceso',
-      subtitle:
-          'Ingresa tu correo y enviaremos un enlace para crear una contraseña nueva.',
-      children: [
-        Form(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: RecoveryAuthScaffold(
+        eyebrow: 'Recuperación segura',
+        title: 'Vuelve a entrar sin perder el control',
+        subtitle:
+            'Te enviaremos un enlace temporal para crear una contraseña nueva '
+            'y mantener tu cuenta protegida.',
+        panelTitle: 'Recuperar acceso',
+        panelSubtitle: 'Ingresa el correo asociado a tu cuenta FleteApp.',
+        panelIcon: Icons.mark_email_read_outlined,
+        child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AuthTextField(
+              RecoveryAuthField(
                 controller: _emailCtrl,
-                label: 'Correo electrónico',
+                hint: 'Correo electrónico',
                 icon: Icons.mail_outline_rounded,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.done,
@@ -77,30 +83,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               if (_message != null || _error != null) ...[
                 const SizedBox(height: 16),
-                AuthStatusMessage(
+                RecoveryStatusMessage(
                   message: _message ?? _error!,
                   isError: _error != null,
                 ),
               ],
               const SizedBox(height: 24),
-              AuthPrimaryButton(
+              RecoveryPrimaryButton(
                 label: 'Enviar enlace',
+                icon: Icons.send_rounded,
                 isLoading: _loading,
                 onPressed: _submit,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextButton(
                 onPressed: () => context.go('/auth/login'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primary,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                  foregroundColor: AppTheme.primaryDark,
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
                 ),
                 child: const Text('Volver al inicio de sesión'),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

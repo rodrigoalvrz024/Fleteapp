@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/auth_service.dart';
-import 'widgets/auth_widgets.dart';
+import 'widgets/recovery_auth_widgets.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String? token;
@@ -41,6 +42,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
+    HapticFeedback.lightImpact();
+
     setState(() {
       _loading = true;
       _message = null;
@@ -66,38 +69,47 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AuthShell(
-      appBarTitle: 'Nueva contraseña',
-      onBack: () => context.go('/auth/login'),
-      icon: Icons.lock_reset_rounded,
-      title: 'Crea una contraseña segura',
-      subtitle: 'Actualiza tu acceso para volver a entrar a tu cuenta.',
-      children: [
-        Form(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: RecoveryAuthScaffold(
+        eyebrow: 'Nuevo acceso',
+        title: 'Crea una contraseña fuerte y sigue operando',
+        subtitle:
+            'Actualiza tu contraseña con un enlace temporal y vuelve a tu '
+            'cuenta con la misma trazabilidad de siempre.',
+        panelTitle: 'Nueva contraseña',
+        panelSubtitle: 'Usa al menos 8 caracteres para proteger tu cuenta.',
+        panelIcon: Icons.lock_reset_rounded,
+        child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AuthTextField(
+              RecoveryAuthField(
                 controller: _passwordCtrl,
-                label: 'Nueva contraseña',
+                hint: 'Nueva contraseña',
                 icon: Icons.lock_outline_rounded,
                 obscureText: _obscure,
+                textInputAction: TextInputAction.next,
                 validator: (value) =>
                     (value?.length ?? 0) >= 8 ? null : 'Mínimo 8 caracteres',
-                suffixIcon: IconButton(
+                suffix: IconButton(
+                  tooltip:
+                      _obscure ? 'Mostrar contraseña' : 'Ocultar contraseña',
                   icon: Icon(
                     _obscure
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
+                    color: AppTheme.slate400,
+                    size: 19,
                   ),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
-              const SizedBox(height: 14),
-              AuthTextField(
+              const SizedBox(height: 12),
+              RecoveryAuthField(
                 controller: _confirmCtrl,
-                label: 'Confirmar contraseña',
+                hint: 'Confirmar contraseña',
                 icon: Icons.lock_outline_rounded,
                 obscureText: _obscure,
                 textInputAction: TextInputAction.done,
@@ -108,30 +120,34 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               ),
               if (_message != null || _error != null) ...[
                 const SizedBox(height: 16),
-                AuthStatusMessage(
+                RecoveryStatusMessage(
                   message: _message ?? _error!,
                   isError: _error != null,
                 ),
               ],
               const SizedBox(height: 24),
-              AuthPrimaryButton(
+              RecoveryPrimaryButton(
                 label: 'Actualizar contraseña',
+                icon: Icons.check_rounded,
                 isLoading: _loading,
                 onPressed: _message == null ? _submit : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextButton(
                 onPressed: () => context.go('/auth/login'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primary,
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                  foregroundColor: AppTheme.primaryDark,
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
                 ),
                 child: Text(_message == null ? 'Volver' : 'Iniciar sesión'),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
