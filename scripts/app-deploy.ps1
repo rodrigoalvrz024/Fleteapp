@@ -10,6 +10,21 @@ function Get-FirebaseCli {
     return $command.Source
   }
 
+  $localToolsDir = Join-Path $repoRoot '.local-tools'
+  if (Test-Path $localToolsDir) {
+    $localFirebase = Get-ChildItem `
+      -Path $localToolsDir `
+      -Filter 'firebase.cmd' `
+      -Recurse `
+      -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -like '*\node-v*-win-x64\firebase.cmd' } |
+      Select-Object -First 1
+
+    if ($localFirebase) {
+      return $localFirebase.FullName
+    }
+  }
+
   return $null
 }
 
