@@ -109,9 +109,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             return Stack(
               fit: StackFit.expand,
               children: [
-                Image.network(
-                  'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7'
-                  '?auto=format&fit=crop&w=1800&q=80',
+                Image.asset(
+                  'assets/images/hero-truck.jpg',
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
                     color: AppTheme.midnight,
