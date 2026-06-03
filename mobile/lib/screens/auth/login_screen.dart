@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+
+const _publicHomeUrl = 'https://fleteapp-public-8d8f7.web.app';
+
+Future<void> _openPublicHome() async {
+  await launchUrl(Uri.parse(_publicHomeUrl), webOnlyWindowName: '_self');
+}
 
 class LoginScreen extends ConsumerStatefulWidget {
   final String? redirectPath;
@@ -214,7 +221,7 @@ class _LoginNav extends StatelessWidget {
         const Spacer(),
         if (!compact)
           TextButton(
-            onPressed: () => context.go('/'),
+            onPressed: _openPublicHome,
             style: TextButton.styleFrom(
               foregroundColor: Colors.white.withValues(alpha: 0.86),
             ),
@@ -424,10 +431,10 @@ class _LoginHeroCopy extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Wrap(
+          const Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: const [
+            children: [
               _TrustBadge(
                 icon: Icons.verified_user_outlined,
                 label: 'Conductores verificados',
