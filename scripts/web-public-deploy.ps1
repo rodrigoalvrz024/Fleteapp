@@ -27,6 +27,10 @@ if ($firebase) {
 
 Write-Host ''
 Write-Host 'Build listo, pero Firebase CLI no esta disponible como comando de PowerShell.'
-Write-Host 'Ahora abre o vuelve al prompt > de Firebase/Firepit y ejecuta:'
+Write-Host 'Abre Firebase/Firepit desde PowerShell con:'
+Write-Host ''
+Write-Host '.\.local-tools\firebase-tools-instant-win.exe'
+Write-Host ''
+Write-Host 'Luego, en el prompt > de Firebase/Firepit, ejecuta:'
 Write-Host ''
 Write-Host "firebase deploy --only hosting:public --project $projectId"
