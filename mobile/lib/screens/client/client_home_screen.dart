@@ -413,14 +413,18 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                       child: Row(children: [
-                        // Pill de saludo
+                        // Saludo y ubicación
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(50),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.slate200,
+                                width: 0.8,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.08),
@@ -436,7 +440,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                 decoration: BoxDecoration(
                                   color:
                                       AppTheme.primary.withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Icon(Icons.local_shipping_rounded,
                                     size: 14, color: AppTheme.primary),
@@ -476,7 +480,11 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             height: 40,
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              shape: BoxShape.circle,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.slate200,
+                                width: 0.8,
+                              ),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.08),
@@ -548,9 +556,17 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: desktop
-                            ? BorderRadius.circular(24)
+                            ? BorderRadius.circular(8)
                             : const BorderRadius.vertical(
-                                top: Radius.circular(24),
+                                top: Radius.circular(8),
+                              ),
+                        border: desktop
+                            ? Border.all(color: AppTheme.slate200, width: 0.8)
+                            : const Border(
+                                top: BorderSide(
+                                  color: AppTheme.slate200,
+                                  width: 0.8,
+                                ),
                               ),
                         boxShadow: [
                           BoxShadow(
@@ -583,6 +599,14 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                _ClientPanelHeader(
+                                  name: name,
+                                  address: _currentAddress,
+                                  onFreights: () =>
+                                      context.push('/app/client/freights'),
+                                ),
+                                const SizedBox(height: 16),
+
                                 // Input búsqueda
                                 _SearchInput(
                                   controller: _searchCtrl,
@@ -616,7 +640,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius: BorderRadius.circular(8),
                                         boxShadow: [
                                           BoxShadow(
                                             color: const Color(0xFF2563EB)
@@ -637,8 +661,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 15,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.2,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0,
                                               )),
                                         ],
                                       ),
@@ -742,7 +766,7 @@ class _ProfileMenu extends ConsumerWidget {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
       ),
       padding: EdgeInsets.fromLTRB(
           20, 16, 20, MediaQuery.of(context).padding.bottom + 20),
@@ -806,7 +830,7 @@ class _ProfileMenu extends ConsumerWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text('Editar',
                     style: TextStyle(
@@ -850,7 +874,7 @@ class _ProfileMenu extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
                 color: AppTheme.error.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: AppTheme.error.withValues(alpha: 0.15),
                   width: 0.5,
@@ -891,7 +915,7 @@ class _MenuOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
           child: Row(children: [
@@ -900,7 +924,7 @@ class _MenuOption extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 color: AppTheme.slate100,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, size: 18, color: AppTheme.slate600),
             ),
@@ -932,6 +956,84 @@ class _MenuOption extends StatelessWidget {
 
 // ── Widgets del bottom sheet ────────────────────────────────
 
+class _ClientPanelHeader extends StatelessWidget {
+  final String name;
+  final String address;
+  final VoidCallback onFreights;
+
+  const _ClientPanelHeader({
+    required this.name,
+    required this.address,
+    required this.onFreights,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hola, $name',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    height: 1.05,
+                    letterSpacing: 0,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.my_location_rounded,
+                      color: AppTheme.primary,
+                      size: 15,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.slate600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Tooltip(
+            message: 'Mis fletes',
+            child: IconButton(
+              onPressed: onFreights,
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.background,
+                foregroundColor: AppTheme.midnight,
+                side: const BorderSide(color: AppTheme.slate200, width: 0.8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.receipt_long_outlined, size: 20),
+            ),
+          ),
+        ],
+      );
+}
+
 class _SearchInput extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -948,7 +1050,7 @@ class _SearchInput extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         decoration: BoxDecoration(
           color: const Color(0xFFF4F6F8),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFFDDE3EC), width: 0.8),
         ),
         child: TextField(
@@ -998,7 +1100,7 @@ class _LocationCurrentTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: AppTheme.primary.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: AppTheme.primary.withValues(alpha: 0.12),
               width: 0.5,
@@ -1064,7 +1166,7 @@ class _InfoRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: border, width: 0.5),
           ),
           child: Row(children: [
@@ -1088,7 +1190,7 @@ class _Label extends StatelessWidget {
         fontSize: 11,
         fontWeight: FontWeight.w600,
         color: AppTheme.slate400,
-        letterSpacing: 0.7,
+        letterSpacing: 0,
       ));
 }
 
@@ -1102,7 +1204,7 @@ class _RecentTile extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
             child: Row(children: [
@@ -1111,7 +1213,7 @@ class _RecentTile extends StatelessWidget {
                 height: 38,
                 decoration: BoxDecoration(
                   color: AppTheme.slate100,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(place.icon, size: 17, color: AppTheme.slate600),
               ),
@@ -1168,7 +1270,7 @@ class _Step extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               color: AppTheme.primary.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 19, color: AppTheme.primary),
           ),
