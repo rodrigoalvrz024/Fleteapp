@@ -21,14 +21,16 @@ class FreightStatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: resolvedColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: resolvedColor.withValues(alpha: 0.22)),
       ),
       child: Text(
         label ?? AppTheme.statusLabel(status),
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           color: resolvedColor,
+          letterSpacing: 0,
         ),
       ),
     );
@@ -106,14 +108,16 @@ class FreightPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: resolvedColor.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: resolvedColor.withValues(alpha: 0.16)),
       ),
       child: Text(
         label,
         style: TextStyle(
           fontSize: 11,
           color: resolvedColor,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0,
         ),
       ),
     );
@@ -137,7 +141,7 @@ class FreightInfoCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: AppTheme.cardDecoration(radius: 12),
+      decoration: AppTheme.cardDecoration(radius: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -151,6 +155,7 @@ class FreightInfoCard extends StatelessWidget {
                   color: AppTheme.midnight,
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -191,7 +196,8 @@ class FreightInfoRow extends StatelessWidget {
             style: const TextStyle(
               color: AppTheme.slate600,
               fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0,
             ),
           ),
         ),
@@ -203,6 +209,7 @@ class FreightInfoRow extends StatelessWidget {
               fontSize: 13,
               height: 1.35,
               fontWeight: FontWeight.w600,
+              letterSpacing: 0,
             ),
           ),
         ),
@@ -240,7 +247,7 @@ class ClientEmptyState extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, size: 36, color: AppTheme.primary),
             ),

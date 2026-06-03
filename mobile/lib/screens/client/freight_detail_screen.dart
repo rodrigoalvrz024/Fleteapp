@@ -46,6 +46,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         title: const Text('Cancelar flete'),
         content: const Text('¿Estás seguro de que deseas cancelar este flete?'),
         actions: [
@@ -54,7 +55,12 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
             child: const Text('No'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Sí, cancelar'),
           ),
@@ -101,21 +107,20 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     }
 
     final fmt = NumberFormat('#,##0', 'es_CL');
+    final dateFmt = DateFormat('d MMM yyyy, HH:mm', 'es_CL');
     final canCancel =
         freight.status == 'pending' || freight.status == 'accepted';
 
     return WebPageScaffold(
       title: 'Flete #${freight.id}',
-      subtitle: 'Detalle operativo para cliente',
+      subtitle: 'Seguimiento operativo, ruta, carga y precio',
       child: WebPageBody(
         onRefresh: _load,
         children: [
-          Center(
-            child: FreightStatusBadge(
-              status: freight.status,
-              label: freight.statusLabel,
-              color: freight.statusColor,
-            ),
+          _FreightDetailHero(
+            freight: freight,
+            fmt: fmt,
+            dateFmt: dateFmt,
           ),
           const SizedBox(height: 24),
           StatusTrackerWidget(currentStatus: freight.status),
@@ -182,7 +187,14 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
             title: 'Precio',
             icon: Icons.payments_outlined,
             children: [
-              if (freight.estimatedPrice != null)
+              if (freight.clientPays != null)
+                FreightInfoRow(
+                  icon: Icons.account_balance_wallet_outlined,
+                  color: AppTheme.success,
+                  label: 'Cliente paga',
+                  value: '\$${fmt.format(freight.clientPays)} CLP',
+                )
+              else if (freight.estimatedPrice != null)
                 FreightInfoRow(
                   icon: Icons.request_quote_outlined,
                   color: AppTheme.primary,
@@ -196,6 +208,24 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                   color: AppTheme.success,
                   label: 'Final',
                   value: '\$${fmt.format(freight.finalPrice)} CLP',
+                ),
+              ],
+              if (freight.driverReceives != null) ...[
+                const SizedBox(height: 10),
+                FreightInfoRow(
+                  icon: Icons.person_outline_rounded,
+                  color: AppTheme.accent,
+                  label: 'Conductor',
+                  value: '\$${fmt.format(freight.driverReceives)} CLP',
+                ),
+              ],
+              if (freight.platformFee != null) ...[
+                const SizedBox(height: 10),
+                FreightInfoRow(
+                  icon: Icons.receipt_long_outlined,
+                  color: AppTheme.slate600,
+                  label: 'Comisión',
+                  value: '\$${fmt.format(freight.platformFee)} CLP',
                 ),
               ],
               if (freight.estimatedPrice == null && freight.finalPrice == null)
@@ -214,12 +244,101 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.error,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               onPressed: _cancel,
               icon: const Icon(Icons.cancel_outlined),
               label: const Text('Cancelar flete'),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FreightDetailHero extends StatelessWidget {
+  final FreightModel freight;
+  final NumberFormat fmt;
+  final DateFormat dateFmt;
+
+  const _FreightDetailHero({
+    required this.freight,
+    required this.fmt,
+    required this.dateFmt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final amount =
+        freight.finalPrice ?? freight.clientPays ?? freight.estimatedPrice;
+    final isUrgent = freight.isUrgent ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: AppTheme.cardDecoration(radius: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      amount != null
+                          ? '\$${fmt.format(amount)} CLP'
+                          : 'Precio por confirmar',
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Creado ${dateFmt.format(freight.createdAt)}',
+                      style: const TextStyle(
+                        color: AppTheme.slate600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FreightStatusBadge(
+                status: freight.status,
+                label: freight.statusLabel,
+                color: freight.statusColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FreightPill(
+                isUrgent ? 'Urgente' : 'Programado',
+                color: isUrgent ? AppTheme.urgent : AppTheme.primary,
+              ),
+              if (freight.scheduledAt != null)
+                FreightPill('Agenda: ${dateFmt.format(freight.scheduledAt!)}'),
+              if (freight.distanceKm != null)
+                FreightPill('${freight.distanceKm!.toStringAsFixed(1)} km'),
+              if ((freight.requiresHelpers ?? 0) > 0)
+                FreightPill('${freight.requiresHelpers} ayudante(s)'),
+            ],
+          ),
         ],
       ),
     );
