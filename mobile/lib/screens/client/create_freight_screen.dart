@@ -361,11 +361,11 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_isUrgent
-            ? '⚡ Flete urgente creado — buscando conductor'
-            : '📅 Flete programado correctamente'),
+            ? 'Flete urgente creado - buscando conductor'
+            : 'Flete programado correctamente'),
         backgroundColor: AppTheme.success,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ));
       context.go('/app/client/freights');
     } catch (_) {
@@ -381,7 +381,8 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
 
     return WebPageScaffold(
       title: 'Solicitar flete',
-      subtitle: 'Completa ruta, carga, horario y precio',
+      subtitle:
+          'Define ruta, carga y horario; revisa el precio antes de confirmar',
       // The form stays before the floating CTA so this screen reads top-down.
       // ignore: sort_child_properties_last
       child: Form(
@@ -603,7 +604,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppTheme.error.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: AppTheme.error.withValues(alpha: 0.2),
                     width: 0.5,
@@ -686,11 +687,11 @@ class _RequestProgressHeader extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.slate200, width: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.slate200, width: 0.8),
       ),
       child: Row(
         children: [
@@ -791,14 +792,14 @@ class _ModeSelector extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           color: AppTheme.slate100,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
         ),
         padding: const EdgeInsets.all(4),
         child: TabBar(
           controller: controller,
           indicator: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.08),
@@ -811,10 +812,16 @@ class _ModeSelector extends StatelessWidget {
           dividerColor: Colors.transparent,
           labelColor: AppTheme.midnight,
           unselectedLabelColor: AppTheme.slate400,
-          labelStyle:
-              const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          unselectedLabelStyle:
-              const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
+          labelStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0,
+          ),
           tabs: const [
             Tab(
               child: Row(
@@ -852,7 +859,7 @@ class _TarifaBanner extends StatelessWidget {
           color: isNight
               ? const Color(0xFF1E1B4B).withValues(alpha: 0.05)
               : const Color(0xFFFFF7ED),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isNight
                 ? Colors.deepPurple.withValues(alpha: 0.2)
@@ -899,24 +906,33 @@ class _SectionCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.slate200, width: 0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.slate200, width: 0.8),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Icon(icon, size: 14, color: AppTheme.slate400),
-              const SizedBox(width: 6),
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.slate200, width: 0.8),
+                ),
+                child: Icon(icon, size: 15, color: AppTheme.primary),
+              ),
+              const SizedBox(width: 8),
               Text(title,
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.slate400,
-                    letterSpacing: 0.5,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.midnight,
+                    letterSpacing: 0,
                   )),
             ]),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             child,
           ],
         ),
@@ -942,7 +958,7 @@ class _DateTimePicker extends StatelessWidget {
             color: isSet
                 ? AppTheme.primary.withValues(alpha: 0.05)
                 : const Color(0xFFF4F6F8),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isSet
                   ? AppTheme.primary.withValues(alpha: 0.3)
@@ -993,7 +1009,7 @@ class _LocationRow extends StatelessWidget {
             height: 32,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 16, color: color),
           ),
@@ -1005,9 +1021,9 @@ class _LocationRow extends StatelessWidget {
                 Text(label,
                     style: const TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
                       color: AppTheme.slate400,
-                      letterSpacing: 0.4,
+                      letterSpacing: 0,
                     )),
                 const SizedBox(height: 2),
                 Text(
@@ -1053,8 +1069,8 @@ class _MapSection extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: 240,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.slate200, width: 0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.slate200, width: 0.8),
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(children: [
@@ -1134,7 +1150,7 @@ class _MapSection extends StatelessWidget {
                   height: 32,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.92),
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: const [
                       BoxShadow(color: Colors.black12, blurRadius: 4)
                     ],
@@ -1172,7 +1188,7 @@ class _Counter extends StatelessWidget {
                 color: onDecrement != null
                     ? AppTheme.slate100
                     : const Color(0xFFF4F4F4),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.slate200, width: 0.5),
               ),
               child: Icon(Icons.remove_rounded,
@@ -1199,7 +1215,7 @@ class _Counter extends StatelessWidget {
               height: 36,
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: AppTheme.primary.withValues(alpha: 0.3),
                   width: 0.5,
@@ -1233,8 +1249,8 @@ class _PriceCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: AppTheme.success.withValues(alpha: 0.3),
             width: 0.8,
@@ -1251,15 +1267,17 @@ class _PriceCard extends StatelessWidget {
                     const Text('Total a pagar',
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppTheme.slate400,
-                          fontWeight: FontWeight.w500,
+                          color: AppTheme.success,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0,
                         )),
                     const SizedBox(height: 2),
                     Text('\$${fmt.format(clientPays)} CLP',
                         style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
                           color: AppTheme.midnight,
+                          letterSpacing: 0,
                         )),
                   ],
                 ),
@@ -1271,22 +1289,24 @@ class _PriceCard extends StatelessWidget {
                   color: isUrgent
                       ? AppTheme.urgent.withValues(alpha: 0.1)
                       : AppTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isUrgent ? '⚡ Urgente' : '📅 Programado',
+                  isUrgent ? 'Urgente' : 'Programado',
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w800,
                     color: isUrgent ? AppTheme.urgent : AppTheme.primary,
+                    letterSpacing: 0,
                   ),
                 ),
               ),
             ],
           ),
           const Divider(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
             children: [
               if (distanceKm != null)
                 _PriceMeta(
@@ -1388,7 +1408,7 @@ class _SubmitButtonState extends State<_SubmitButton>
                     )
                   : null,
               color: widget.canSubmit ? null : AppTheme.slate200,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(8),
               boxShadow: widget.canSubmit
                   ? [
                       BoxShadow(
@@ -1428,11 +1448,11 @@ class _SubmitButtonState extends State<_SubmitButton>
                               : 'Confirmar flete',
                           style: TextStyle(
                             fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w800,
                             color: widget.canSubmit
                                 ? Colors.white
                                 : AppTheme.slate400,
-                            letterSpacing: 0.2,
+                            letterSpacing: 0,
                           ),
                         ),
                       ],
