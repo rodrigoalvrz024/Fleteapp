@@ -1,175 +1,139 @@
-import { StartRequestPanel } from './start-request-panel';
+import Link from 'next/link';
+import { appBaseUrl, SiteFooter, SiteNav } from './site-shell';
 
-const appBaseUrl = 'https://fleteapp-8d8f7.web.app';
-
-const audienceCards = [
+const routes = [
   {
-    eyebrow: 'Clientes',
-    title: 'Pide un flete sin llamadas eternas',
-    body: 'Ingresa origen, destino y detalles de carga. La app mantiene el estado del servicio visible desde la solicitud.',
-    action: 'Entrar como cliente',
-    href: `${appBaseUrl}/#/auth/login`,
+    title: 'Para clientes',
+    body: 'Planifica fletes urbanos con conductores revisados, precios visibles y seguimiento de cada solicitud.',
+    href: '/clientes',
   },
   {
-    eyebrow: 'Conductores',
-    title: 'Postula con documentos al día',
-    body: 'Completa tu perfil, registra vehículo y sube licencia, permiso, SOAP y revisión técnica para evaluación.',
-    action: 'Postular',
-    href: `${appBaseUrl}/#/auth/register`,
+    title: 'Para conductores',
+    body: 'Postula, registra tu vehiculo y mantén tus documentos al dia para operar cuando seas aprobado.',
+    href: '/conductores',
   },
   {
-    eyebrow: 'Equipo',
-    title: 'Opera con panel y trazabilidad',
-    body: 'Revisa documentos, solicitudes, alertas, historial y actividad operacional desde el panel interno.',
-    action: 'Abrir admin',
-    href: `${appBaseUrl}/#/admin`,
+    title: 'Para equipos',
+    body: 'Administra documentos, solicitudes y trazabilidad operacional desde un panel interno separado.',
+    href: '/empresas',
   },
 ];
 
-const processSteps = [
-  {
-    title: 'Solicita',
-    body: 'El cliente crea una solicitud con ruta, carga, ayudantes y horario.',
-  },
-  {
-    title: 'Valida',
-    body: 'Solo conductores aprobados pueden operar dentro de la plataforma.',
-  },
-  {
-    title: 'Monitorea',
-    body: 'Cada cambio importante queda registrado para soporte y análisis futuro.',
-  },
+const principles = [
+  'Web publica para informar',
+  'App privada para operar',
+  'Conductores verificados',
+  'Documentos protegidos',
 ];
 
-const trustItems = [
-  'Conductores revisados',
-  'Documentos privados',
-  'Aceptación legal registrada',
-  'Historial auditable',
-  'Panel operacional',
-  'Base lista para datos',
-];
-
-const metrics = [
-  { value: '3', label: 'entradas claras' },
-  { value: '24/7', label: 'web disponible' },
-  { value: '100%', label: 'flujo trazable' },
+const operatingModel = [
+  {
+    title: 'Conoce',
+    body: 'La web explica la propuesta, perfiles y requisitos antes de crear una cuenta.',
+  },
+  {
+    title: 'Registra',
+    body: 'El acceso a solicitudes, documentos y paneles queda dentro de la app autenticada.',
+  },
+  {
+    title: 'Opera',
+    body: 'Cliente, conductor y administrador trabajan en vistas separadas, con roles y trazabilidad.',
+  },
 ];
 
 export default function Home() {
   return (
     <main>
-      <section className="hero" id="inicio">
-        <nav className="nav" aria-label="Principal">
-          <a className="brand" href="#inicio" aria-label="FleteApp inicio">
-            <span className="brandIcon">F</span>
-            <span>FleteApp</span>
-          </a>
-          <div className="navLinks">
-            <a href="#soluciones">Soluciones</a>
-            <a href="#proceso">Proceso</a>
-            <a href="#confianza">Confianza</a>
-            <a className="navAction" href={`${appBaseUrl}/#/auth/login`}>
+      <section className="homeHero" id="inicio">
+        <SiteNav />
+        <div className="homeHeroInner">
+          <p className="eyebrow">FleteApp en Chile</p>
+          <h1>Fletes urbanos para mover carga con respaldo</h1>
+          <p className="heroLead">
+            Una red de clientes, conductores y operación interna para coordinar
+            traslados con verificación documental, estados claros y soporte
+            trazable.
+          </p>
+          <div className="heroActions">
+            <Link className="primaryAction dark" href="/clientes">
+              Ver soluciones
+            </Link>
+            <a className="secondaryAction light" href={`${appBaseUrl}/#/auth/login`}>
               Ingresar
             </a>
           </div>
-        </nav>
+        </div>
+      </section>
 
-        <div className="heroContent heroGrid">
-          <div className="heroCopy">
-            <p className="eyebrow">Fletes urbanos en Chile</p>
-            <h1>FleteApp</h1>
-            <p className="heroText">
-              Una plataforma para pedir, aceptar y monitorear fletes con
-              conductores verificados, documentos resguardados e historial
-              operativo desde el primer viaje.
-            </p>
-            <div className="heroActions">
-              <a className="primaryAction" href={`${appBaseUrl}/#/auth/login`}>
-                Entrar a la app
-              </a>
-              <a className="secondaryAction" href="#soluciones">
-                Ver cómo funciona
-              </a>
-            </div>
-            <dl className="metricStrip" aria-label="Resumen FleteApp">
-              {metrics.map((metric) => (
-                <div key={metric.label}>
-                  <dt>{metric.value}</dt>
-                  <dd>{metric.label}</dd>
-                </div>
-              ))}
-            </dl>
+      <section className="introBand" aria-label="Modelo publico">
+        <div className="introInner">
+          <p>
+            La web publica no reemplaza la app. Presenta la marca, orienta a
+            cada perfil y deriva al entorno autenticado solo cuando corresponde.
+          </p>
+          <div className="principleGrid">
+            {principles.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
           </div>
-          <StartRequestPanel />
         </div>
       </section>
 
       <section className="section" id="soluciones">
         <div className="sectionHeader">
-          <p className="eyebrow">Tres perfiles, una operación</p>
-          <h2>Una web pública clara y una app interna para operar</h2>
+          <p className="eyebrow">Soluciones</p>
+          <h2>Tres entradas publicas, una operacion separada</h2>
           <p>
-            La página pública explica, orienta y deriva. La app Flutter queda
-            reservada para autenticación, solicitudes, conducción y panel admin.
+            Cada perfil tiene una pagina publica propia. La accion operativa
+            vive en la app, no dentro del sitio institucional.
           </p>
         </div>
-        <div className="audienceGrid">
-          {audienceCards.map((card) => (
-            <article className="audienceCard" key={card.title}>
-              <p>{card.eyebrow}</p>
-              <h3>{card.title}</h3>
-              <span>{card.body}</span>
-              <a href={card.href}>{card.action}</a>
-            </article>
+        <div className="routeGrid">
+          {routes.map((route) => (
+            <Link className="routeCard" href={route.href} key={route.title}>
+              <span>{route.title}</span>
+              <p>{route.body}</p>
+              <strong>Conocer mas</strong>
+            </Link>
           ))}
         </div>
       </section>
 
-      <section className="processBand" id="proceso">
-        <div className="processInner">
-          <div className="sectionHeader compactHeader">
-            <p className="eyebrow">Cómo funciona</p>
-            <h2>Simple para usuarios, ordenado para operación</h2>
-          </div>
-          <ol className="steps">
-            {processSteps.map((step) => (
-              <li key={step.title}>
-                <strong>{step.title}</strong>
-                <span>{step.body}</span>
-              </li>
-            ))}
-          </ol>
+      <section className="editorialSplit" id="modelo">
+        <div>
+          <p className="eyebrow">Como funciona</p>
+          <h2>Separar comunicacion de operacion mantiene la experiencia clara</h2>
         </div>
+        <ol className="modelList">
+          {operatingModel.map((step) => (
+            <li key={step.title}>
+              <strong>{step.title}</strong>
+              <span>{step.body}</span>
+            </li>
+          ))}
+        </ol>
       </section>
 
-      <section className="section securitySection" id="confianza">
+      <section className="ctaBand">
         <div>
-          <p className="eyebrow">Confianza y datos</p>
-          <h2>Preparada para crecer con control desde el inicio</h2>
+          <p className="eyebrow">Acceso privado</p>
+          <h2>La solicitud de flete ocurre dentro de la app</h2>
           <p>
-            FleteApp prioriza documentos protegidos, roles claros, aceptación
-            de términos y registros históricos para decisiones data-driven.
+            Para proteger datos, documentos y seguimiento, el flujo operacional
+            requiere cuenta autenticada.
           </p>
         </div>
-        <div className="trustGrid">
-          {trustItems.map((item) => (
-            <span key={item}>{item}</span>
-          ))}
+        <div className="ctaActions">
+          <a className="primaryAction dark" href={`${appBaseUrl}/#/auth/register`}>
+            Crear cuenta
+          </a>
+          <a className="secondaryAction darkLine" href={`${appBaseUrl}/#/auth/login`}>
+            Ingresar
+          </a>
         </div>
       </section>
 
-      <footer className="footer">
-        <div>
-          <strong>FleteApp</strong>
-          <span>Fletes urbanos verificados para Chile.</span>
-        </div>
-        <nav aria-label="Legal">
-          <a href="/terminos">Términos</a>
-          <a href="/privacidad">Privacidad</a>
-          <a href={`${appBaseUrl}/#/auth/login`}>Ingresar</a>
-        </nav>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }
