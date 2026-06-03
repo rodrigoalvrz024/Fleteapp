@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 
-const appLoginUrl = 'https://fleteapp-8d8f7.web.app/#/login';
+const appLoginUrl = 'https://fleteapp-8d8f7.web.app/#/auth/login';
 
 export function StartRequestPanel() {
   const [origin, setOrigin] = useState('');
@@ -47,7 +47,7 @@ export function StartRequestPanel() {
         />
       </label>
       <button type="submit">Continuar</button>
-      <a href="https://fleteapp-8d8f7.web.app/#/register">Crear cuenta</a>
+      <a href="https://fleteapp-8d8f7.web.app/#/auth/register">Crear cuenta</a>
     </form>
   );
 }

@@ -30,6 +30,18 @@ function Read-PlainSecret([securestring]$Secret) {
   }
 }
 
+function Test-GoogleMapsApiKey([string]$Value) {
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return $false
+  }
+
+  if ($Value.Length -lt 20) {
+    return $false
+  }
+
+  return $Value -notmatch '[\x00-\x1F\x7F]'
+}
+
 if (-not (Test-Path $mobileDir)) {
   throw "No se encontro la carpeta mobile en $mobileDir."
 }
@@ -42,6 +54,10 @@ if ([string]::IsNullOrWhiteSpace($GoogleMapsApiKey)) {
 
 if ([string]::IsNullOrWhiteSpace($GoogleMapsApiKey)) {
   throw 'No se ingreso GOOGLE_MAPS_API_KEY. No se construira la app web.'
+}
+
+if (-not (Test-GoogleMapsApiKey $GoogleMapsApiKey)) {
+  throw 'La GOOGLE_MAPS_API_KEY ingresada no parece valida. Copia la clave completa desde Google Cloud; si PowerShell no pega con Ctrl+V, usa clic derecho o define $env:GOOGLE_MAPS_API_KEY antes de ejecutar el script.'
 }
 
 $flutter = Get-FlutterCli

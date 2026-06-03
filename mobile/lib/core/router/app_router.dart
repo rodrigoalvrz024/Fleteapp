@@ -20,8 +20,10 @@ import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
 
 String _withQuery(String path, GoRouterState state) {
-  final query = state.uri.query;
-  return query.isEmpty ? path : '$path?$query';
+  final query = state.uri.queryParameters;
+  return query.isEmpty
+      ? path
+      : Uri(path: path, queryParameters: query).toString();
 }
 
 final _router = GoRouter(
