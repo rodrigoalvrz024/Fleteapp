@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import 'widgets/auth_visuals.dart';
 
 const _publicHomeUrl = 'https://fleteapp-public-8d8f7.web.app';
 
@@ -113,51 +115,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             final horizontalPadding = compact ? 20.0 : 36.0;
             final topBottomPadding = compact ? 18.0 : 26.0;
 
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  'assets/images/hero-truck.jpg',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: AppTheme.midnight,
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.local_shipping_rounded,
-                      color: Colors.white,
-                      size: 88,
+            return AuthBackdrop(
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight -
+                          MediaQuery.paddingOf(context).top -
+                          MediaQuery.paddingOf(context).bottom,
                     ),
-                  ),
-                ),
-                Container(color: Colors.black.withValues(alpha: 0.56)),
-                SafeArea(
-                  child: SingleChildScrollView(
-                    physics: const ClampingScrollPhysics(),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight -
-                            MediaQuery.paddingOf(context).top -
-                            MediaQuery.paddingOf(context).bottom,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        topBottomPadding,
+                        horizontalPadding,
+                        topBottomPadding,
                       ),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          topBottomPadding,
-                          horizontalPadding,
-                          topBottomPadding,
-                        ),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1180),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _LoginNav(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1180),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AuthReveal(
+                                delay: 0.04,
+                                offsetY: -12,
+                                child: _LoginNav(
                                   compact: compact,
                                   registerPath: _registerPath,
                                 ),
-                                SizedBox(height: compact ? 44 : 78),
-                                compact
+                              ),
+                              SizedBox(height: compact ? 44 : 78),
+                              AuthReveal(
+                                delay: 0.14,
+                                child: compact
                                     ? _CompactLoginLayout(
                                         auth: auth,
                                         formKey: _formKey,
@@ -186,16 +178,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         btnScale: _btnScale,
                                         btnCtrl: _btnCtrl,
                                       ),
-                                SizedBox(height: compact ? 28 : 44),
-                              ],
-                            ),
+                              ),
+                              SizedBox(height: compact ? 28 : 44),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
             );
           },
         ),
@@ -240,6 +232,10 @@ class _LoginNav extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
+            textStyle: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -270,12 +266,12 @@ class _BrandMark extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        const Text(
+        Text(
           'FleteApp',
-          style: TextStyle(
+          style: GoogleFonts.manrope(
             color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
         ),
@@ -401,21 +397,21 @@ class _LoginHeroCopy extends StatelessWidget {
         children: [
           Text(
             'Fletes urbanos en Chile'.toUpperCase(),
-            style: TextStyle(
+            style: GoogleFonts.inter(
               color: AppTheme.accent,
               fontSize: compact ? 12 : 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 16),
           Text(
             'FleteApp',
-            style: TextStyle(
+            style: GoogleFonts.manrope(
               color: Colors.white,
               fontSize: compact ? 48 : 72,
               fontWeight: FontWeight.w900,
-              height: 0.95,
+              height: 1,
               letterSpacing: 0,
             ),
           ),
@@ -521,34 +517,24 @@ class _LoginPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.38)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 36,
-            offset: const Offset(0, 18),
-          ),
-        ],
-      ),
+    return FloatingAuthPanel(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(28),
         child: Form(
           key: formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              const AuthPanelAccent(),
+              const SizedBox(height: 20),
+              Text(
                 'Ingresar',
-                style: TextStyle(
+                style: GoogleFonts.manrope(
                   color: AppTheme.midnight,
-                  fontSize: 30,
+                  fontSize: 32,
                   fontWeight: FontWeight.w900,
-                  height: 1.05,
+                  height: 1.1,
                   letterSpacing: 0,
                 ),
               ),
@@ -558,7 +544,7 @@ class _LoginPanel extends StatelessWidget {
                 style: TextStyle(
                   color: AppTheme.slate600,
                   fontSize: 15,
-                  height: 1.4,
+                  height: 1.5,
                   letterSpacing: 0,
                 ),
               ),
@@ -624,7 +610,7 @@ class _LoginPanel extends StatelessWidget {
                 btnScale: btnScale,
                 btnCtrl: btnCtrl,
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 20),
               Wrap(
                 alignment: WrapAlignment.center,
                 crossAxisAlignment: WrapCrossAlignment.center,

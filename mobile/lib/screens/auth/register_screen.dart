@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import 'widgets/auth_visuals.dart';
 
 const _publicHomeUrl = 'https://fleteapp-public-8d8f7.web.app';
 
@@ -118,51 +120,42 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             final horizontalPadding = compact ? 20.0 : 36.0;
             final topBottomPadding = compact ? 18.0 : 26.0;
 
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  'assets/images/hero-truck.jpg',
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: AppTheme.midnight,
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.local_shipping_rounded,
-                      color: Colors.white,
-                      size: 88,
+            return AuthBackdrop(
+              overlayStrength: 0.64,
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight -
+                          MediaQuery.paddingOf(context).top -
+                          MediaQuery.paddingOf(context).bottom,
                     ),
-                  ),
-                ),
-                Container(color: Colors.black.withValues(alpha: 0.58)),
-                SafeArea(
-                  child: SingleChildScrollView(
-                    physics: const ClampingScrollPhysics(),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight -
-                            MediaQuery.paddingOf(context).top -
-                            MediaQuery.paddingOf(context).bottom,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        topBottomPadding,
+                        horizontalPadding,
+                        topBottomPadding,
                       ),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          topBottomPadding,
-                          horizontalPadding,
-                          topBottomPadding,
-                        ),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1180),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _RegisterNav(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1180),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AuthReveal(
+                                delay: 0.04,
+                                offsetY: -12,
+                                child: _RegisterNav(
                                   compact: compact,
                                   loginPath: _loginPath,
                                 ),
-                                SizedBox(height: compact ? 34 : 58),
-                                compact
+                              ),
+                              SizedBox(height: compact ? 34 : 58),
+                              AuthReveal(
+                                delay: 0.14,
+                                child: compact
                                     ? _CompactRegisterLayout(
                                         auth: auth,
                                         formKey: _formKey,
@@ -223,16 +216,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                         ),
                                         onRegister: _register,
                                       ),
-                                SizedBox(height: compact ? 28 : 44),
-                              ],
-                            ),
+                              ),
+                              SizedBox(height: compact ? 28 : 44),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
             );
           },
         ),
@@ -284,6 +277,10 @@ class _RegisterNav extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
+            textStyle: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -314,12 +311,12 @@ class _BrandMark extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        const Text(
+        Text(
           'FleteApp',
-          style: TextStyle(
+          style: GoogleFonts.manrope(
             color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
         ),
@@ -493,21 +490,21 @@ class _RegisterHeroCopy extends StatelessWidget {
         children: [
           Text(
             'Cuenta verificada'.toUpperCase(),
-            style: TextStyle(
+            style: GoogleFonts.inter(
               color: AppTheme.accent,
               fontSize: compact ? 12 : 13,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 16),
           Text(
             'Empieza a mover fletes con control',
-            style: TextStyle(
+            style: GoogleFonts.manrope(
               color: Colors.white,
               fontSize: compact ? 40 : 62,
               fontWeight: FontWeight.w900,
-              height: 1.02,
+              height: 1.06,
               letterSpacing: 0,
             ),
           ),
@@ -630,34 +627,24 @@ class _RegisterPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.38)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 36,
-            offset: const Offset(0, 18),
-          ),
-        ],
-      ),
+    return FloatingAuthPanel(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(28),
         child: Form(
           key: formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              const AuthPanelAccent(),
+              const SizedBox(height: 20),
+              Text(
                 'Crear cuenta',
-                style: TextStyle(
+                style: GoogleFonts.manrope(
                   color: AppTheme.midnight,
-                  fontSize: 30,
+                  fontSize: 32,
                   fontWeight: FontWeight.w900,
-                  height: 1.05,
+                  height: 1.1,
                   letterSpacing: 0,
                 ),
               ),
@@ -749,13 +736,23 @@ class _RegisterPanel extends StatelessWidget {
                 linkText: 'Ver',
                 onLink: () => context.push('/legal/privacy'),
               ),
-              if (role == 'driver')
-                _ConsentRow(
-                  value: acceptDriverDocuments,
-                  onChanged: auth.isLoading ? null : onAcceptDriverDocuments,
-                  text:
-                      'Autorizo la revisión de mi licencia y documentos del vehículo',
-                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: role == 'driver'
+                    ? _ConsentRow(
+                        key: const ValueKey('driver-consent'),
+                        value: acceptDriverDocuments,
+                        onChanged:
+                            auth.isLoading ? null : onAcceptDriverDocuments,
+                        text:
+                            'Autorizo la revisión de mi licencia y documentos del vehículo',
+                      )
+                    : const SizedBox.shrink(
+                        key: ValueKey('no-driver-consent'),
+                      ),
+              ),
               const SizedBox(height: 20),
               _RegisterButton(
                 isLoading: auth.isLoading,
@@ -952,6 +949,7 @@ class _ConsentRow extends StatelessWidget {
   final VoidCallback? onLink;
 
   const _ConsentRow({
+    super.key,
     required this.value,
     required this.onChanged,
     required this.text,
