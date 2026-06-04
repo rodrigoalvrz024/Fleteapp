@@ -17,8 +17,9 @@ Future<void> _openPublicHome() async {
 
 class RegisterScreen extends ConsumerStatefulWidget {
   final String? redirectPath;
+  final String? initialRole;
 
-  const RegisterScreen({super.key, this.redirectPath});
+  const RegisterScreen({super.key, this.redirectPath, this.initialRole});
 
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
@@ -35,6 +36,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _acceptTerms = false;
   bool _acceptPrivacy = false;
   bool _acceptDriverDocuments = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialRole == 'driver') _role = 'driver';
+  }
 
   @override
   void dispose() {
@@ -152,7 +159,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   loginPath: _loginPath,
                                 ),
                               ),
-                              SizedBox(height: compact ? 34 : 58),
+                              SizedBox(height: compact ? 24 : 58),
                               AuthReveal(
                                 delay: 0.14,
                                 child: compact
@@ -449,8 +456,6 @@ class _CompactRegisterLayout extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _RegisterHeroCopy(compact: true),
-        const SizedBox(height: 28),
         _RegisterPanel(
           auth: auth,
           formKey: formKey,
@@ -471,6 +476,8 @@ class _CompactRegisterLayout extends StatelessWidget {
           onAcceptDriverDocuments: onAcceptDriverDocuments,
           onRegister: onRegister,
         ),
+        const SizedBox(height: 30),
+        const _RegisterHeroCopy(compact: true),
       ],
     );
   }

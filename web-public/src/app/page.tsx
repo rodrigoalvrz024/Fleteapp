@@ -4,40 +4,40 @@ import { appBaseUrl, SiteFooter, SiteNav } from './site-shell';
 const routes = [
   {
     title: 'Para clientes',
-    body: 'Planifica fletes urbanos con conductores revisados, precios visibles y seguimiento de cada solicitud.',
+    body: 'Mueve muebles, compras voluminosas y carga urbana con precio visible antes de confirmar.',
     href: '/clientes',
   },
   {
     title: 'Para conductores',
-    body: 'Postula, registra tu vehiculo y mantén tus documentos al dia para operar cuando seas aprobado.',
+    body: 'Accede a oportunidades de flete con precios claros y un proceso de verificacion ordenado.',
     href: '/conductores',
   },
   {
-    title: 'Para equipos',
-    body: 'Administra documentos, solicitudes y trazabilidad operacional desde un panel interno separado.',
+    title: 'Para negocios',
+    body: 'Coordina entregas urbanas y conserva respaldo de cada servicio para tu operacion.',
     href: '/empresas',
   },
 ];
 
 const principles = [
-  'Web publica para informar',
-  'App privada para operar',
+  'Precio antes de confirmar',
   'Conductores verificados',
-  'Documentos protegidos',
+  'Ayudantes cuando los necesitas',
+  'Historial de cada servicio',
 ];
 
 const operatingModel = [
   {
-    title: 'Conoce',
-    body: 'La web explica la propuesta, perfiles y requisitos antes de crear una cuenta.',
+    title: 'Describe',
+    body: 'Indica que necesitas mover, la ruta, el horario y si requieres ayudantes.',
   },
   {
-    title: 'Registra',
-    body: 'El acceso a solicitudes, documentos y paneles queda dentro de la app autenticada.',
+    title: 'Confirma',
+    body: 'Revisa el precio estimado y crea la solicitud cuando estes listo.',
   },
   {
-    title: 'Opera',
-    body: 'Cliente, conductor y administrador trabajan en vistas separadas, con roles y trazabilidad.',
+    title: 'Sigue',
+    body: 'Consulta el estado del servicio y conserva su historial para futuras referencias.',
   },
 ];
 
@@ -48,16 +48,15 @@ export default function Home() {
         <SiteNav />
         <div className="homeHeroInner">
           <p className="eyebrow">FleteApp en Chile</p>
-          <h1>Fletes urbanos para mover carga con respaldo</h1>
+          <h1>Mueve muebles, compras y carga urbana sin improvisar</h1>
           <p className="heroLead">
-            Una red de clientes, conductores y operación interna para coordinar
-            traslados con verificación documental, estados claros y soporte
-            trazable.
+            Coordina tu traslado con conductores revisados, precios visibles y
+            un historial claro desde la solicitud hasta la entrega.
           </p>
           <div className="heroActions">
-            <Link className="primaryAction dark" href="/clientes">
-              Ver soluciones
-            </Link>
+            <a className="primaryAction dark" href={`${appBaseUrl}/#/auth/register`}>
+              Comenzar
+            </a>
             <a className="secondaryAction light" href={`${appBaseUrl}/#/auth/login`}>
               Ingresar
             </a>
@@ -65,11 +64,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="introBand" aria-label="Modelo publico">
+      <section className="introBand" aria-label="Beneficios principales">
         <div className="introInner">
           <p>
-            La web publica no reemplaza la app. Presenta la marca, orienta a
-            cada perfil y deriva al entorno autenticado solo cuando corresponde.
+            Para una compra grande, un mueble nuevo, una mudanza pequena o una
+            entrega de negocio: prepara el servicio con la informacion que
+            necesitas antes de confirmar.
           </p>
           <div className="principleGrid">
             {principles.map((item) => (
@@ -82,10 +82,10 @@ export default function Home() {
       <section className="section" id="soluciones">
         <div className="sectionHeader">
           <p className="eyebrow">Soluciones</p>
-          <h2>Tres entradas publicas, una operacion separada</h2>
+          <h2>Una solucion para cada necesidad de traslado</h2>
           <p>
-            Cada perfil tiene una pagina publica propia. La accion operativa
-            vive en la app, no dentro del sitio institucional.
+            Conoce como FleteApp ayuda a clientes, conductores y negocios a
+            coordinar fletes urbanos con mayor claridad.
           </p>
         </div>
         <div className="routeGrid">
@@ -102,7 +102,7 @@ export default function Home() {
       <section className="editorialSplit" id="modelo">
         <div>
           <p className="eyebrow">Como funciona</p>
-          <h2>Separar comunicacion de operacion mantiene la experiencia clara</h2>
+          <h2>De la necesidad al traslado en tres pasos claros</h2>
         </div>
         <ol className="modelList">
           {operatingModel.map((step) => (
@@ -116,11 +116,11 @@ export default function Home() {
 
       <section className="ctaBand">
         <div>
-          <p className="eyebrow">Acceso privado</p>
-          <h2>La solicitud de flete ocurre dentro de la app</h2>
+          <p className="eyebrow">Tu proximo traslado</p>
+          <h2>Crea tu cuenta y prepara tu primer flete</h2>
           <p>
-            Para proteger datos, documentos y seguimiento, el flujo operacional
-            requiere cuenta autenticada.
+            Guarda tus solicitudes, revisa precios y consulta el estado de cada
+            servicio desde un espacio privado.
           </p>
         </div>
         <div className="ctaActions">

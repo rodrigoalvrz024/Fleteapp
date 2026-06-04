@@ -57,6 +57,7 @@ final _router = GoRouter(
       path: '/auth/register',
       builder: (_, state) => RegisterScreen(
         redirectPath: state.uri.queryParameters['next'],
+        initialRole: state.uri.queryParameters['role'],
       ),
     ),
     GoRoute(

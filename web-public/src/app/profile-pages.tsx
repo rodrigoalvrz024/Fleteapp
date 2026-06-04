@@ -65,10 +65,10 @@ export function ProfilePage({
       <section className="ctaBand">
         <div>
           <p className="eyebrow">Siguiente paso</p>
-          <h2>La operacion ocurre dentro de la app</h2>
+          <h2>Continua en FleteApp</h2>
           <p>
-            La web publica informa. Las cuentas, documentos, solicitudes y
-            seguimiento se gestionan en el entorno autenticado.
+            Crea tu cuenta para guardar solicitudes, documentos e historial en
+            un espacio privado.
           </p>
         </div>
         <div className="ctaActions">

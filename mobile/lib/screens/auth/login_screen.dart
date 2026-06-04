@@ -146,7 +146,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   registerPath: _registerPath,
                                 ),
                               ),
-                              SizedBox(height: compact ? 44 : 78),
+                              SizedBox(height: compact ? 24 : 78),
                               AuthReveal(
                                 delay: 0.14,
                                 child: compact
@@ -364,8 +364,6 @@ class _CompactLoginLayout extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _LoginHeroCopy(compact: true),
-        const SizedBox(height: 28),
         _LoginPanel(
           auth: auth,
           formKey: formKey,
@@ -378,6 +376,8 @@ class _CompactLoginLayout extends StatelessWidget {
           btnScale: btnScale,
           btnCtrl: btnCtrl,
         ),
+        const SizedBox(height: 30),
+        const _LoginHeroCopy(compact: true),
       ],
     );
   }

@@ -4,31 +4,31 @@ import { ProfilePage } from '../profile-pages';
 export default function CompaniesPage() {
   return (
     <ProfilePage
-      eyebrow="Equipos"
-      title="Control operativo para administrar solicitudes y conductores"
-      lead="El panel interno separa tareas de soporte, aprobacion documental, monitoreo y trazabilidad historica de la web publica."
+      eyebrow="Negocios"
+      title="Entregas urbanas con respaldo para tu operacion"
+      lead="Coordina traslados para compras, inventario y entregas locales conservando informacion clara de cada servicio."
       imageClass="teamsHero"
-      primaryAction="Ingresar al panel"
-      primaryHref={`${appBaseUrl}/#/auth/login`}
+      primaryAction="Crear cuenta"
+      primaryHref={`${appBaseUrl}/#/auth/register`}
       sections={[
         {
-          title: 'Monitoreo',
-          body: 'Revisa solicitudes, conductores, alertas y actividad reciente desde un entorno autenticado.',
+          title: 'Coordina entregas',
+          body: 'Prepara servicios urbanos con ruta, carga, horario y ayudantes cuando sean necesarios.',
         },
         {
-          title: 'Aprobaciones',
-          body: 'Gestiona documentos y estados de conductores con una separacion clara entre web publica y operacion interna.',
+          title: 'Conserva historial',
+          body: 'Consulta solicitudes anteriores y mantén respaldo de precios, rutas y estados.',
         },
         {
-          title: 'Datos',
-          body: 'Mantiene historial, eventos y registros para analisis futuro sin exponerlos en el sitio publico.',
+          title: 'Opera con claridad',
+          body: 'Centraliza la informacion de cada traslado para reducir coordinaciones informales y llamadas.',
         },
       ]}
       highlights={[
-        'Panel interno',
-        'Roles separados',
-        'Historial auditable',
-        'Alertas operacionales',
+        'Servicios programados',
+        'Precios visibles',
+        'Historial por traslado',
+        'Soporte trazable',
       ]}
     />
   );

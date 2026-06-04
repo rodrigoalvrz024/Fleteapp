@@ -12,7 +12,7 @@ export function SiteNav() {
       <div className="navLinks">
         <Link href="/clientes">Clientes</Link>
         <Link href="/conductores">Conductores</Link>
-        <Link href="/empresas">Empresas</Link>
+        <Link href="/empresas">Negocios</Link>
         <a href={`${appBaseUrl}/#/auth/login`}>Ingresar</a>
         <a className="navAction" href={`${appBaseUrl}/#/auth/register`}>
           Registrarse
@@ -32,7 +32,7 @@ export function SiteFooter() {
       <nav aria-label="Legal">
         <Link href="/clientes">Clientes</Link>
         <Link href="/conductores">Conductores</Link>
-        <Link href="/empresas">Empresas</Link>
+        <Link href="/empresas">Negocios</Link>
         <Link href="/terminos">Terminos</Link>
         <Link href="/privacidad">Privacidad</Link>
       </nav>
