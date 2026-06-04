@@ -50,6 +50,15 @@ class FreightRequest(Base):
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancel_reason = Column(String, nullable=True)
 
+    pickup_photo_ref = Column(String, nullable=True)
+    pickup_photo_uploaded_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_photo_ref = Column(String, nullable=True)
+    delivery_photo_uploaded_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_pin_hash = Column(String, nullable=True)
+    delivery_pin_generated_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_pin_verified_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_pin_failed_attempts = Column(Integer, default=0, nullable=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
@@ -60,6 +69,44 @@ class FreightRequest(Base):
     status_history = relationship("TripStatusHistory", back_populates="freight")
     payment = relationship("Payment", back_populates="freight", uselist=False)
     rating = relationship("Rating", back_populates="freight", uselist=False)
+
+    @property
+    def has_pickup_photo(self) -> bool:
+        return bool(self.pickup_photo_ref)
+
+    @property
+    def has_delivery_photo(self) -> bool:
+        return bool(self.delivery_photo_ref)
+
+    @property
+    def delivery_pin_ready(self) -> bool:
+        return bool(self.delivery_pin_hash)
+
+    @property
+    def delivery_pin_verified(self) -> bool:
+        return bool(self.delivery_pin_verified_at)
+
+    @property
+    def payment_id(self) -> int | None:
+        return self.payment.id if self.payment else None
+
+    @property
+    def payment_status(self) -> str | None:
+        if not self.payment:
+            return None
+        return (
+            self.payment.status.value
+            if hasattr(self.payment.status, "value")
+            else str(self.payment.status)
+        )
+
+    @property
+    def rating_score(self) -> float | None:
+        return self.rating.score if self.rating else None
+
+    @property
+    def rating_comment(self) -> str | None:
+        return self.rating.comment if self.rating else None
 
 
 class TripStatusHistory(Base):

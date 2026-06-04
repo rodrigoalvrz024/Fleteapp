@@ -21,6 +21,14 @@ class FreightModel {
   final double? platformFee;
   final double? helpersCost;
   final DateTime? scheduledAt;
+  final bool hasPickupPhoto;
+  final bool hasDeliveryPhoto;
+  final bool deliveryPinReady;
+  final bool deliveryPinVerified;
+  final int? paymentId;
+  final String? paymentStatus;
+  final double? ratingScore;
+  final String? ratingComment;
 
   FreightModel({
     required this.id,
@@ -43,6 +51,14 @@ class FreightModel {
     this.platformFee,
     this.helpersCost,
     this.scheduledAt,
+    this.hasPickupPhoto = false,
+    this.hasDeliveryPhoto = false,
+    this.deliveryPinReady = false,
+    this.deliveryPinVerified = false,
+    this.paymentId,
+    this.paymentStatus,
+    this.ratingScore,
+    this.ratingComment,
   });
 
   factory FreightModel.fromJson(Map<String, dynamic> j) => FreightModel(
@@ -68,6 +84,14 @@ class FreightModel {
         scheduledAt: j['scheduled_at'] != null
             ? DateTime.parse(j['scheduled_at'])
             : null,
+        hasPickupPhoto: j['has_pickup_photo'] ?? false,
+        hasDeliveryPhoto: j['has_delivery_photo'] ?? false,
+        deliveryPinReady: j['delivery_pin_ready'] ?? false,
+        deliveryPinVerified: j['delivery_pin_verified'] ?? false,
+        paymentId: j['payment_id'],
+        paymentStatus: j['payment_status'],
+        ratingScore: (j['rating_score'] as num?)?.toDouble(),
+        ratingComment: j['rating_comment'],
       );
 
   String get statusLabel {

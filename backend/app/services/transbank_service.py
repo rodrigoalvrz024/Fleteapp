@@ -24,6 +24,10 @@ class WebpayCommitResult:
 
 def _transaction():
     try:
+        from transbank.common.integration_api_keys import IntegrationApiKeys
+        from transbank.common.integration_commerce_codes import (
+            IntegrationCommerceCodes,
+        )
         from transbank.common.integration_type import IntegrationType
         from transbank.common.options import WebpayOptions
         from transbank.webpay.webpay_plus.transaction import Transaction
@@ -33,21 +37,34 @@ def _transaction():
             detail="SDK de Transbank no disponible",
         ) from exc
 
-    if not settings.TRANSBANK_COMMERCE_CODE or not settings.TRANSBANK_API_KEY:
+    is_production = settings.TRANSBANK_ENVIRONMENT.lower() == "production"
+    if is_production and (
+        not settings.TRANSBANK_COMMERCE_CODE or not settings.TRANSBANK_API_KEY
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Credenciales de Transbank no configuradas",
+            detail="Credenciales productivas de Transbank no configuradas",
         )
 
     environment = (
         IntegrationType.LIVE
-        if settings.TRANSBANK_ENVIRONMENT.lower() == "production"
+        if is_production
         else IntegrationType.TEST
+    )
+    commerce_code = (
+        settings.TRANSBANK_COMMERCE_CODE
+        if settings.TRANSBANK_COMMERCE_CODE
+        else IntegrationCommerceCodes.WEBPAY_PLUS
+    )
+    api_key = (
+        settings.TRANSBANK_API_KEY
+        if settings.TRANSBANK_API_KEY
+        else IntegrationApiKeys.WEBPAY
     )
     return Transaction(
         WebpayOptions(
-            settings.TRANSBANK_COMMERCE_CODE,
-            settings.TRANSBANK_API_KEY,
+            commerce_code,
+            api_key,
             environment,
         )
     )

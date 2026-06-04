@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -64,18 +66,145 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     }
   }
 
-  Future<void> _updateStatus(String status) async {
+  void _showMessage(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppTheme.error : AppTheme.success,
+      ),
+    );
+  }
+
+  Future<void> _updateStatus(String status, {String? confirmationPin}) async {
     setState(() {
       _actionLoading = true;
     });
     try {
-      await _service.updateStatus(widget.freightId, status);
+      await _service.updateStatus(
+        widget.freightId,
+        status,
+        confirmationPin: confirmationPin,
+      );
       await _load();
+      _showMessage(
+        status == 'completed' ? 'Entrega confirmada' : 'Estado actualizado',
+      );
+    } catch (_) {
+      _showMessage(
+        status == 'completed'
+            ? 'No pudimos confirmar la entrega. Revisa el PIN.'
+            : 'No pudimos actualizar el estado.',
+        error: true,
+      );
     } finally {
-      setState(() {
-        _actionLoading = false;
-      });
+      if (mounted) setState(() => _actionLoading = false);
     }
+  }
+
+  Future<void> _pickEvidence(String kind) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Elegir de galería'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final file = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 78,
+      maxWidth: 1800,
+    );
+    if (file == null) return;
+
+    setState(() => _actionLoading = true);
+    try {
+      await _service.uploadEvidence(widget.freightId, kind, file);
+      await _load();
+      _showMessage(
+        kind == 'pickup'
+            ? 'Foto de retiro registrada'
+            : 'Foto de entrega registrada',
+      );
+    } catch (_) {
+      _showMessage('No pudimos cargar la foto.', error: true);
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
+  }
+
+  Future<void> _viewEvidence(String kind) async {
+    try {
+      final url = await _service.getEvidenceViewUrl(widget.freightId, kind);
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      _showMessage('No pudimos abrir la evidencia.', error: true);
+    }
+  }
+
+  Future<void> _completeWithPin() async {
+    final controller = TextEditingController();
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        title: const Text('Confirmar entrega'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Pide al cliente el PIN de cuatro dígitos después de entregar la carga.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'PIN de entrega',
+                counterText: '',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.length == 4) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (pin != null) await _updateStatus('completed', confirmationPin: pin);
   }
 
   @override
@@ -176,6 +305,108 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
                         color: AppTheme.success)),
               ]),
             ),
+          if (f.status == 'accepted' ||
+              f.status == 'in_progress' ||
+              f.status == 'completed') ...[
+            const SizedBox(height: 12),
+            _Card(children: [
+              const Text(
+                'Evidencia del servicio',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.midnight,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _Row(
+                icon: f.hasPickupPhoto
+                    ? Icons.check_circle_rounded
+                    : Icons.photo_camera_outlined,
+                color: f.hasPickupPhoto ? AppTheme.success : AppTheme.primary,
+                label: 'Retiro',
+                value: f.hasPickupPhoto ? 'Foto registrada' : 'Foto pendiente',
+              ),
+              if (f.hasPickupPhoto) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _viewEvidence('pickup'),
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: const Text('Ver retiro'),
+                ),
+              ],
+              const SizedBox(height: 12),
+              _Row(
+                icon: f.hasDeliveryPhoto
+                    ? Icons.check_circle_rounded
+                    : Icons.photo_camera_outlined,
+                color: f.hasDeliveryPhoto ? AppTheme.success : AppTheme.primary,
+                label: 'Entrega',
+                value:
+                    f.hasDeliveryPhoto ? 'Foto registrada' : 'Foto pendiente',
+              ),
+              if (f.hasDeliveryPhoto) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _viewEvidence('delivery'),
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: const Text('Ver entrega'),
+                ),
+              ],
+              if (f.status == 'in_progress') ...[
+                const SizedBox(height: 12),
+                _Row(
+                  icon: f.deliveryPinReady
+                      ? Icons.pin_outlined
+                      : Icons.hourglass_empty_rounded,
+                  color:
+                      f.deliveryPinReady ? AppTheme.success : AppTheme.slate600,
+                  label: 'PIN',
+                  value: f.deliveryPinReady
+                      ? 'Preparado por el cliente'
+                      : 'Esperando al cliente',
+                ),
+              ],
+            ]),
+          ],
+          if (f.status == 'completed' && f.ratingScore != null) ...[
+            const SizedBox(height: 12),
+            _Card(children: [
+              const Text(
+                'Calificación del cliente',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.midnight,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.star_rounded, color: AppTheme.accent),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${f.ratingScore!.toStringAsFixed(0)} de 5',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              if (f.ratingComment != null &&
+                  f.ratingComment!.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  f.ratingComment!,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ]),
+          ],
           const SizedBox(height: 24),
           if (_actionLoading)
             const Center(child: CircularProgressIndicator())
@@ -189,21 +420,43 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
                 label: const Text('Aceptar flete'),
               ),
             if (f.status == 'accepted')
-              ElevatedButton.icon(
-                onPressed: () => _updateStatus('in_progress'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.secondary),
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Iniciar viaje'),
-              ),
+              if (!f.hasPickupPhoto)
+                ElevatedButton.icon(
+                  onPressed: () => _pickEvidence('pickup'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary),
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Registrar foto de retiro'),
+                )
+              else
+                ElevatedButton.icon(
+                  onPressed: () => _updateStatus('in_progress'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.secondary),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Iniciar viaje'),
+                ),
             if (f.status == 'in_progress')
-              ElevatedButton.icon(
-                onPressed: () => _updateStatus('completed'),
-                style:
-                    ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
-                icon: const Icon(Icons.flag),
-                label: const Text('Marcar como completado'),
-              ),
+              if (!f.hasDeliveryPhoto)
+                ElevatedButton.icon(
+                  onPressed: () => _pickEvidence('delivery'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary),
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Registrar foto de entrega'),
+                )
+              else
+                ElevatedButton.icon(
+                  onPressed: f.deliveryPinReady ? _completeWithPin : null,
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.success),
+                  icon: const Icon(Icons.pin_outlined),
+                  label: Text(
+                    f.deliveryPinReady
+                        ? 'Confirmar con PIN'
+                        : 'Esperando PIN del cliente',
+                  ),
+                ),
           ],
         ],
       ),

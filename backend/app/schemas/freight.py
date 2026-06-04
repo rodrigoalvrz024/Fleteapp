@@ -37,6 +37,17 @@ class FreightCreate(BaseModel):
 class FreightStatusUpdate(BaseModel):
     status: FreightStatus
     note:   Optional[str] = None
+    confirmation_pin: Optional[str] = None
+
+
+class DeliveryPinResponse(BaseModel):
+    pin: str
+    generated_at: datetime
+
+
+class EvidenceViewResponse(BaseModel):
+    url: str
+    expires_at: datetime
 
 
 class FreightResponse(BaseModel):
@@ -65,6 +76,14 @@ class FreightResponse(BaseModel):
     status:              FreightStatus
     scheduled_at:        Optional[datetime]
     created_at:          datetime
+    has_pickup_photo:    bool = False
+    has_delivery_photo:  bool = False
+    delivery_pin_ready:  bool = False
+    delivery_pin_verified: bool = False
+    payment_id:          Optional[int] = None
+    payment_status:      Optional[str] = None
+    rating_score:        Optional[float] = None
+    rating_comment:      Optional[str] = None
     status_history:      List[StatusHistoryResponse] = []
 
     class Config:

@@ -7,6 +7,9 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $mobileDir = Join-Path $repoRoot 'mobile'
 $flutterDefault = 'C:\flutter\bin\flutter.bat'
+$gcloudDefault = Join-Path $env:LOCALAPPDATA 'Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd'
+$projectId = 'fleteapp-8d8f7'
+$mapsWebKeyId = '691cc45f-2b0c-4d57-bb40-4cd807de79d2'
 
 function Get-FlutterCli {
   $command = Get-Command flutter -ErrorAction SilentlyContinue
@@ -19,6 +22,37 @@ function Get-FlutterCli {
   }
 
   throw 'No se encontro Flutter CLI. Revisa que Flutter este instalado o agrega flutter al PATH.'
+}
+
+function Get-GcloudCli {
+  $command = Get-Command gcloud -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Source
+  }
+
+  if (Test-Path $gcloudDefault) {
+    return $gcloudDefault
+  }
+
+  return $null
+}
+
+function Get-RestrictedMapsWebKey {
+  $gcloud = Get-GcloudCli
+  if (-not $gcloud) {
+    return $null
+  }
+
+  $value = & $gcloud services api-keys get-key-string $mapsWebKeyId `
+    --location global `
+    --project $projectId `
+    --format 'value(keyString)' 2>$null
+
+  if ($LASTEXITCODE -ne 0) {
+    return $null
+  }
+
+  return "$value".Trim()
 }
 
 function Read-PlainSecret([securestring]$Secret) {
@@ -44,6 +78,10 @@ function Test-GoogleMapsApiKey([string]$Value) {
 
 if (-not (Test-Path $mobileDir)) {
   throw "No se encontro la carpeta mobile en $mobileDir."
+}
+
+if ([string]::IsNullOrWhiteSpace($GoogleMapsApiKey)) {
+  $GoogleMapsApiKey = Get-RestrictedMapsWebKey
 }
 
 if ([string]::IsNullOrWhiteSpace($GoogleMapsApiKey)) {

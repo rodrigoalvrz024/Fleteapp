@@ -19,6 +19,7 @@ ALLOWED_UPLOAD_TYPES = {
     "application/pdf": ".pdf",
 }
 DOCUMENT_VIEW_PURPOSE = "driver_document_view"
+FREIGHT_EVIDENCE_VIEW_PURPOSE = "freight_evidence_view"
 FILE_SIGNATURES = {
     "image/jpeg": (b"\xff\xd8\xff",),
     "image/png": (b"\x89PNG\r\n\x1a\n",),
@@ -29,6 +30,10 @@ FILE_SIGNATURES = {
 
 def _max_upload_bytes() -> int:
     return settings.DRIVER_DOCUMENT_MAX_MB * 1024 * 1024
+
+
+def _max_freight_evidence_bytes() -> int:
+    return settings.FREIGHT_EVIDENCE_MAX_MB * 1024 * 1024
 
 
 def _ensure_storage_configured() -> None:
@@ -89,6 +94,35 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
     return object_name
 
 
+async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) -> str:
+    content_type = file.content_type or "application/octet-stream"
+    extension = ALLOWED_UPLOAD_TYPES.get(content_type)
+    if not extension or content_type == "application/pdf":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato no permitido. Usa JPG, PNG o WEBP.",
+        )
+
+    content = await file.read()
+    if len(content) > _max_freight_evidence_bytes():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"La foto supera el maximo de {settings.FREIGHT_EVIDENCE_MAX_MB} MB.",
+        )
+    _validate_file_signature(content_type, content)
+
+    object_name = (
+        f"freights/{freight_id}/evidence/{kind}/{uuid4().hex}{extension}"
+    )
+    blob = _bucket().blob(object_name)
+    blob.upload_from_file(
+        io.BytesIO(content),
+        content_type=content_type,
+        rewind=True,
+    )
+    return object_name
+
+
 def create_driver_document_view_token(
     driver_id: int,
     document_type: str,
@@ -120,6 +154,41 @@ def decode_driver_document_view_token(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Documento no disponible",
+        )
+    return payload
+
+
+def create_freight_evidence_view_token(
+    freight_id: int,
+    kind: str,
+    evidence_ref: str,
+) -> tuple[str, datetime]:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.FREIGHT_EVIDENCE_VIEW_EXPIRE_MINUTES
+    )
+    payload = {
+        "purpose": FREIGHT_EVIDENCE_VIEW_PURPOSE,
+        "freight_id": freight_id,
+        "kind": kind,
+        "evidence_ref": evidence_ref,
+        "exp": expires_at,
+    }
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return token, expires_at
+
+
+def decode_freight_evidence_view_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidencia no disponible",
+        )
+    if payload.get("purpose") != FREIGHT_EVIDENCE_VIEW_PURPOSE:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evidencia no disponible",
         )
     return payload
 

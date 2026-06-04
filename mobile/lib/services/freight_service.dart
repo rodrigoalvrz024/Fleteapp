@@ -1,3 +1,6 @@
+import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
+
 import 'api_service.dart';
 import '../models/freight_model.dart';
 import '../core/constants/api_constants.dart';
@@ -50,12 +53,42 @@ class FreightService {
     return FreightModel.fromJson(res.data);
   }
 
-  Future<FreightModel> updateStatus(int id, String status,
-      {String? note}) async {
+  Future<FreightModel> updateStatus(
+    int id,
+    String status, {
+    String? note,
+    String? confirmationPin,
+  }) async {
     final res = await _api.put('${ApiConstants.freights}/$id/status', {
       'status': status,
       if (note != null) 'note': note,
+      if (confirmationPin != null) 'confirmation_pin': confirmationPin,
     });
     return FreightModel.fromJson(res.data);
+  }
+
+  Future<String> generateDeliveryPin(int id) async {
+    final res =
+        await _api.post('${ApiConstants.freights}/$id/delivery-pin', {});
+    return res.data['pin'] as String;
+  }
+
+  Future<FreightModel> uploadEvidence(int id, String kind, XFile file) async {
+    final bytes = await file.readAsBytes();
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: file.name),
+    });
+    final res = await _api.uploadForm(
+      '${ApiConstants.freights}/$id/evidence/$kind',
+      form,
+    );
+    return FreightModel.fromJson(res.data);
+  }
+
+  Future<String> getEvidenceViewUrl(int id, String kind) async {
+    final res = await _api.get(
+      '${ApiConstants.freights}/$id/evidence/$kind/view-url',
+    );
+    return res.data['url'] as String;
   }
 }

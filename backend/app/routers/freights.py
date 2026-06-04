@@ -1,21 +1,44 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+import secrets
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
-from datetime import datetime
+
+from app.core.config import settings
+from app.core.security import (
+    get_current_user,
+    hash_password,
+    require_role,
+    verify_password,
+)
 from app.database import get_db
-from app.models.user import User, UserRole
 from app.models.driver import Driver
 from app.models.freight import FreightRequest, FreightStatus, TripStatusHistory
-from app.schemas.freight import FreightCreate, FreightResponse, FreightStatusUpdate
-from app.core.security import get_current_user, require_role
-from app.services.freight_service import calculate_distance_km, estimate_price, can_transition
-from app.services.notification_service import send_push_notification
+from app.models.user import User, UserRole
+from app.schemas.freight import (
+    DeliveryPinResponse,
+    EvidenceViewResponse,
+    FreightCreate,
+    FreightResponse,
+    FreightStatusUpdate,
+)
 from app.services.audit_service import record_audit_event
-import asyncio
-from typing import Optional, List
-from datetime import datetime
+from app.services.freight_service import calculate_distance_km, can_transition, estimate_price
+from app.services.storage_service import (
+    create_freight_evidence_view_token,
+    decode_freight_evidence_view_token,
+    delete_private_document,
+    stream_private_document,
+    upload_freight_evidence,
+)
 
 router = APIRouter(prefix="/freights", tags=["Fletes"])
+EVIDENCE_FIELDS = {
+    "pickup": ("pickup_photo_ref", "pickup_photo_uploaded_at"),
+    "delivery": ("delivery_photo_ref", "delivery_photo_uploaded_at"),
+}
 
 def _get_driver_for_user(db: Session, user: User) -> Driver | None:
     if user.role != UserRole.driver:
@@ -41,8 +64,16 @@ def _require_freight_status_access(
     freight: FreightRequest,
     db: Session,
     current_user: User,
+    new_status: FreightStatus,
 ) -> None:
     if current_user.role == UserRole.admin:
+        return
+    if (
+        current_user.role == UserRole.client
+        and freight.client_id == current_user.id
+        and new_status == FreightStatus.cancelled
+        and freight.status in (FreightStatus.pending, FreightStatus.accepted)
+    ):
         return
     if current_user.role == UserRole.driver:
         driver = _get_driver_for_user(db, current_user)
@@ -52,6 +83,20 @@ def _require_freight_status_access(
         status_code=403,
         detail="Solo el conductor asignado o un admin puede actualizar el estado",
     )
+
+
+def _require_assigned_driver(
+    freight: FreightRequest,
+    db: Session,
+    current_user: User,
+) -> Driver:
+    driver = _get_driver_for_user(db, current_user)
+    if not driver or freight.driver_id != driver.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el conductor asignado puede realizar esta accion",
+        )
+    return driver
 
 @router.post("", response_model=FreightResponse, status_code=201)
 async def create_freight(
@@ -159,6 +204,155 @@ def get_freight(freight_id: int, db: Session = Depends(get_db), current_user: Us
     _require_freight_view_access(freight, db, current_user)
     return freight
 
+
+@router.post("/{freight_id}/delivery-pin", response_model=DeliveryPinResponse)
+def generate_delivery_pin(
+    freight_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("client")),
+):
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    if freight.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para este flete")
+    if freight.status not in (FreightStatus.accepted, FreightStatus.in_progress):
+        raise HTTPException(
+            status_code=400,
+            detail="El PIN se puede generar cuando el flete fue aceptado",
+        )
+
+    pin = f"{secrets.randbelow(10000):04d}"
+    generated_at = datetime.now(timezone.utc)
+    freight.delivery_pin_hash = hash_password(pin)
+    freight.delivery_pin_generated_at = generated_at
+    freight.delivery_pin_verified_at = None
+    freight.delivery_pin_failed_attempts = 0
+    freight.last_modified_by = current_user.id
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="freight.delivery_pin_generated",
+        after_data={"generated_at": generated_at.isoformat()},
+        request=request,
+    )
+    db.commit()
+    return DeliveryPinResponse(pin=pin, generated_at=generated_at)
+
+
+@router.post("/{freight_id}/evidence/{kind}", response_model=FreightResponse)
+async def upload_evidence(
+    freight_id: int,
+    kind: str,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("driver")),
+):
+    fields = EVIDENCE_FIELDS.get(kind)
+    if not fields:
+        raise HTTPException(status_code=400, detail="Tipo de evidencia invalido")
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_assigned_driver(freight, db, current_user)
+
+    expected_status = (
+        FreightStatus.accepted if kind == "pickup" else FreightStatus.in_progress
+    )
+    if freight.status != expected_status:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "La foto de retiro se carga antes de iniciar el viaje"
+                if kind == "pickup"
+                else "La foto de entrega se carga durante el viaje"
+            ),
+        )
+
+    ref_field, uploaded_at_field = fields
+    previous_ref = getattr(freight, ref_field)
+    evidence_ref = await upload_freight_evidence(file, freight.id, kind)
+    uploaded_at = datetime.now(timezone.utc)
+    setattr(freight, ref_field, evidence_ref)
+    setattr(freight, uploaded_at_field, uploaded_at)
+    freight.last_modified_by = current_user.id
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type=f"freight.{kind}_photo_uploaded",
+        after_data={"kind": kind, "uploaded_at": uploaded_at.isoformat()},
+        request=request,
+    )
+    db.commit()
+    db.refresh(freight)
+    if previous_ref and previous_ref != evidence_ref:
+        try:
+            delete_private_document(previous_ref)
+        except Exception:
+            pass
+    return freight
+
+
+@router.get(
+    "/{freight_id}/evidence/{kind}/view-url",
+    response_model=EvidenceViewResponse,
+)
+def get_evidence_view_url(
+    freight_id: int,
+    kind: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    fields = EVIDENCE_FIELDS.get(kind)
+    if not fields:
+        raise HTTPException(status_code=400, detail="Tipo de evidencia invalido")
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_freight_view_access(freight, db, current_user)
+    evidence_ref = getattr(freight, fields[0])
+    if not evidence_ref:
+        raise HTTPException(status_code=404, detail="Evidencia no disponible")
+
+    token, expires_at = create_freight_evidence_view_token(
+        freight.id,
+        kind,
+        evidence_ref,
+    )
+    base_url = (
+        settings.PUBLIC_API_URL.rstrip("/")
+        if settings.PUBLIC_API_URL
+        else str(request.base_url).rstrip("/")
+    )
+    return EvidenceViewResponse(
+        url=f"{base_url}/freights/evidence/{token}",
+        expires_at=expires_at,
+    )
+
+
+@router.get("/evidence/{token}", response_class=StreamingResponse)
+def view_evidence(token: str, db: Session = Depends(get_db)):
+    payload = decode_freight_evidence_view_token(token)
+    freight = (
+        db.query(FreightRequest)
+        .filter(FreightRequest.id == payload.get("freight_id"))
+        .first()
+    )
+    fields = EVIDENCE_FIELDS.get(payload.get("kind"))
+    if not freight or not fields:
+        raise HTTPException(status_code=404, detail="Evidencia no disponible")
+    evidence_ref = getattr(freight, fields[0])
+    if not evidence_ref or evidence_ref != payload.get("evidence_ref"):
+        raise HTTPException(status_code=404, detail="Evidencia no disponible")
+    return stream_private_document(evidence_ref)
+
 @router.put("/{freight_id}/accept", response_model=FreightResponse)
 def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_role("driver"))):
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
@@ -207,10 +401,48 @@ def update_status(
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
 
-    _require_freight_status_access(freight, db, current_user)
+    _require_freight_status_access(freight, db, current_user, data.status)
 
     if not can_transition(freight.status, data.status):
         raise HTTPException(status_code=400, detail=f"No se puede pasar de {freight.status} a {data.status}")
+
+    if data.status == FreightStatus.in_progress and not freight.pickup_photo_ref:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes subir una foto del retiro antes de iniciar el viaje",
+        )
+    if (
+        data.status == FreightStatus.cancelled
+        and current_user.role == UserRole.client
+        and freight.pickup_photo_ref
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="El retiro ya fue registrado. Contacta a soporte para cancelar",
+        )
+    if data.status == FreightStatus.completed:
+        if not freight.delivery_photo_ref:
+            raise HTTPException(
+                status_code=400,
+                detail="Debes subir una foto de entrega antes de completar el viaje",
+            )
+        if not freight.delivery_pin_hash:
+            raise HTTPException(
+                status_code=400,
+                detail="El cliente debe generar un PIN de entrega",
+            )
+        if freight.delivery_pin_failed_attempts >= 5:
+            raise HTTPException(
+                status_code=400,
+                detail="PIN bloqueado. Solicita al cliente generar uno nuevo",
+            )
+        if not data.confirmation_pin or not verify_password(
+            data.confirmation_pin,
+            freight.delivery_pin_hash,
+        ):
+            freight.delivery_pin_failed_attempts += 1
+            db.commit()
+            raise HTTPException(status_code=400, detail="PIN de entrega incorrecto")
 
     status_before = freight.status.value if hasattr(freight.status, "value") else str(freight.status)
     freight.status = data.status
@@ -219,6 +451,7 @@ def update_status(
     elif data.status == FreightStatus.completed:
         freight.completed_at = datetime.utcnow()
         freight.final_price = freight.estimated_price
+        freight.delivery_pin_verified_at = datetime.now(timezone.utc)
     elif data.status == FreightStatus.cancelled:
         freight.cancelled_at = datetime.utcnow()
         freight.cancel_reason = data.note

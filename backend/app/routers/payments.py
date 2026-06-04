@@ -1,4 +1,7 @@
+import html
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from app.database import get_db
@@ -13,9 +16,14 @@ from app.services.transbank_service import (
     commit_webpay_transaction,
     create_webpay_transaction,
 )
-import uuid
-
 router = APIRouter(prefix="/payments", tags=["Pagos"])
+
+
+def _frontend_payment_result(freight_id: int, result: str) -> str:
+    return (
+        f"{settings.FRONTEND_URL.rstrip('/')}/#/app/client/freights/"
+        f"{freight_id}?payment={result}"
+    )
 
 @router.post("/initiate", response_model=WebpayInitResponse)
 def initiate_payment(
@@ -44,15 +52,18 @@ def initiate_payment(
     amount = int(freight.final_price or freight.estimated_price)
 
     # Modo sandbox Transbank — en producción usar el SDK oficial
-    payment = Payment(
-        freight_id=freight.id,
-        amount=amount,
-        method=data.method,
-        buy_order=buy_order,
-        status=PaymentStatus.pending,
-        last_modified_by=current_user.id,
-    )
-    db.add(payment)
+    payment = freight.payment or Payment(freight_id=freight.id)
+    payment.amount = amount
+    payment.method = data.method
+    payment.buy_order = buy_order
+    payment.status = PaymentStatus.pending
+    payment.webpay_token = None
+    payment.authorization_code = None
+    payment.transaction_id = None
+    payment.paid_at = None
+    payment.last_modified_by = current_user.id
+    if not freight.payment:
+        db.add(payment)
     db.flush()
 
     base_url = (
@@ -78,6 +89,11 @@ def initiate_payment(
         webpay_url = webpay.url
 
     payment.webpay_token = webpay_token
+    redirect_url = (
+        f"{return_url}?token_ws={webpay_token}"
+        if settings.ALLOW_SIMULATED_PAYMENTS and webpay_token.startswith("SANDBOX_TOKEN_")
+        else f"{base_url}/payments/webpay/{webpay_token}"
+    )
     record_audit_event(
         db,
         actor=current_user,
@@ -93,17 +109,59 @@ def initiate_payment(
     )
     db.commit()
 
-    return WebpayInitResponse(token=payment.webpay_token, url=webpay_url)
+    return WebpayInitResponse(
+        token=payment.webpay_token,
+        url=webpay_url,
+        redirect_url=redirect_url,
+    )
 
-@router.api_route("/callback", methods=["GET", "POST"])
-async def payment_callback(
+
+@router.get("/webpay/{token_ws}", response_class=HTMLResponse)
+def redirect_to_webpay(token_ws: str, db: Session = Depends(get_db)):
+    payment = db.query(Payment).filter(Payment.webpay_token == token_ws).first()
+    if not payment or payment.status != PaymentStatus.pending:
+        raise HTTPException(status_code=404, detail="Pago no disponible")
+    action = html.escape(payment_redirect_url(), quote=True)
+    token = html.escape(token_ws, quote=True)
+    return HTMLResponse(
+        content=f"""<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Conectando con Webpay</title></head>
+<body>
+  <p>Conectando con Webpay...</p>
+  <form id="webpay" method="post" action="{action}">
+    <input type="hidden" name="token_ws" value="{token}">
+  </form>
+  <script>document.getElementById('webpay').submit();</script>
+</body></html>""",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def payment_redirect_url() -> str:
+    if settings.TRANSBANK_ENVIRONMENT.lower() == "production":
+        return "https://webpay3g.transbank.cl/webpayserver/initTransaction"
+    return "https://webpay3gint.transbank.cl/webpayserver/initTransaction"
+
+async def _process_payment_callback(
     request: Request,
-    token_ws: str | None = None,
-    db: Session = Depends(get_db),
+    token_ws: str | None,
+    db: Session,
 ):
+    form = await request.form() if request.method == "POST" else {}
+    callback_data = {**dict(request.query_params), **dict(form)}
     if not token_ws:
-        form = await request.form()
-        token_ws = form.get("token_ws")
+        token_ws = callback_data.get("token_ws")
+    if not token_ws:
+        aborted_buy_order = callback_data.get("TBK_ORDEN_COMPRA")
+        if aborted_buy_order:
+            payment = db.query(Payment).filter(Payment.buy_order == aborted_buy_order).first()
+            if payment:
+                payment.status = PaymentStatus.failed
+                db.commit()
+                return RedirectResponse(
+                    _frontend_payment_result(payment.freight_id, "cancelled"),
+                    status_code=303,
+                )
     if not token_ws:
         raise HTTPException(status_code=400, detail="Token requerido")
     payment = db.query(Payment).filter(Payment.webpay_token == token_ws).first()
@@ -111,7 +169,10 @@ async def payment_callback(
         raise HTTPException(status_code=404, detail="Pago no encontrado")
 
     if payment.status == PaymentStatus.authorized:
-        return {"message": "Pago ya confirmado", "payment_id": payment.id}
+        return RedirectResponse(
+            _frontend_payment_result(payment.freight_id, "success"),
+            status_code=303,
+        )
 
     status_before = payment.status.value if hasattr(payment.status, "value") else str(payment.status)
     if token_ws.startswith("SANDBOX_TOKEN_"):
@@ -171,8 +232,33 @@ async def payment_callback(
     )
     db.commit()
     if not authorized:
-        raise HTTPException(status_code=400, detail="Pago no autorizado por Transbank")
-    return {"message": "Pago confirmado", "payment_id": payment.id}
+        return RedirectResponse(
+            _frontend_payment_result(payment.freight_id, "failed"),
+            status_code=303,
+        )
+    return RedirectResponse(
+        _frontend_payment_result(payment.freight_id, "success"),
+        status_code=303,
+    )
+
+
+@router.get("/callback", operation_id="payment_callback_get")
+async def payment_callback_get(
+    request: Request,
+    token_ws: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return await _process_payment_callback(request, token_ws, db)
+
+
+@router.post("/callback", operation_id="payment_callback_post")
+async def payment_callback_post(
+    request: Request,
+    token_ws: str | None = None,
+    db: Session = Depends(get_db),
+):
+    return await _process_payment_callback(request, token_ws, db)
+
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
 def get_payment(

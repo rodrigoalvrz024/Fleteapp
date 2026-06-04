@@ -23,3 +23,4 @@ class PaymentResponse(BaseModel):
 class WebpayInitResponse(BaseModel):
     token: str
     url: str
+    redirect_url: str

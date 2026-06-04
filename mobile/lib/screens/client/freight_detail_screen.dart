@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
+import '../../services/payment_service.dart';
+import '../../services/rating_service.dart';
 import '../../widgets/common/status_tracker_widget.dart';
 import '../shared/web_layout.dart';
 import 'widgets/freight_widgets.dart';
@@ -19,13 +23,32 @@ class FreightDetailScreen extends StatefulWidget {
 
 class _FreightDetailScreenState extends State<FreightDetailScreen> {
   final _service = FreightService();
+  final _paymentService = PaymentService();
+  final _ratingService = RatingService();
   FreightModel? _freight;
   bool _loading = true;
+  bool _actionLoading = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showPaymentResult());
+  }
+
+  void _showPaymentResult() {
+    final fragment = Uri.base.fragment;
+    if (!fragment.contains('?')) return;
+    final result = Uri.tryParse(fragment)?.queryParameters['payment'];
+    if (result == 'success') {
+      _showMessage('Pago confirmado correctamente.');
+    } else if (result == 'cancelled') {
+      _showMessage('Pago cancelado. Puedes intentarlo nuevamente.',
+          error: true);
+    } else if (result == 'failed') {
+      _showMessage('Webpay no autorizó el pago. Intenta otra vez.',
+          error: true);
+    }
   }
 
   Future<void> _load() async {
@@ -76,6 +99,170 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
       note: 'Cancelado por cliente',
     );
     if (mounted) _load();
+  }
+
+  void _showMessage(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppTheme.error : AppTheme.success,
+      ),
+    );
+  }
+
+  Future<void> _generatePin() async {
+    setState(() => _actionLoading = true);
+    try {
+      final pin = await _service.generateDeliveryPin(widget.freightId);
+      await _load();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: const Text('PIN de entrega'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Compártelo con el conductor únicamente cuando recibas la carga.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              SelectableText(
+                pin,
+                style: const TextStyle(
+                  fontSize: 38,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                  color: AppTheme.midnight,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      _showMessage('No pudimos generar el PIN.', error: true);
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
+  }
+
+  Future<void> _viewEvidence(String kind) async {
+    try {
+      final url = await _service.getEvidenceViewUrl(widget.freightId, kind);
+      await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      _showMessage('No pudimos abrir la evidencia.', error: true);
+    }
+  }
+
+  Future<void> _payWithWebpay() async {
+    setState(() => _actionLoading = true);
+    try {
+      final payment = await _paymentService.initiateWebpay(widget.freightId);
+      final launched = await launchUrl(
+        Uri.parse(payment.redirectUrl),
+        mode: kIsWeb
+            ? LaunchMode.platformDefault
+            : LaunchMode.externalApplication,
+        webOnlyWindowName: kIsWeb ? '_self' : null,
+      );
+      if (!launched) {
+        _showMessage('No pudimos abrir Webpay.', error: true);
+      }
+    } catch (_) {
+      _showMessage('No pudimos iniciar el pago.', error: true);
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
+  }
+
+  Future<void> _rateService() async {
+    double score = 5;
+    final comment = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: const Text('Califica tu experiencia'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  final value = index + 1.0;
+                  return IconButton(
+                    tooltip: '$value estrellas',
+                    onPressed: () => setDialogState(() => score = value),
+                    icon: Icon(
+                      value <= score
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: AppTheme.accent,
+                      size: 34,
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: comment,
+                maxLines: 3,
+                maxLength: 300,
+                decoration: const InputDecoration(
+                  labelText: 'Comentario opcional',
+                  hintText: 'Cuéntanos cómo fue el servicio',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Ahora no'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Enviar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != true) {
+      comment.dispose();
+      return;
+    }
+    setState(() => _actionLoading = true);
+    try {
+      await _ratingService.createRating(
+        freightId: widget.freightId,
+        score: score,
+        comment: comment.text,
+      );
+      await _load();
+      _showMessage('Gracias por tu calificación.');
+    } catch (_) {
+      _showMessage('No pudimos guardar la calificación.', error: true);
+    } finally {
+      comment.dispose();
+      if (mounted) setState(() => _actionLoading = false);
+    }
   }
 
   @override
@@ -239,6 +426,128 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                 ),
             ],
           ),
+          if (freight.status == 'accepted' ||
+              freight.status == 'in_progress' ||
+              freight.status == 'completed') ...[
+            const SizedBox(height: 14),
+            FreightInfoCard(
+              title: 'Respaldo del servicio',
+              icon: Icons.verified_user_outlined,
+              children: [
+                FreightInfoRow(
+                  icon: freight.hasPickupPhoto
+                      ? Icons.check_circle_rounded
+                      : Icons.hourglass_empty_rounded,
+                  color: freight.hasPickupPhoto
+                      ? AppTheme.success
+                      : AppTheme.slate600,
+                  label: 'Foto de retiro',
+                  value: freight.hasPickupPhoto ? 'Registrada' : 'Pendiente',
+                ),
+                if (freight.hasPickupPhoto) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _viewEvidence('pickup'),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('Ver foto de retiro'),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                FreightInfoRow(
+                  icon: freight.hasDeliveryPhoto
+                      ? Icons.check_circle_rounded
+                      : Icons.hourglass_empty_rounded,
+                  color: freight.hasDeliveryPhoto
+                      ? AppTheme.success
+                      : AppTheme.slate600,
+                  label: 'Foto de entrega',
+                  value: freight.hasDeliveryPhoto ? 'Registrada' : 'Pendiente',
+                ),
+                if (freight.hasDeliveryPhoto) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _viewEvidence('delivery'),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('Ver foto de entrega'),
+                  ),
+                ],
+                if (freight.status != 'completed') ...[
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Genera el PIN y entrégalo al conductor únicamente cuando recibas la carga.',
+                    style: TextStyle(color: AppTheme.slate600, height: 1.4),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: _actionLoading ? null : _generatePin,
+                    icon: const Icon(Icons.pin_outlined),
+                    label: Text(
+                      freight.deliveryPinReady
+                          ? 'Generar un PIN nuevo'
+                          : 'Generar PIN de entrega',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          if (freight.status == 'completed') ...[
+            const SizedBox(height: 14),
+            FreightInfoCard(
+              title: 'Pago y calificación',
+              icon: Icons.receipt_long_outlined,
+              children: [
+                FreightInfoRow(
+                  icon: freight.paymentStatus == 'authorized'
+                      ? Icons.check_circle_rounded
+                      : freight.paymentStatus == 'failed'
+                          ? Icons.error_outline_rounded
+                          : Icons.payments_outlined,
+                  color: freight.paymentStatus == 'authorized'
+                      ? AppTheme.success
+                      : freight.paymentStatus == 'failed'
+                          ? AppTheme.error
+                          : AppTheme.primary,
+                  label: 'Pago',
+                  value: freight.paymentStatus == 'authorized'
+                      ? 'Pagado con Webpay'
+                      : freight.paymentStatus == 'failed'
+                          ? 'No completado'
+                          : 'Pendiente',
+                ),
+                if (freight.paymentStatus == 'failed') ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'El intento anterior no generó ningún cobro. Puedes volver a intentarlo.',
+                    style: TextStyle(color: AppTheme.slate600, height: 1.4),
+                  ),
+                ],
+                if (freight.paymentStatus != 'authorized') ...[
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _actionLoading ? null : _payWithWebpay,
+                    icon: const Icon(Icons.lock_outline_rounded),
+                    label: const Text('Pagar con Webpay'),
+                  ),
+                ] else if (freight.ratingScore == null) ...[
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    onPressed: _actionLoading ? null : _rateService,
+                    icon: const Icon(Icons.star_outline_rounded),
+                    label: const Text('Calificar servicio'),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 12),
+                  FreightInfoRow(
+                    icon: Icons.star_rounded,
+                    color: AppTheme.accent,
+                    label: 'Tu calificación',
+                    value: '${freight.ratingScore!.toStringAsFixed(0)} de 5',
+                  ),
+                ],
+              ],
+            ),
+          ],
           if (canCancel) ...[
             const SizedBox(height: 24),
             ElevatedButton.icon(
