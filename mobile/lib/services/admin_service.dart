@@ -1,3 +1,4 @@
+import '../models/payout_model.dart';
 import 'api_service.dart';
 
 class AdminMetrics {
@@ -24,6 +25,9 @@ class AdminMetrics {
   final num platformCommissionClp;
   final num pendingPlatformCommissionClp;
   final num driverPayoutClp;
+  final num pendingDriverPayoutClp;
+  final num paidDriverPayoutClp;
+  final Map<String, int> payoutsByStatus;
   final num totalRevenueClp;
 
   const AdminMetrics({
@@ -50,6 +54,9 @@ class AdminMetrics {
     required this.platformCommissionClp,
     required this.pendingPlatformCommissionClp,
     required this.driverPayoutClp,
+    required this.pendingDriverPayoutClp,
+    required this.paidDriverPayoutClp,
+    required this.payoutsByStatus,
     required this.totalRevenueClp,
   });
 
@@ -84,6 +91,9 @@ class AdminMetrics {
       pendingPlatformCommissionClp:
           json['pending_platform_commission_clp'] ?? 0,
       driverPayoutClp: json['driver_payout_clp'] ?? 0,
+      pendingDriverPayoutClp: json['pending_driver_payout_clp'] ?? 0,
+      paidDriverPayoutClp: json['paid_driver_payout_clp'] ?? 0,
+      payoutsByStatus: intMap('payouts_by_status'),
       totalRevenueClp:
           json['total_revenue_clp'] ?? json['authorized_payments_clp'] ?? 0,
     );
@@ -249,6 +259,7 @@ class AdminAuditEvent {
         'vehicle' => 'Vehiculo',
         'freight' => 'Flete',
         'payment' => 'Pago',
+        'driver_payout' => 'Liquidacion',
         'system' => 'Sistema',
         'privacy_request' => 'Privacidad',
         'data_privacy_request' => 'Privacidad',
@@ -274,6 +285,11 @@ class AdminAuditEvent {
         'freight.status_changed' => 'Estado de flete',
         'payment.initiated' => 'Pago iniciado',
         'payment.authorized' => 'Pago autorizado',
+        'driver_payout.created' => 'Liquidacion creada',
+        'driver_payout.pending' => 'Liquidacion pendiente',
+        'driver_payout.scheduled' => 'Liquidacion programada',
+        'driver_payout.paid' => 'Liquidacion pagada',
+        'driver_payout.failed' => 'Liquidacion fallida',
         'privacy_request.created' => 'Solicitud creada',
         'privacy_request.status_changed' => 'Solicitud actualizada',
         'legal.terms_accepted' => 'Terminos aceptados',
@@ -664,6 +680,35 @@ class AdminService {
     return (res.data as List)
         .map((item) => AdminOperationalAlert.fromJson(item))
         .toList();
+  }
+
+  Future<List<PayoutModel>> listPayouts({String? status}) async {
+    final res = await _api.get(
+      '/payouts',
+      params: {
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+    return (res.data as List)
+        .map((item) => PayoutModel.fromJson(item))
+        .toList();
+  }
+
+  Future<void> updatePayout({
+    required int payoutId,
+    required String status,
+    DateTime? scheduledFor,
+    String? transferReference,
+    String? note,
+  }) async {
+    await _api.put('/payouts/$payoutId', {
+      'status': status,
+      if (scheduledFor != null)
+        'scheduled_for': scheduledFor.toUtc().toIso8601String(),
+      if (transferReference != null && transferReference.trim().isNotEmpty)
+        'transfer_reference': transferReference.trim(),
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    });
   }
 
   Future<List<AdminLegalConsent>> listLegalConsents() async {

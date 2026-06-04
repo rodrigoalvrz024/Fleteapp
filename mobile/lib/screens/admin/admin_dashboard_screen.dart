@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/payout_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
 import '../../utils/file_download.dart';
@@ -35,6 +36,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   List<AdminAuditEvent> _auditEvents = [];
   List<AdminOperationalAlert> _alerts = [];
   List<AdminLegalConsent> _legalConsents = [];
+  List<PayoutModel> _payouts = [];
   String _auditEntityType = '';
   String _auditEventType = '';
   String _auditActorRole = '';
@@ -88,6 +90,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _service.listDrivers(),
         _service.listPrivacyRequests(),
         _service.listOperationalAlerts(),
+        _service.listPayouts(),
         _service.listLegalConsents(),
         _service.listAuditEvents(
           limit: 100,
@@ -107,8 +110,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _drivers = results[2] as List<AdminDriver>;
         _privacyRequests = results[3] as List<AdminPrivacyRequest>;
         _alerts = results[4] as List<AdminOperationalAlert>;
-        _legalConsents = results[5] as List<AdminLegalConsent>;
-        _auditEvents = results[6] as List<AdminAuditEvent>;
+        _payouts = results[5] as List<PayoutModel>;
+        _legalConsents = results[6] as List<AdminLegalConsent>;
+        _auditEvents = results[7] as List<AdminAuditEvent>;
       });
     } catch (_) {
       if (mounted) {
@@ -286,6 +290,25 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
+  Future<void> _updatePayout(PayoutModel payout) async {
+    final update = await showDialog<_PayoutUpdateData>(
+      context: context,
+      builder: (_) => _PayoutUpdateDialog(payout: payout),
+    );
+    if (update == null) return;
+
+    await _runDriverAction(
+      success: 'Liquidacion #${payout.id} actualizada',
+      action: () => _service.updatePayout(
+        payoutId: payout.id,
+        status: update.status,
+        scheduledFor: update.scheduledFor,
+        transferReference: update.transferReference,
+        note: update.note,
+      ),
+    );
+  }
+
   Future<void> _runDriverAction({
     required String success,
     required Future<void> Function() action,
@@ -385,6 +408,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             userCount: _users.length,
                             driverCount: _drivers.length,
                             privacyCount: _privacyRequests.length,
+                            payoutCount: _payouts.length,
                             auditCount: _auditEvents.length,
                             legalCount: _legalConsents.length,
                             onChanged: (value) =>
@@ -404,12 +428,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               onDeleteDocuments: _deleteDocuments,
                             )
                           else if (_tabIndex == 2)
+                            _PayoutsPanel(
+                              payouts: _payouts,
+                              money: _money,
+                              actionLoading: _actionLoading,
+                              onUpdate: _updatePayout,
+                            )
+                          else if (_tabIndex == 3)
                             _PrivacyRequestsPanel(
                               requests: _privacyRequests,
                               actionLoading: _actionLoading,
                               onUpdate: _updatePrivacyRequest,
                             )
-                          else if (_tabIndex == 3)
+                          else if (_tabIndex == 4)
                             _AuditEventsPanel(
                               events: _auditEvents,
                               loading: _auditLoading,
@@ -624,12 +655,20 @@ class _MetricsGrid extends StatelessWidget {
         color: AppTheme.warning,
       ),
       _MetricData(
-        label: 'Pago conductores',
+        label: 'Por pagar conductores',
         value: loading
             ? '...'
-            : '\$${money.format(metrics?.driverPayoutClp ?? 0)}',
+            : '\$${money.format(metrics?.pendingDriverPayoutClp ?? 0)}',
+        icon: Icons.pending_actions_outlined,
+        color: AppTheme.warning,
+      ),
+      _MetricData(
+        label: 'Pagado conductores',
+        value: loading
+            ? '...'
+            : '\$${money.format(metrics?.paidDriverPayoutClp ?? 0)}',
         icon: Icons.handshake_outlined,
-        color: AppTheme.midnight,
+        color: AppTheme.success,
       ),
       _MetricData(
         label: 'Por aprobar',
@@ -1072,6 +1111,14 @@ class _FinancePanel extends StatelessWidget {
               value: '\$${money.format(metrics.grossCompletedClp)}',
             ),
             _FinanceRow(
+              label: 'Liquidaciones por pagar',
+              value: '\$${money.format(metrics.pendingDriverPayoutClp)}',
+            ),
+            _FinanceRow(
+              label: 'Liquidaciones pagadas',
+              value: '\$${money.format(metrics.paidDriverPayoutClp)}',
+            ),
+            _FinanceRow(
               label: 'Finalización',
               value: '${metrics.completionRate}%',
             ),
@@ -1141,6 +1188,7 @@ class _TabSelector extends StatelessWidget {
   final int userCount;
   final int driverCount;
   final int privacyCount;
+  final int payoutCount;
   final int auditCount;
   final int legalCount;
   final ValueChanged<int> onChanged;
@@ -1150,6 +1198,7 @@ class _TabSelector extends StatelessWidget {
     required this.userCount,
     required this.driverCount,
     required this.privacyCount,
+    required this.payoutCount,
     required this.auditCount,
     required this.legalCount,
     required this.onChanged,
@@ -1180,24 +1229,31 @@ class _TabSelector extends StatelessWidget {
             ),
             _TabButton(
               selected: index == 2,
-              icon: Icons.privacy_tip_outlined,
-              label: 'Datos',
-              count: privacyCount,
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Liquidaciones',
+              count: payoutCount,
               onTap: () => onChanged(2),
             ),
             _TabButton(
               selected: index == 3,
-              icon: Icons.history_rounded,
-              label: 'Historial',
-              count: auditCount,
+              icon: Icons.privacy_tip_outlined,
+              label: 'Datos',
+              count: privacyCount,
               onTap: () => onChanged(3),
             ),
             _TabButton(
               selected: index == 4,
+              icon: Icons.history_rounded,
+              label: 'Historial',
+              count: auditCount,
+              onTap: () => onChanged(4),
+            ),
+            _TabButton(
+              selected: index == 5,
               icon: Icons.verified_user_outlined,
               label: 'Legal',
               count: legalCount,
-              onTap: () => onChanged(4),
+              onTap: () => onChanged(5),
             ),
           ],
         ),
@@ -1376,6 +1432,180 @@ class _UserRow extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _PayoutsPanel extends StatelessWidget {
+  final List<PayoutModel> payouts;
+  final NumberFormat money;
+  final bool actionLoading;
+  final ValueChanged<PayoutModel> onUpdate;
+
+  const _PayoutsPanel({
+    required this.payouts,
+    required this.money,
+    required this.actionLoading,
+    required this.onUpdate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (payouts.isEmpty) {
+      return const _EmptyPanel(
+        icon: Icons.account_balance_wallet_outlined,
+        text: 'Sin liquidaciones registradas',
+      );
+    }
+    return _DataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: _PanelTitle(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Liquidaciones de conductores',
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < payouts.length; i++) ...[
+            _PayoutRow(
+              payout: payouts[i],
+              money: money,
+              actionLoading: actionLoading,
+              onUpdate: onUpdate,
+            ),
+            if (i != payouts.length - 1) const Divider(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PayoutRow extends StatelessWidget {
+  final PayoutModel payout;
+  final NumberFormat money;
+  final bool actionLoading;
+  final ValueChanged<PayoutModel> onUpdate;
+
+  const _PayoutRow({
+    required this.payout,
+    required this.money,
+    required this.actionLoading,
+    required this.onUpdate,
+  });
+
+  Color get _statusColor => switch (payout.status) {
+        'scheduled' => AppTheme.primary,
+        'paid' => AppTheme.success,
+        'failed' => AppTheme.error,
+        _ => AppTheme.warning,
+      };
+
+  String _formatDate(DateTime? value) {
+    if (value == null) return '';
+    return DateFormat('dd/MM/yyyy HH:mm').format(value.toLocal());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final milestone = switch (payout.status) {
+      'scheduled' => 'Programada ${_formatDate(payout.scheduledFor)}',
+      'paid' => 'Pagada ${_formatDate(payout.paidAt)}',
+      'failed' => 'Requiere correccion',
+      _ => 'Pendiente de programacion',
+    };
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '\$${money.format(payout.amount)} CLP',
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  _StatusPill(label: payout.statusLabel, color: _statusColor),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '${payout.driverName} · Flete #${payout.freightId} · Pago #${payout.paymentId}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.slate600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                milestone,
+                style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
+              ),
+              if ((payout.transferReference ?? '').isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(
+                  'Referencia: ${payout.transferReference}',
+                  style:
+                      const TextStyle(color: AppTheme.slate400, fontSize: 12),
+                ),
+              ],
+              if ((payout.note ?? '').isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Text(
+                  payout.note!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(color: AppTheme.slate600, fontSize: 12),
+                ),
+              ],
+            ],
+          );
+          final action = OutlinedButton.icon(
+            onPressed: actionLoading ? null : () => onUpdate(payout),
+            icon: const Icon(Icons.edit_calendar_outlined, size: 17),
+            label: const Text('Gestionar'),
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                details,
+                if (payout.status != 'paid') ...[
+                  const SizedBox(height: 12),
+                  action,
+                ],
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: details),
+              if (payout.status != 'paid') ...[
+                const SizedBox(width: 16),
+                action,
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _PrivacyRequestsPanel extends StatelessWidget {
@@ -1745,6 +1975,7 @@ class _AuditFiltersBar extends StatelessWidget {
     'vehicle': 'Vehiculos',
     'freight': 'Fletes',
     'payment': 'Pagos',
+    'driver_payout': 'Liquidaciones',
     'data_privacy_request': 'Privacidad',
     'user_consent': 'Legal',
     'system': 'Sistema',
@@ -1769,6 +2000,11 @@ class _AuditFiltersBar extends StatelessWidget {
     'freight.status_changed': 'Estado de flete',
     'payment.initiated': 'Pago iniciado',
     'payment.authorized': 'Pago autorizado',
+    'driver_payout.created': 'Liquidacion creada',
+    'driver_payout.pending': 'Liquidacion pendiente',
+    'driver_payout.scheduled': 'Liquidacion programada',
+    'driver_payout.paid': 'Liquidacion pagada',
+    'driver_payout.failed': 'Liquidacion fallida',
     'privacy_request.created': 'Solicitud creada',
     'privacy_request.status_changed': 'Solicitud actualizada',
     'legal.terms_accepted': 'Terminos aceptados',
@@ -2062,6 +2298,7 @@ class _AuditEventRow extends StatelessWidget {
     if (event.eventType.startsWith('driver.')) return AppTheme.success;
     if (event.eventType.startsWith('freight.')) return AppTheme.primary;
     if (event.eventType.startsWith('payment.')) return AppTheme.midnight;
+    if (event.eventType.startsWith('driver_payout.')) return AppTheme.success;
     if (event.eventType.startsWith('privacy_request.')) return AppTheme.error;
     if (event.eventType.startsWith('legal.')) return AppTheme.success;
     if (event.eventType.startsWith('system.')) return AppTheme.error;
@@ -2075,6 +2312,9 @@ class _AuditEventRow extends StatelessWidget {
     }
     if (event.eventType.startsWith('freight.')) return Icons.route_outlined;
     if (event.eventType.startsWith('payment.')) return Icons.payments_outlined;
+    if (event.eventType.startsWith('driver_payout.')) {
+      return Icons.account_balance_wallet_outlined;
+    }
     if (event.eventType.startsWith('privacy_request.')) {
       return Icons.privacy_tip_outlined;
     }
@@ -3242,6 +3482,184 @@ class _VehicleLine extends StatelessWidget {
       ],
     );
   }
+}
+
+class _PayoutUpdateData {
+  final String status;
+  final DateTime? scheduledFor;
+  final String? transferReference;
+  final String? note;
+
+  const _PayoutUpdateData({
+    required this.status,
+    this.scheduledFor,
+    this.transferReference,
+    this.note,
+  });
+}
+
+class _PayoutUpdateDialog extends StatefulWidget {
+  final PayoutModel payout;
+
+  const _PayoutUpdateDialog({required this.payout});
+
+  @override
+  State<_PayoutUpdateDialog> createState() => _PayoutUpdateDialogState();
+}
+
+class _PayoutUpdateDialogState extends State<_PayoutUpdateDialog> {
+  late String _status;
+  late DateTime _scheduledFor;
+  late final TextEditingController _referenceController;
+  late final TextEditingController _noteController;
+
+  List<String> get _options => switch (widget.payout.status) {
+        'scheduled' => const ['paid', 'pending', 'failed'],
+        'failed' => const ['scheduled', 'pending', 'paid'],
+        _ => const ['scheduled', 'paid', 'failed'],
+      };
+
+  String _label(String status) => switch (status) {
+        'pending' => 'Dejar pendiente',
+        'scheduled' => 'Programar transferencia',
+        'paid' => 'Marcar pagada',
+        'failed' => 'Registrar fallo',
+        _ => status,
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    _status = _options.first;
+    _scheduledFor = widget.payout.scheduledFor?.toLocal() ??
+        DateTime.now().add(const Duration(days: 1));
+    _referenceController = TextEditingController(
+      text: widget.payout.transferReference ?? '',
+    );
+    _noteController = TextEditingController(text: widget.payout.note ?? '');
+  }
+
+  @override
+  void dispose() {
+    _referenceController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _scheduledFor,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(
+      () => _scheduledFor = DateTime(picked.year, picked.month, picked.day, 12),
+    );
+  }
+
+  bool get _canSubmit {
+    if (_status == 'paid') return _referenceController.text.trim().isNotEmpty;
+    if (_status == 'failed') return _noteController.text.trim().isNotEmpty;
+    return true;
+  }
+
+  void _submit() {
+    if (!_canSubmit) return;
+    Navigator.pop(
+      context,
+      _PayoutUpdateData(
+        status: _status,
+        scheduledFor: _status == 'scheduled' ? _scheduledFor : null,
+        transferReference:
+            _status == 'paid' ? _referenceController.text.trim() : null,
+        note: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text('Gestionar liquidacion #${widget.payout.id}'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${widget.payout.driverName} · Flete #${widget.payout.freightId}',
+                style: const TextStyle(color: AppTheme.slate600, fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: _status,
+                decoration: const InputDecoration(labelText: 'Nuevo estado'),
+                items: [
+                  for (final status in _options)
+                    DropdownMenuItem(
+                      value: status,
+                      child: Text(_label(status)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _status = value);
+                },
+              ),
+              if (_status == 'scheduled') ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: Text(
+                    'Fecha: ${DateFormat('dd/MM/yyyy').format(_scheduledFor)}',
+                  ),
+                ),
+              ],
+              if (_status == 'paid') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _referenceController,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Referencia de transferencia',
+                    hintText: 'Ej: transferencia bancaria 10452',
+                  ),
+                ),
+              ],
+              if (_status == 'failed' || _status == 'scheduled') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _noteController,
+                  minLines: 2,
+                  maxLines: 4,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: _status == 'failed'
+                        ? 'Motivo del fallo'
+                        : 'Nota opcional',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: _canSubmit ? _submit : null,
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: const Text('Guardar'),
+          ),
+        ],
+      );
 }
 
 class _RejectDriverDialog extends StatefulWidget {

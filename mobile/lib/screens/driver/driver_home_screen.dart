@@ -431,6 +431,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                       color: AppTheme.slate600,
                     ),
                     const SizedBox(height: 10),
+                    _ActionTile(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'Mis liquidaciones',
+                      subtitle: 'Montos pendientes, programados y pagados',
+                      onTap: () => context.push('/app/driver/payouts'),
+                      color: AppTheme.success,
+                    ),
+                    const SizedBox(height: 10),
 
                     _ActionTile(
                       icon: Icons.help_outline_rounded,

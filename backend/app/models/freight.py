@@ -69,6 +69,7 @@ class FreightRequest(Base):
     status_history = relationship("TripStatusHistory", back_populates="freight")
     payment = relationship("Payment", back_populates="freight", uselist=False)
     rating = relationship("Rating", back_populates="freight", uselist=False)
+    driver_payout = relationship("DriverPayout", back_populates="freight", uselist=False)
 
     @property
     def has_pickup_photo(self) -> bool:

@@ -34,3 +34,4 @@ class Payment(Base):
     last_modified_by = Column(Integer, nullable=True)
 
     freight = relationship("FreightRequest", back_populates="payment")
+    driver_payout = relationship("DriverPayout", back_populates="payment", uselist=False)

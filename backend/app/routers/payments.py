@@ -12,6 +12,7 @@ from app.schemas.payment import PaymentCreate, PaymentResponse, WebpayInitRespon
 from app.core.security import get_current_user, require_role
 from app.core.config import settings
 from app.services.audit_service import record_audit_event
+from app.services.payout_service import ensure_driver_payout
 from app.services.transbank_service import (
     commit_webpay_transaction,
     create_webpay_transaction,
@@ -169,6 +170,9 @@ async def _process_payment_callback(
         raise HTTPException(status_code=404, detail="Pago no encontrado")
 
     if payment.status == PaymentStatus.authorized:
+        payout = ensure_driver_payout(db, payment)
+        if payout:
+            db.commit()
         return RedirectResponse(
             _frontend_payment_result(payment.freight_id, "success"),
             status_code=303,
@@ -214,6 +218,22 @@ async def _process_payment_callback(
         payment.paid_at = datetime.now(timezone.utc)
         payment.authorization_code = commit["authorization_code"]
         payment.transaction_id = commit["transaction_id"]
+        payout = ensure_driver_payout(db, payment)
+        if payout:
+            record_audit_event(
+                db,
+                entity_type="driver_payout",
+                entity_id=payout.id,
+                event_type="driver_payout.created",
+                after_data={
+                    "payment_id": payment.id,
+                    "freight_id": payout.freight_id,
+                    "driver_id": payout.driver_id,
+                    "amount": payout.amount,
+                    "status": payout.status.value,
+                },
+                request=request,
+            )
     record_audit_event(
         db,
         entity_type="payment",

@@ -14,6 +14,7 @@ import '../../screens/driver/available_freights_screen.dart';
 import '../../screens/driver/driver_freight_detail_screen.dart';
 import '../../screens/driver/driver_home_screen.dart';
 import '../../screens/driver/driver_onboarding_screen.dart';
+import '../../screens/driver/driver_payouts_screen.dart';
 import '../../screens/legal/legal_document_screen.dart';
 import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
@@ -126,6 +127,10 @@ final _router = GoRouter(
       path: '/app/driver/onboarding',
       builder: (_, __) => const DriverOnboardingScreen(),
     ),
+    GoRoute(
+      path: '/app/driver/payouts',
+      builder: (_, __) => const DriverPayoutsScreen(),
+    ),
 
     // Admin web.
     GoRoute(
@@ -195,6 +200,10 @@ final _router = GoRouter(
     GoRoute(
       path: '/driver/onboarding',
       redirect: (_, state) => _withQuery('/app/driver/onboarding', state),
+    ),
+    GoRoute(
+      path: '/driver/payouts',
+      redirect: (_, state) => _withQuery('/app/driver/payouts', state),
     ),
   ],
 );

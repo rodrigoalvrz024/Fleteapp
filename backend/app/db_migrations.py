@@ -106,6 +106,33 @@ STARTUP_MIGRATIONS = (
     ALTER TABLE data_privacy_requests
     ADD COLUMN IF NOT EXISTS last_modified_by INTEGER
     """,
+    """
+    INSERT INTO driver_payouts (
+        payment_id,
+        freight_id,
+        driver_id,
+        amount,
+        status,
+        created_at
+    )
+    SELECT
+        payments.id,
+        freight_requests.id,
+        freight_requests.driver_id,
+        freight_requests.driver_receives,
+        'pending',
+        NOW()
+    FROM payments
+    JOIN freight_requests ON freight_requests.id = payments.freight_id
+    WHERE payments.status::text = 'authorized'
+      AND freight_requests.driver_id IS NOT NULL
+      AND freight_requests.driver_receives IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM driver_payouts
+          WHERE driver_payouts.payment_id = payments.id
+      )
+    """,
 )
 
 

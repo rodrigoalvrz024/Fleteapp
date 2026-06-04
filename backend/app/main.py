@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.database import engine, Base, SessionLocal
 from app.db_migrations import run_startup_migrations
 from app.models.audit_event import AuditEvent
-from app.routers import auth, users, drivers, freights, payments, ratings, admin
+from app.routers import auth, users, drivers, freights, payments, payouts, ratings, admin
 
 Base.metadata.create_all(bind=engine)
 run_startup_migrations(engine)
@@ -85,6 +85,7 @@ app.include_router(users.router)
 app.include_router(drivers.router)
 app.include_router(freights.router)
 app.include_router(payments.router)
+app.include_router(payouts.router)
 app.include_router(ratings.router)
 app.include_router(admin.router)
 

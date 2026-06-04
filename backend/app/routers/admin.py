@@ -21,6 +21,7 @@ from app.models.user_consent import UserConsent
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus
+from app.models.driver_payout import DriverPayout, DriverPayoutStatus
 from app.schemas.privacy_request import PrivacyRequestAdminUpdate
 from app.schemas.user import UserResponse
 from app.core.security import require_role
@@ -509,6 +510,11 @@ def list_operational_alerts(
             ]
         )
     ).count()
+    pending_payouts = db.query(DriverPayout).filter(
+        DriverPayout.status.in_(
+            [DriverPayoutStatus.pending, DriverPayoutStatus.failed]
+        )
+    ).count()
 
     if backend_errors_24h:
         alerts.append(
@@ -518,6 +524,16 @@ def list_operational_alerts(
                 "Hay respuestas 500 registradas en la bitacora.",
                 backend_errors_24h,
                 "Revisar Historial filtrando accion system.backend_error",
+            )
+        )
+    if pending_payouts:
+        alerts.append(
+            _alert(
+                "warning",
+                "Liquidaciones por resolver",
+                "Hay pagos a conductores pendientes o fallidos.",
+                pending_payouts,
+                "Revisar pestaña Liquidaciones",
             )
         )
     if stale_pending_drivers:
@@ -949,6 +965,7 @@ def get_metrics(
     drivers_by_status = _count_by(db, Driver.status)
     freights_by_status = _count_by(db, FreightRequest.status)
     payments_by_status = _count_by(db, Payment.status)
+    payouts_by_status = _count_by(db, DriverPayout.status)
     pending_privacy_requests = db.query(DataPrivacyRequest).filter(
         DataPrivacyRequest.status.in_(
             [
@@ -978,10 +995,22 @@ def get_metrics(
             FreightStatus.in_progress,
         ]),
     )
-    driver_payout_clp = _sum_or_zero(
+    driver_payout_clp = _sum_or_zero(db, DriverPayout.amount)
+    pending_driver_payout_clp = _sum_or_zero(
         db,
-        FreightRequest.driver_receives,
-        FreightRequest.status == FreightStatus.completed,
+        DriverPayout.amount,
+        DriverPayout.status.in_(
+            [
+                DriverPayoutStatus.pending,
+                DriverPayoutStatus.scheduled,
+                DriverPayoutStatus.failed,
+            ]
+        ),
+    )
+    paid_driver_payout_clp = _sum_or_zero(
+        db,
+        DriverPayout.amount,
+        DriverPayout.status == DriverPayoutStatus.paid,
     )
     gross_completed_clp = _sum_or_zero(
         db,
@@ -1027,6 +1056,7 @@ def get_metrics(
         "completed_freights":             completed_freights,
         "completion_rate":                completion_rate,
         "payments_by_status":             payments_by_status,
+        "payouts_by_status":              payouts_by_status,
         "pending_privacy_requests":       pending_privacy_requests,
         "authorized_payments_count":      authorized_payments_count,
         "authorized_payments_clp":        authorized_payments_clp,
@@ -1035,6 +1065,8 @@ def get_metrics(
         "platform_commission_clp":        platform_commission_clp,
         "pending_platform_commission_clp": pending_platform_commission_clp,
         "driver_payout_clp":              driver_payout_clp,
+        "pending_driver_payout_clp":      pending_driver_payout_clp,
+        "paid_driver_payout_clp":         paid_driver_payout_clp,
         # Compatibilidad: antes esta tarjeta se llamaba "Ingresos".
         "total_revenue_clp":              authorized_payments_clp,
     }
