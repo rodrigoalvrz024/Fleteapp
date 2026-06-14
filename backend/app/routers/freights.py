@@ -14,7 +14,7 @@ from app.core.security import (
     verify_password,
 )
 from app.database import get_db
-from app.models.driver import Driver
+from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus, TripStatusHistory
 from app.models.user import User, UserRole
 from app.schemas.freight import (
@@ -57,6 +57,13 @@ def _require_freight_view_access(
     if current_user.role == UserRole.driver:
         driver = _get_driver_for_user(db, current_user)
         if driver and freight.driver_id == driver.id:
+            return
+        if (
+            driver
+            and driver.status == DriverStatus.approved
+            and freight.status == FreightStatus.pending
+            and freight.driver_id is None
+        ):
             return
     raise HTTPException(status_code=403, detail="No tienes permiso para ver este flete")
 
@@ -189,7 +196,13 @@ def list_freights(status: str = None, db: Session = Depends(get_db), current_use
     elif current_user.role == UserRole.driver:
         driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
         if status == "available":
-            query = query.filter(FreightRequest.status == FreightStatus.pending, FreightRequest.driver_id == None)
+            if driver and driver.status == DriverStatus.approved:
+                query = query.filter(
+                    FreightRequest.status == FreightStatus.pending,
+                    FreightRequest.driver_id == None,
+                )
+            else:
+                query = query.filter(False)
         else:
             query = query.filter(FreightRequest.driver_id == driver.id) if driver else query.filter(False)
     if status and status != "available":
