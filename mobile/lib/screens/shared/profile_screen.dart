@@ -191,6 +191,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return WebPageScaffold(
       title: 'Mi perfil',
       subtitle: 'Cuenta, privacidad, soporte y seguridad',
+      actions: [
+        WebAppBarActions(
+          homePath: role == 'driver'
+              ? '/app/driver'
+              : role == 'admin'
+                  ? '/admin'
+                  : '/app/client',
+        ),
+      ],
       child: WebPageBody(
         maxWidth: 780,
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),

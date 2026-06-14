@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -182,6 +183,39 @@ class WebPanel extends StatelessWidget {
       padding: padding,
       decoration: AppTheme.cardDecoration(),
       child: child,
+    );
+  }
+}
+
+class WebAppBarActions extends StatelessWidget {
+  final String homePath;
+
+  const WebAppBarActions({
+    super.key,
+    required this.homePath,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: 'Inicio',
+          child: IconButton(
+            onPressed: () => context.go(homePath),
+            icon: const Icon(Icons.home_outlined),
+          ),
+        ),
+        Tooltip(
+          message: 'Perfil',
+          child: IconButton(
+            onPressed: () => context.push('/app/profile'),
+            icon: const Icon(Icons.person_outline_rounded),
+          ),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 }

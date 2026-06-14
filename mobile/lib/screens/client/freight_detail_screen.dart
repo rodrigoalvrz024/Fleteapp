@@ -272,6 +272,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     if (_loading) {
       return const WebPageScaffold(
         title: 'Detalle de flete',
+        actions: [WebAppBarActions(homePath: '/app/client')],
         child: WebLoadingState(),
       );
     }
@@ -279,6 +280,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     if (freight == null) {
       return WebPageScaffold(
         title: 'Detalle de flete',
+        actions: const [WebAppBarActions(homePath: '/app/client')],
         child: WebPageBody(
           children: [
             WebEmptyState(
@@ -301,6 +303,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     return WebPageScaffold(
       title: 'Flete #${freight.id}',
       subtitle: 'Seguimiento operativo, ruta, carga y precio',
+      actions: const [WebAppBarActions(homePath: '/app/client')],
       child: WebPageBody(
         onRefresh: _load,
         children: [

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,9 +8,11 @@ import 'package:intl/intl.dart';
 import '../../services/freight_service.dart';
 import '../../services/api_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
+import '../../utils/api_error_message.dart';
 import '../shared/web_layout.dart';
 
-class CreateFreightScreen extends StatefulWidget {
+class CreateFreightScreen extends ConsumerStatefulWidget {
   final String? destAddress;
   final double? destLat;
   final double? destLng;
@@ -28,10 +31,11 @@ class CreateFreightScreen extends StatefulWidget {
   });
 
   @override
-  State<CreateFreightScreen> createState() => _CreateFreightScreenState();
+  ConsumerState<CreateFreightScreen> createState() =>
+      _CreateFreightScreenState();
 }
 
-class _CreateFreightScreenState extends State<CreateFreightScreen>
+class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _freightService = FreightService();
@@ -207,7 +211,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
 
   Future<void> _estimatePrice() async {
     if (_originLatLng == null || _destLatLng == null) return;
-    final weight = double.tryParse(_weightCtrl.text);
+    final weight = _cargoWeight;
     if (weight == null || weight <= 0) return;
 
     setState(() => _estimating = true);
@@ -232,6 +236,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         'is_urgent': _isUrgent,
         if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
       });
+      if (!mounted) return;
       setState(() {
         _clientPays = (res.data['client_pays'] as num?)?.toDouble();
         _driverReceives = (res.data['driver_receives'] as num?)?.toDouble();
@@ -240,7 +245,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       });
     } catch (_) {
     } finally {
-      setState(() => _estimating = false);
+      if (mounted) setState(() => _estimating = false);
     }
   }
 
@@ -297,9 +302,11 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
 
   bool get _routeReady => _originLatLng != null && _destLatLng != null;
 
+  double? get _cargoWeight =>
+      double.tryParse(_weightCtrl.text.trim().replaceAll(',', '.'));
+
   bool get _cargoReady =>
-      _cargoCtrl.text.trim().isNotEmpty &&
-      (double.tryParse(_weightCtrl.text) ?? 0) > 0;
+      _cargoCtrl.text.trim().isNotEmpty && (_cargoWeight ?? 0) > 0;
 
   bool get _timingReady =>
       _isUrgent || (_scheduledDate != null && _scheduledTime != null);
@@ -317,12 +324,51 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
     return _routeReady && _cargoReady && _timingReady;
   }
 
+  String _roleLabel(String? role) {
+    if (role == 'driver') return 'conductor';
+    if (role == 'admin') return 'administrador';
+    return 'usuario';
+  }
+
+  Future<bool> _ensureClientSession() async {
+    if (!ref.read(authProvider).isAuthenticated) {
+      await ref.read(authProvider.notifier).checkAuth();
+    }
+    final user = ref.read(authProvider).user;
+    if (user == null) {
+      if (!mounted) return false;
+      setState(() => _error = 'Tu sesion expiro. Vuelve a iniciar sesion.');
+      return false;
+    }
+    if (user.role != 'client') {
+      if (!mounted) return false;
+      setState(() {
+        _error =
+            'Estas usando una cuenta de ${_roleLabel(user.role)}. Para solicitar fletes, inicia sesion con una cuenta de cliente.';
+      });
+      return false;
+    }
+    return true;
+  }
+
+  String _submitValidationMessage() {
+    if (!_routeReady) return 'Selecciona origen y destino del flete.';
+    if (_cargoCtrl.text.trim().isEmpty) return 'Describe la carga a mover.';
+    if ((_cargoWeight ?? 0) <= 0) return 'Ingresa un peso valido en kilos.';
+    if (!_timingReady) {
+      return 'Selecciona fecha y hora o marca el flete urgente.';
+    }
+    return 'Completa los datos del flete.';
+  }
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!await _ensureClientSession()) return;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _error = _submitValidationMessage());
+      return;
+    }
     if (!_canSubmit) {
-      setState(() => _error = _isUrgent
-          ? 'Completa todos los campos'
-          : 'Selecciona fecha y hora del flete');
+      setState(() => _error = _submitValidationMessage());
       return;
     }
 
@@ -345,14 +391,14 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       }
 
       await _freightService.createFreight(
-        originAddress: _originCtrl.text,
+        originAddress: _originCtrl.text.trim(),
         originLat: _originLatLng!.latitude,
         originLng: _originLatLng!.longitude,
-        destinationAddress: _destCtrl.text,
+        destinationAddress: _destCtrl.text.trim(),
         destinationLat: _destLatLng!.latitude,
         destinationLng: _destLatLng!.longitude,
-        cargoDescription: _cargoCtrl.text,
-        cargoWeightKg: double.parse(_weightCtrl.text),
+        cargoDescription: _cargoCtrl.text.trim(),
+        cargoWeightKg: _cargoWeight!,
         requiresHelpers: _helpers,
         isUrgent: _isUrgent,
         scheduledAt: scheduledAt,
@@ -368,10 +414,16 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ));
       context.go('/app/client/freights');
-    } catch (_) {
-      setState(() => _error = 'Error al crear el flete. Intenta de nuevo.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = apiErrorMessage(
+          e,
+          fallback: 'No pudimos crear el flete. Intenta nuevamente.',
+        );
+      });
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -383,6 +435,7 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
       title: 'Solicitar flete',
       subtitle:
           'Define ruta, carga y horario; revisa el precio antes de confirmar',
+      actions: const [WebAppBarActions(homePath: '/app/client')],
       // The form stays before the floating CTA so this screen reads top-down.
       // ignore: sort_child_properties_last
       child: Form(
@@ -505,7 +558,8 @@ class _CreateFreightScreenState extends State<CreateFreightScreen>
                             TextStyle(color: AppTheme.slate400, fontSize: 13),
                       ),
                       validator: (v) {
-                        final n = double.tryParse(v ?? '');
+                        final n = double.tryParse(
+                            (v ?? '').trim().replaceAll(',', '.'));
                         return (n != null && n > 0) ? null : 'Ingresa el peso';
                       },
                       onChanged: (_) {
