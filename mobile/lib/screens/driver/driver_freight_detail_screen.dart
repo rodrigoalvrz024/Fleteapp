@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../utils/api_error_message.dart';
 import '../shared/web_layout.dart';
 
 class DriverFreightDetailScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   FreightModel? _freight;
   bool _loading = true;
   bool _actionLoading = false;
+  static const int _maxEvidenceBytes = 8 * 1024 * 1024;
 
   @override
   void initState() {
@@ -103,32 +105,53 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   }
 
   Future<void> _pickEvidence(String kind) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Tomar foto'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Elegir de galería'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
+    XFile? file;
+    try {
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Tomar foto'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Elegir de galería'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-    if (source == null) return;
-    final file = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 78,
-      maxWidth: 1800,
-    );
+      );
+      if (source == null) return;
+      file = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 78,
+        maxWidth: 1800,
+      );
+    } catch (e) {
+      _showMessage(
+        apiErrorMessage(
+          e,
+          fallback: 'No pudimos abrir la camara o galeria.',
+        ),
+        error: true,
+      );
+      return;
+    }
     if (file == null) return;
+
+    final length = await file.length();
+    if (length > _maxEvidenceBytes) {
+      _showMessage(
+        'La foto supera el maximo de 8 MB. Prueba con una imagen mas liviana.',
+        error: true,
+      );
+      return;
+    }
 
     setState(() => _actionLoading = true);
     try {
@@ -139,8 +162,14 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
             ? 'Foto de retiro registrada'
             : 'Foto de entrega registrada',
       );
-    } catch (_) {
-      _showMessage('No pudimos cargar la foto.', error: true);
+    } catch (e) {
+      _showMessage(
+        apiErrorMessage(
+          e,
+          fallback: 'No pudimos cargar la foto. Usa JPG, PNG o WEBP.',
+        ),
+        error: true,
+      );
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }

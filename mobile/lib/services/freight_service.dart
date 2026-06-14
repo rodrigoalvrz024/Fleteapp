@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api_service.dart';
@@ -75,8 +76,13 @@ class FreightService {
 
   Future<FreightModel> uploadEvidence(int id, String kind, XFile file) async {
     final bytes = await file.readAsBytes();
+    final contentType = _imageContentType(bytes, file.name);
     final form = FormData.fromMap({
-      'file': MultipartFile.fromBytes(bytes, filename: file.name),
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: _safeImageFilename(file.name, contentType),
+        contentType: contentType,
+      ),
     });
     final res = await _api.uploadForm(
       '${ApiConstants.freights}/$id/evidence/$kind',
@@ -91,4 +97,56 @@ class FreightService {
     );
     return res.data['url'] as String;
   }
+}
+
+MediaType _imageContentType(List<int> bytes, String filename) {
+  if (_startsWith(bytes, [0xFF, 0xD8, 0xFF])) {
+    return MediaType('image', 'jpeg');
+  }
+  if (_startsWith(bytes, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) {
+    return MediaType('image', 'png');
+  }
+  if (bytes.length >= 12 &&
+      _startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
+      bytes[8] == 0x57 &&
+      bytes[9] == 0x45 &&
+      bytes[10] == 0x42 &&
+      bytes[11] == 0x50) {
+    return MediaType('image', 'webp');
+  }
+
+  final lower = filename.toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return MediaType('image', 'jpeg');
+  }
+  if (lower.endsWith('.png')) return MediaType('image', 'png');
+  if (lower.endsWith('.webp')) return MediaType('image', 'webp');
+
+  return MediaType('application', 'octet-stream');
+}
+
+String _safeImageFilename(String filename, MediaType contentType) {
+  final lower = filename.toLowerCase();
+  if (lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.png') ||
+      lower.endsWith('.webp')) {
+    return filename;
+  }
+
+  final extension = switch (contentType.mimeType) {
+    'image/jpeg' => '.jpg',
+    'image/png' => '.png',
+    'image/webp' => '.webp',
+    _ => '.bin',
+  };
+  return 'evidencia$extension';
+}
+
+bool _startsWith(List<int> bytes, List<int> signature) {
+  if (bytes.length < signature.length) return false;
+  for (var i = 0; i < signature.length; i++) {
+    if (bytes[i] != signature[i]) return false;
+  }
+  return true;
 }
