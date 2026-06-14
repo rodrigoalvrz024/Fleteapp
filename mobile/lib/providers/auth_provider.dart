@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
@@ -95,9 +96,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   String _parseError(dynamic e) {
+    if (e is DioException) {
+      final status = e.response?.statusCode;
+      final data = e.response?.data;
+      final detail = data is Map ? data['detail']?.toString() : null;
+      if (status == 400) {
+        return detail?.isNotEmpty == true
+            ? detail!
+            : 'Revisa los datos ingresados.';
+      }
+      if (status == 401) return 'Credenciales incorrectas';
+      if (status == 403) return detail ?? 'Cuenta suspendida';
+      if (status == 422) return 'Revisa el formato de los datos.';
+      if (status == 429) {
+        return detail ?? 'Demasiados intentos. Intenta nuevamente mas tarde.';
+      }
+      if (status != null) {
+        return detail ?? 'No se pudo completar la solicitud. Codigo $status.';
+      }
+    }
     final msg = e.toString();
     if (msg.contains('400')) {
       return 'El correo o teléfono ya está registrado';
+    }
+    if (msg.contains('429')) {
+      return 'Demasiados intentos. Intenta nuevamente mas tarde.';
     }
     if (msg.contains('401')) return 'Credenciales incorrectas';
     if (msg.contains('403')) return 'Cuenta suspendida';
