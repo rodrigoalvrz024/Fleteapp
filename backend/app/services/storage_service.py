@@ -16,7 +16,32 @@ ALLOWED_UPLOAD_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
+    "image/heic-sequence": ".heic",
+    "image/heif-sequence": ".heif",
     "application/pdf": ".pdf",
+}
+ALLOWED_IMAGE_UPLOAD_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/heic-sequence",
+    "image/heif-sequence",
+}
+HEIF_BRANDS = {
+    b"heic",
+    b"heix",
+    b"hevc",
+    b"hevx",
+    b"heim",
+    b"heis",
+    b"hevm",
+    b"hevs",
+    b"mif1",
+    b"msf1",
 }
 DOCUMENT_VIEW_PURPOSE = "driver_document_view"
 FREIGHT_EVIDENCE_VIEW_PURPOSE = "freight_evidence_view"
@@ -45,6 +70,19 @@ def _ensure_storage_configured() -> None:
 
 
 def _validate_file_signature(content_type: str, content: bytes) -> None:
+    if content_type in {
+        "image/heic",
+        "image/heif",
+        "image/heic-sequence",
+        "image/heif-sequence",
+    }:
+        if not _is_heif_content(content):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El contenido del archivo no coincide con el formato declarado.",
+            )
+        return
+
     signatures = FILE_SIGNATURES.get(content_type, ())
     if not signatures or not any(content.startswith(signature) for signature in signatures):
         raise HTTPException(
@@ -58,6 +96,39 @@ def _validate_file_signature(content_type: str, content: bytes) -> None:
         )
 
 
+def _is_heif_content(content: bytes) -> bool:
+    if len(content) < 12 or content[4:8] != b"ftyp":
+        return False
+    brands = [content[8:12]]
+    brands.extend(content[i : i + 4] for i in range(16, len(content) - 3, 4))
+    return any(brand in HEIF_BRANDS for brand in brands)
+
+
+def _detect_upload_type(content: bytes, declared_type: str, filename: str) -> str:
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if (
+        content.startswith(b"RIFF")
+        and len(content) >= 12
+        and content[8:12] == b"WEBP"
+    ):
+        return "image/webp"
+    if content.startswith(b"%PDF-"):
+        return "application/pdf"
+    if _is_heif_content(content):
+        lower = filename.lower()
+        if lower.endswith(".heic"):
+            return "image/heic"
+        if lower.endswith(".heif"):
+            return "image/heif"
+        if declared_type in ALLOWED_UPLOAD_TYPES:
+            return declared_type
+        return "image/heic"
+    return declared_type
+
+
 def _bucket():
     _ensure_storage_configured()
     return storage.Client().bucket(settings.DRIVER_DOCUMENTS_BUCKET)
@@ -68,15 +139,16 @@ def _object_name(driver_id: int, field: str, extension: str) -> str:
 
 
 async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -> str:
-    content_type = file.content_type or "application/octet-stream"
+    declared_type = file.content_type or "application/octet-stream"
+    content = await file.read()
+    content_type = _detect_upload_type(content, declared_type, file.filename or "")
     extension = ALLOWED_UPLOAD_TYPES.get(content_type)
     if not extension:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Formato no permitido. Usa JPG, PNG, WEBP o PDF.",
+            detail="Formato no permitido. Usa JPG, PNG, WEBP, HEIC, HEIF o PDF.",
         )
 
-    content = await file.read()
     if len(content) > _max_upload_bytes():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -95,15 +167,16 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
 
 
 async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) -> str:
-    content_type = file.content_type or "application/octet-stream"
+    declared_type = file.content_type or "application/octet-stream"
+    content = await file.read()
+    content_type = _detect_upload_type(content, declared_type, file.filename or "")
     extension = ALLOWED_UPLOAD_TYPES.get(content_type)
-    if not extension or content_type == "application/pdf":
+    if not extension or content_type not in ALLOWED_IMAGE_UPLOAD_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Formato no permitido. Usa JPG, PNG o WEBP.",
+            detail="Formato no permitido. Usa JPG, PNG, WEBP, HEIC o HEIF.",
         )
 
-    content = await file.read()
     if len(content) > _max_freight_evidence_bytes():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

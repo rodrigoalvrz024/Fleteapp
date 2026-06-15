@@ -114,6 +114,11 @@ MediaType _imageContentType(List<int> bytes, String filename) {
       bytes[11] == 0x50) {
     return MediaType('image', 'webp');
   }
+  if (_isHeifContent(bytes)) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.heif')) return MediaType('image', 'heif');
+    return MediaType('image', 'heic');
+  }
 
   final lower = filename.toLowerCase();
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
@@ -121,6 +126,8 @@ MediaType _imageContentType(List<int> bytes, String filename) {
   }
   if (lower.endsWith('.png')) return MediaType('image', 'png');
   if (lower.endsWith('.webp')) return MediaType('image', 'webp');
+  if (lower.endsWith('.heic')) return MediaType('image', 'heic');
+  if (lower.endsWith('.heif')) return MediaType('image', 'heif');
 
   return MediaType('application', 'octet-stream');
 }
@@ -130,7 +137,9 @@ String _safeImageFilename(String filename, MediaType contentType) {
   if (lower.endsWith('.jpg') ||
       lower.endsWith('.jpeg') ||
       lower.endsWith('.png') ||
-      lower.endsWith('.webp')) {
+      lower.endsWith('.webp') ||
+      lower.endsWith('.heic') ||
+      lower.endsWith('.heif')) {
     return filename;
   }
 
@@ -138,6 +147,8 @@ String _safeImageFilename(String filename, MediaType contentType) {
     'image/jpeg' => '.jpg',
     'image/png' => '.png',
     'image/webp' => '.webp',
+    'image/heic' => '.heic',
+    'image/heif' => '.heif',
     _ => '.bin',
   };
   return 'evidencia$extension';
@@ -149,4 +160,34 @@ bool _startsWith(List<int> bytes, List<int> signature) {
     if (bytes[i] != signature[i]) return false;
   }
   return true;
+}
+
+bool _isHeifContent(List<int> bytes) {
+  if (bytes.length < 12) return false;
+  if (bytes[4] != 0x66 ||
+      bytes[5] != 0x74 ||
+      bytes[6] != 0x79 ||
+      bytes[7] != 0x70) {
+    return false;
+  }
+
+  const brands = {
+    'heic',
+    'heix',
+    'hevc',
+    'hevx',
+    'heim',
+    'heis',
+    'hevm',
+    'hevs',
+    'mif1',
+    'msf1',
+  };
+  final majorBrand = String.fromCharCodes(bytes.sublist(8, 12));
+  if (brands.contains(majorBrand)) return true;
+  for (var i = 16; i + 4 <= bytes.length; i += 4) {
+    final brand = String.fromCharCodes(bytes.sublist(i, i + 4));
+    if (brands.contains(brand)) return true;
+  }
+  return false;
 }

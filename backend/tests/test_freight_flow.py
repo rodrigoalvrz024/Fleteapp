@@ -13,6 +13,7 @@ from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.rating import Rating
 from app.schemas.freight import FreightResponse, FreightStatusUpdate
 from app.services.freight_service import can_transition
+from app.services.storage_service import _detect_upload_type
 
 
 class FreightCompletionFlowTests(unittest.TestCase):
@@ -79,6 +80,20 @@ class FreightCompletionFlowTests(unittest.TestCase):
             can_transition(FreightStatus.in_progress, FreightStatus.completed)
         )
         self.assertFalse(can_transition(FreightStatus.accepted, FreightStatus.completed))
+
+    def test_storage_detects_jpeg_even_when_browser_sends_octet_stream(self):
+        content = b"\xff\xd8\xff\xe0" + b"jpeg"
+        self.assertEqual(
+            _detect_upload_type(content, "application/octet-stream", "foto"),
+            "image/jpeg",
+        )
+
+    def test_storage_detects_heic_for_ios_photos(self):
+        content = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1"
+        self.assertEqual(
+            _detect_upload_type(content, "application/octet-stream", "foto.HEIC"),
+            "image/heic",
+        )
 
 
 if __name__ == "__main__":
