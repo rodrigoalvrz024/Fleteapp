@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +6,7 @@ import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/api_error_message.dart';
+import '../../utils/image_file_picker.dart';
 import '../shared/web_layout.dart';
 import 'widgets/driver_app_bar_actions.dart';
 
@@ -107,7 +107,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   }
 
   Future<void> _pickEvidence(String kind) async {
-    XFile? file;
+    PickedImageFile? picked;
     try {
       final source = await showModalBottomSheet<ImageSource>(
         context: context,
@@ -129,12 +129,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
         ),
       );
       if (source == null) return;
-      file = await ImagePicker().pickImage(
-        source: source,
-        imageQuality: kIsWeb ? null : 78,
-        maxWidth: kIsWeb ? null : 1800,
-        requestFullMetadata: false,
-      );
+      picked = await pickImageFile(source);
     } catch (e) {
       _showMessage(
         apiErrorMessage(
@@ -145,20 +140,9 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       );
       return;
     }
-    if (file == null) return;
+    if (picked == null) return;
 
-    late final List<int> bytes;
-    try {
-      bytes = await file.readAsBytes();
-    } catch (e) {
-      _showMessage(
-        'No pudimos leer la foto seleccionada. Prueba con otro archivo JPG o toma la foto nuevamente.',
-        error: true,
-      );
-      return;
-    }
-
-    if (bytes.length > _maxEvidenceBytes) {
+    if (picked.bytes.length > _maxEvidenceBytes) {
       _showMessage(
         'La foto supera el maximo de 8 MB. Prueba con una imagen mas liviana.',
         error: true,
@@ -171,8 +155,8 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       await _service.uploadEvidenceBytes(
         widget.freightId,
         kind,
-        bytes,
-        file.name,
+        picked.bytes,
+        picked.name,
       );
       await _load();
       _showMessage(
