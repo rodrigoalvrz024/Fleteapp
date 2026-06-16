@@ -51,9 +51,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         },
         onLogout: () async {
           Navigator.pop(context);
-          await ref.read(driverProvider.notifier).goOffline();
-          await ref.read(authProvider.notifier).logout();
-          if (mounted) context.go('/auth/login');
+          await _logout();
         },
         onSupport: () {
           Navigator.pop(context);
@@ -61,6 +59,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _logout() async {
+    await ref.read(driverProvider.notifier).goOffline();
+    await ref.read(authProvider.notifier).logout();
+    if (mounted) context.go('/auth/login');
   }
 
   void _showSupportSheet() {
@@ -143,6 +147,22 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                           ),
                           child: const Icon(Icons.person_outline_rounded,
                               size: 20, color: AppTheme.midnight),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Cerrar sesion',
+                        child: IconButton(
+                          onPressed: _logout,
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                AppTheme.error.withValues(alpha: 0.08),
+                            foregroundColor: AppTheme.error,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.logout_rounded, size: 20),
                         ),
                       ),
                     ]),
@@ -427,7 +447,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                       icon: Icons.history_rounded,
                       label: 'Mis viajes',
                       subtitle: 'Fletes aceptados y completados',
-                      onTap: () => context.push('/app/driver/available'),
+                      onTap: () => context.push('/app/driver/trips'),
                       color: AppTheme.slate600,
                     ),
                     const SizedBox(height: 10),

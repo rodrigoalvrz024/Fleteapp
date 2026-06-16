@@ -7,6 +7,7 @@ import '../../services/freight_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/api_error_message.dart';
 import '../shared/web_layout.dart';
+import 'widgets/driver_app_bar_actions.dart';
 
 class DriverFreightDetailScreen extends StatefulWidget {
   final int freightId;
@@ -241,12 +242,14 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     if (_loading) {
       return const WebPageScaffold(
         title: 'Detalle de flete',
+        actions: [DriverAppBarActions()],
         child: WebLoadingState(),
       );
     }
     if (_freight == null) {
       return const WebPageScaffold(
         title: 'Detalle de flete',
+        actions: [DriverAppBarActions()],
         child: WebPageBody(
           children: [
             WebEmptyState(
@@ -265,6 +268,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     return WebPageScaffold(
       title: 'Flete #${f.id}',
       subtitle: 'Detalle operativo para conductor',
+      actions: const [DriverAppBarActions()],
       child: WebPageBody(
         children: [
           Center(

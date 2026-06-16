@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/payout_model.dart';
 import '../../services/payout_service.dart';
 import '../shared/web_layout.dart';
+import 'widgets/driver_app_bar_actions.dart';
 
 class DriverPayoutsScreen extends StatefulWidget {
   const DriverPayoutsScreen({super.key});
@@ -48,6 +49,7 @@ class _DriverPayoutsScreenState extends State<DriverPayoutsScreen> {
     return WebPageScaffold(
       title: 'Mis liquidaciones',
       subtitle: 'Pagos correspondientes a tus fletes cobrados',
+      actions: const [DriverAppBarActions()],
       child: WebPageBody(
         onRefresh: _load,
         children: [

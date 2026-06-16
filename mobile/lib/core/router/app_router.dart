@@ -15,6 +15,7 @@ import '../../screens/driver/driver_freight_detail_screen.dart';
 import '../../screens/driver/driver_home_screen.dart';
 import '../../screens/driver/driver_onboarding_screen.dart';
 import '../../screens/driver/driver_payouts_screen.dart';
+import '../../screens/driver/driver_trips_screen.dart';
 import '../../screens/legal/legal_document_screen.dart';
 import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
@@ -118,6 +119,10 @@ final _router = GoRouter(
       builder: (_, __) => const AvailableFreightsScreen(),
     ),
     GoRoute(
+      path: '/app/driver/trips',
+      builder: (_, __) => const DriverTripsScreen(),
+    ),
+    GoRoute(
       path: '/app/driver/freights/:id',
       builder: (_, state) => DriverFreightDetailScreen(
         freightId: int.parse(state.pathParameters['id']!),
@@ -189,6 +194,10 @@ final _router = GoRouter(
     GoRoute(
       path: '/driver/available',
       redirect: (_, state) => _withQuery('/app/driver/available', state),
+    ),
+    GoRoute(
+      path: '/driver/trips',
+      redirect: (_, state) => _withQuery('/app/driver/trips', state),
     ),
     GoRoute(
       path: '/driver/freights/:id',

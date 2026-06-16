@@ -93,7 +93,7 @@ class DriverNotifier extends StateNotifier<DriverState> {
   Future<void> _fetchFreights() async {
     if (!state.isOnline) return;
     try {
-      final list = await _service.listFreights(status: 'pending');
+      final list = await _service.listFreights(status: 'available');
       final newOnes =
           list.where((f) => !_seenFreightIds.contains(f.id)).toList();
 

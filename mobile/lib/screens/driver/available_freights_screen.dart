@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/freight_model.dart';
 import '../../services/freight_service.dart';
 import '../shared/web_layout.dart';
+import 'widgets/driver_app_bar_actions.dart';
 
 class AvailableFreightsScreen extends StatefulWidget {
   const AvailableFreightsScreen({super.key});
@@ -45,6 +46,7 @@ class _AvailableFreightsScreenState extends State<AvailableFreightsScreen> {
     return WebPageScaffold(
       title: 'Fletes disponibles',
       subtitle: 'Solicitudes que puedes revisar y aceptar',
+      actions: const [DriverAppBarActions()],
       child: _loading
           ? const WebLoadingState()
           : _freights.isEmpty
