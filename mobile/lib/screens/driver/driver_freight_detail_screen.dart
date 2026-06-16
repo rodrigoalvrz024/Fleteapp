@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -130,8 +131,9 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       if (source == null) return;
       file = await ImagePicker().pickImage(
         source: source,
-        imageQuality: 78,
-        maxWidth: 1800,
+        imageQuality: kIsWeb ? null : 78,
+        maxWidth: kIsWeb ? null : 1800,
+        requestFullMetadata: false,
       );
     } catch (e) {
       _showMessage(
@@ -145,8 +147,18 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     }
     if (file == null) return;
 
-    final length = await file.length();
-    if (length > _maxEvidenceBytes) {
+    late final List<int> bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (e) {
+      _showMessage(
+        'No pudimos leer la foto seleccionada. Prueba con otro archivo JPG o toma la foto nuevamente.',
+        error: true,
+      );
+      return;
+    }
+
+    if (bytes.length > _maxEvidenceBytes) {
       _showMessage(
         'La foto supera el maximo de 8 MB. Prueba con una imagen mas liviana.',
         error: true,
@@ -156,7 +168,12 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
 
     setState(() => _actionLoading = true);
     try {
-      await _service.uploadEvidence(widget.freightId, kind, file);
+      await _service.uploadEvidenceBytes(
+        widget.freightId,
+        kind,
+        bytes,
+        file.name,
+      );
       await _load();
       _showMessage(
         kind == 'pickup'

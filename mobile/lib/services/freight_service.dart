@@ -75,13 +75,22 @@ class FreightService {
 
   Future<FreightModel> uploadEvidence(int id, String kind, XFile file) async {
     final bytes = await file.readAsBytes();
+    return uploadEvidenceBytes(id, kind, bytes, file.name);
+  }
+
+  Future<FreightModel> uploadEvidenceBytes(
+    int id,
+    String kind,
+    List<int> bytes,
+    String filename,
+  ) async {
     if (bytes.isEmpty) {
       throw StateError('El archivo seleccionado esta vacio.');
     }
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         bytes,
-        filename: _safeImageFilename(file.name, bytes),
+        filename: _safeImageFilename(filename, bytes),
       ),
     });
     final res = await _api.uploadForm(
