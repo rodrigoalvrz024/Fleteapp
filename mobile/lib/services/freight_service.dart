@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api_service.dart';
@@ -76,12 +75,13 @@ class FreightService {
 
   Future<FreightModel> uploadEvidence(int id, String kind, XFile file) async {
     final bytes = await file.readAsBytes();
-    final contentType = _imageContentType(bytes, file.name);
+    if (bytes.isEmpty) {
+      throw StateError('El archivo seleccionado esta vacio.');
+    }
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         bytes,
-        filename: _safeImageFilename(file.name, contentType),
-        contentType: contentType,
+        filename: _safeImageFilename(file.name, bytes),
       ),
     });
     final res = await _api.uploadForm(
@@ -99,12 +99,27 @@ class FreightService {
   }
 }
 
-MediaType _imageContentType(List<int> bytes, String filename) {
+String _safeImageFilename(String filename, List<int> bytes) {
+  final cleanName = filename.trim();
+  final lower = cleanName.toLowerCase();
+  if (lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.png') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.heic') ||
+      lower.endsWith('.heif')) {
+    return cleanName;
+  }
+
+  return 'evidencia${_imageExtension(bytes, lower)}';
+}
+
+String _imageExtension(List<int> bytes, String filename) {
   if (_startsWith(bytes, [0xFF, 0xD8, 0xFF])) {
-    return MediaType('image', 'jpeg');
+    return '.jpg';
   }
   if (_startsWith(bytes, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) {
-    return MediaType('image', 'png');
+    return '.png';
   }
   if (bytes.length >= 12 &&
       _startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
@@ -112,46 +127,14 @@ MediaType _imageContentType(List<int> bytes, String filename) {
       bytes[9] == 0x45 &&
       bytes[10] == 0x42 &&
       bytes[11] == 0x50) {
-    return MediaType('image', 'webp');
+    return '.webp';
   }
   if (_isHeifContent(bytes)) {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.heif')) return MediaType('image', 'heif');
-    return MediaType('image', 'heic');
+    if (filename.endsWith('.heif')) return '.heif';
+    return '.heic';
   }
 
-  final lower = filename.toLowerCase();
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-    return MediaType('image', 'jpeg');
-  }
-  if (lower.endsWith('.png')) return MediaType('image', 'png');
-  if (lower.endsWith('.webp')) return MediaType('image', 'webp');
-  if (lower.endsWith('.heic')) return MediaType('image', 'heic');
-  if (lower.endsWith('.heif')) return MediaType('image', 'heif');
-
-  return MediaType('application', 'octet-stream');
-}
-
-String _safeImageFilename(String filename, MediaType contentType) {
-  final lower = filename.toLowerCase();
-  if (lower.endsWith('.jpg') ||
-      lower.endsWith('.jpeg') ||
-      lower.endsWith('.png') ||
-      lower.endsWith('.webp') ||
-      lower.endsWith('.heic') ||
-      lower.endsWith('.heif')) {
-    return filename;
-  }
-
-  final extension = switch (contentType.mimeType) {
-    'image/jpeg' => '.jpg',
-    'image/png' => '.png',
-    'image/webp' => '.webp',
-    'image/heic' => '.heic',
-    'image/heif' => '.heif',
-    _ => '.bin',
-  };
-  return 'evidencia$extension';
+  return '.jpg';
 }
 
 bool _startsWith(List<int> bytes, List<int> signature) {

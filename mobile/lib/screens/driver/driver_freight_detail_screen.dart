@@ -167,7 +167,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       _showMessage(
         apiErrorMessage(
           e,
-          fallback: 'No pudimos cargar la foto. Usa JPG, PNG o WEBP.',
+          fallback: 'No pudimos cargar la foto. Detalle: ${e.toString()}',
         ),
         error: true,
       );
