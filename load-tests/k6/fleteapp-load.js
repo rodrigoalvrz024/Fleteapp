@@ -6,11 +6,23 @@ const BASE_URL = (__ENV.BASE_URL || 'https://fleteapp-api-i3wy5watea-uc.a.run.ap
 const PROFILE = __ENV.PROFILE || 'smoke';
 const WRITE_FREIGHTS = (__ENV.WRITE_FREIGHTS || 'false').toLowerCase() === 'true';
 const DRIVER_READS = (__ENV.DRIVER_READS || 'true').toLowerCase() === 'true';
+const REGISTER_CLIENTS = (__ENV.REGISTER_CLIENTS || 'false').toLowerCase() === 'true';
+const REGISTER_CLIENT_COUNT = Number(__ENV.REGISTER_CLIENT_COUNT || __ENV.VUS || 1);
 const CLIENT_EMAIL = __ENV.CLIENT_EMAIL;
 const CLIENT_PASSWORD = __ENV.CLIENT_PASSWORD;
+const CLIENT_EMAILS = (__ENV.CLIENT_EMAILS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const CLIENT_PASSWORDS = (__ENV.CLIENT_PASSWORDS || '')
+  .split(',')
+  .map((value) => value.trim());
 const DRIVER_EMAIL = __ENV.DRIVER_EMAIL;
 const DRIVER_PASSWORD = __ENV.DRIVER_PASSWORD;
 const DRIVER_EVERY = Number(__ENV.DRIVER_EVERY || 4);
+const MAX_WRITE_ITERATIONS_PER_VU = Number(__ENV.MAX_WRITE_ITERATIONS_PER_VU || 1);
+const LOAD_TEST_RUN_ID =
+  __ENV.LOAD_TEST_RUN_ID || new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
 
 export const errorRate = new Rate('fleteapp_errors');
 export const freightCreates = new Counter('fleteapp_freight_creates');
@@ -61,17 +73,21 @@ function buildOptions(profile) {
 }
 
 export function setup() {
-  if (!CLIENT_EMAIL || !CLIENT_PASSWORD) {
-    throw new Error('Debes definir CLIENT_EMAIL y CLIENT_PASSWORD como variables de entorno.');
+  if (!REGISTER_CLIENTS && CLIENT_EMAILS.length === 0 && (!CLIENT_EMAIL || !CLIENT_PASSWORD)) {
+    throw new Error(
+      'Debes definir CLIENT_EMAIL y CLIENT_PASSWORD, o CLIENT_EMAILS y CLIENT_PASSWORD/CLIENT_PASSWORDS.',
+    );
   }
 
-  const client = login(CLIENT_EMAIL, CLIENT_PASSWORD);
+  const clients = REGISTER_CLIENTS
+    ? registerClients(REGISTER_CLIENT_COUNT)
+    : loginClientsFromEnv();
   const driver =
     DRIVER_READS && DRIVER_EMAIL && DRIVER_PASSWORD
       ? login(DRIVER_EMAIL, DRIVER_PASSWORD)
       : null;
 
-  return { client, driver };
+  return { clients, driver };
 }
 
 export default function (data) {
@@ -80,7 +96,8 @@ export default function (data) {
     driverReadFlow(data.driver);
     return;
   }
-  clientFlow(data.client);
+  const client = data.clients[(__VU - 1) % data.clients.length];
+  clientFlow(client);
 }
 
 function login(email, password) {
@@ -106,6 +123,60 @@ function login(email, password) {
   };
 }
 
+function loginClientsFromEnv() {
+  if (CLIENT_EMAILS.length === 0) {
+    return [login(CLIENT_EMAIL, CLIENT_PASSWORD)];
+  }
+
+  return CLIENT_EMAILS.map((email, index) =>
+    login(email, CLIENT_PASSWORDS[index] || CLIENT_PASSWORD),
+  );
+}
+
+function registerClients(count) {
+  const clients = [];
+  for (let i = 0; i < count; i += 1) {
+    const suffix = String(i + 1).padStart(3, '0');
+    const email = `load.${LOAD_TEST_RUN_ID}.${suffix}@fletgo.com`;
+    const password = `LoadTest${LOAD_TEST_RUN_ID}!`;
+    const phoneSeed = LOAD_TEST_RUN_ID.replace(/\D/g, '').slice(-7).padStart(7, '0');
+    const phone = `56${phoneSeed}${suffix}`;
+    const res = http.post(
+      `${BASE_URL}/auth/register`,
+      JSON.stringify({
+        email,
+        phone,
+        full_name: `Cliente Load ${suffix}`,
+        password,
+        role: 'client',
+        accepts_terms: true,
+        accepts_privacy: true,
+      }),
+      {
+        ...jsonHeaders(),
+        tags: { name: 'POST /auth/register load client' },
+      },
+    );
+
+    const ok = check(res, {
+      'load client registered': (r) => r.status === 201,
+    });
+    if (!ok) {
+      throw new Error(`No se pudo registrar cliente load ${email}. HTTP ${res.status}.`);
+    }
+    const body = safeJson(res);
+    if (!body.access_token) {
+      throw new Error(`Registro sin access_token para ${email}. HTTP ${res.status}.`);
+    }
+    clients.push({
+      email,
+      token: body.access_token,
+      role: body.user?.role || 'client',
+    });
+  }
+  return clients;
+}
+
 function clientFlow(client) {
   group('client read flow', () => {
     const headers = authHeaders(client.token);
@@ -124,7 +195,7 @@ function clientFlow(client) {
     assertOk(res, 'client freights');
   });
 
-  if (WRITE_FREIGHTS) {
+  if (WRITE_FREIGHTS && __ITER < MAX_WRITE_ITERATIONS_PER_VU) {
     group('client create freight', () => {
       const headers = authHeaders(client.token);
       const payload = freightPayload();
@@ -168,13 +239,13 @@ function driverReadFlow(driver) {
 function freightPayload() {
   const offset = (__VU * 0.001) + (__ITER * 0.0001);
   return {
-    origin_address: `Load test origen VU ${__VU} ITER ${__ITER}`,
+    origin_address: `Load test ${LOAD_TEST_RUN_ID} origen VU ${__VU} ITER ${__ITER}`,
     origin_lat: -33.4489 + offset,
     origin_lng: -70.6693 + offset,
-    destination_address: 'Load test destino Las Condes',
+    destination_address: `Load test ${LOAD_TEST_RUN_ID} destino Las Condes`,
     destination_lat: -33.4146,
     destination_lng: -70.5856,
-    cargo_description: 'Carga de prueba automatizada',
+    cargo_description: `Carga de prueba automatizada ${LOAD_TEST_RUN_ID}`,
     cargo_weight_kg: 25,
     cargo_volume_m3: 1.2,
     requires_helpers: 0,

@@ -22,8 +22,14 @@ function Require-Env($Name) {
   }
 }
 
-Require-Env 'CLIENT_EMAIL'
-Require-Env 'CLIENT_PASSWORD'
+if ($env:REGISTER_CLIENTS -ne 'true') {
+  if ([string]::IsNullOrWhiteSpace($env:CLIENT_EMAILS)) {
+    Require-Env 'CLIENT_EMAIL'
+  }
+  if ([string]::IsNullOrWhiteSpace($env:CLIENT_PASSWORDS)) {
+    Require-Env 'CLIENT_PASSWORD'
+  }
+}
 
 $k6 = Require-Command 'k6' 'Instalalo con: winget install GrafanaLabs.k6'
 

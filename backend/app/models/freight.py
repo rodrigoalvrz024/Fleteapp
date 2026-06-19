@@ -15,8 +15,8 @@ class FreightRequest(Base):
     __tablename__ = "freight_requests"
 
     id = Column(Integer, primary_key=True, index=True)
-    client_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True)
+    client_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True, index=True)
 
     origin_address = Column(String, nullable=False)
     origin_lat = Column(Float, nullable=False)
@@ -41,7 +41,7 @@ class FreightRequest(Base):
     helpers_cost     = Column(Float, nullable=True)
     mode             = Column(String, default="scheduled")  # scheduled / urgent
     final_price = Column(Float, nullable=True)
-    status = Column(Enum(FreightStatus), default=FreightStatus.pending)
+    status = Column(Enum(FreightStatus), default=FreightStatus.pending, index=True)
 
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     accepted_at = Column(DateTime(timezone=True), nullable=True)
@@ -59,7 +59,7 @@ class FreightRequest(Base):
     delivery_pin_verified_at = Column(DateTime(timezone=True), nullable=True)
     delivery_pin_failed_attempts = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     last_modified_by = Column(Integer, nullable=True)
@@ -145,7 +145,7 @@ class TripStatusHistory(Base):
     __tablename__ = "trip_status_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    freight_id = Column(Integer, ForeignKey("freight_requests.id"), nullable=False)
+    freight_id = Column(Integer, ForeignKey("freight_requests.id"), nullable=False, index=True)
     status = Column(Enum(FreightStatus), nullable=False)
     note = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

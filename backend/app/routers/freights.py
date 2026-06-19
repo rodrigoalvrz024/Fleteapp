@@ -1,10 +1,11 @@
+import asyncio
 import secrets
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.config import settings
 from app.core.security import (
@@ -13,7 +14,7 @@ from app.core.security import (
     require_role,
     verify_password,
 )
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus, TripStatusHistory
 from app.models.user import User, UserRole
@@ -40,6 +41,24 @@ EVIDENCE_FIELDS = {
     "pickup": ("pickup_photo_ref", "pickup_photo_uploaded_at"),
     "delivery": ("delivery_photo_ref", "delivery_photo_uploaded_at"),
 }
+
+
+async def _notify_available_drivers(title: str, body: str, data: dict) -> None:
+    from app.services.notification_service import send_notification_to_drivers
+
+    db = SessionLocal()
+    try:
+        await send_notification_to_drivers(
+            db=db,
+            title=title,
+            body=body,
+            data=data,
+        )
+    except Exception as exc:
+        print(f"[notifications] Could not notify available drivers: {exc}")
+    finally:
+        db.close()
+
 
 def _get_driver_for_user(db: Session, user: User) -> Driver | None:
     if user.role != UserRole.driver:
@@ -151,6 +170,12 @@ async def create_freight(
     )
     db.add(freight)
     db.flush()
+    history = TripStatusHistory(
+        freight_id=freight.id,
+        status=FreightStatus.pending,
+        note=f"Solicitud creada - Modo: {prices['mode']}",
+    )
+    db.add(history)
     record_audit_event(
         db,
         actor=current_user,
@@ -170,28 +195,29 @@ async def create_freight(
     db.commit()
     db.refresh(freight)
 
-    history = TripStatusHistory(
-        freight_id = freight.id,
-        status     = FreightStatus.pending,
-        note       = f"Solicitud creada - Modo: {prices['mode']}"
-    )
-    db.add(history)
-    db.commit()
-
-    from app.services.notification_service import send_notification_to_drivers
-    await send_notification_to_drivers(
-        db    = db,
-        title = "🚛 Nuevo flete disponible",
-        body  = f"{'⚡ URGENTE' if data.is_urgent else '📅 Programado'} - ${prices['client_pays']:,.0f} CLP",
-        data  = {"freight_id": str(freight.id), "type": "new_freight", "mode": prices["mode"]}
-    )
-
-    db.refresh(freight)
+    if settings.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
+        asyncio.create_task(
+            _notify_available_drivers(
+                title="Nuevo flete disponible",
+                body=f"{'URGENTE' if data.is_urgent else 'Programado'} - ${prices['client_pays']:,.0f} CLP",
+                data={
+                    "freight_id": str(freight.id),
+                    "type": "new_freight",
+                    "mode": prices["mode"],
+                },
+            )
+        )
     return freight
 
 @router.get("", response_model=List[FreightResponse])
 def list_freights(status: str = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(FreightRequest)
+    query = db.query(FreightRequest).options(
+        selectinload(FreightRequest.status_history),
+        selectinload(FreightRequest.payment),
+        selectinload(FreightRequest.rating),
+        joinedload(FreightRequest.driver).joinedload(Driver.user),
+        joinedload(FreightRequest.driver).joinedload(Driver.vehicle),
+    )
     if current_user.role == UserRole.client:
         query = query.filter(FreightRequest.client_id == current_user.id)
     elif current_user.role == UserRole.driver:

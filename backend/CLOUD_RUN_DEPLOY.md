@@ -50,12 +50,12 @@ gcloud run deploy $env:SERVICE `
   --allow-unauthenticated `
   --min-instances 0 `
   --max-instances 5 `
-  --concurrency 25 `
+  --concurrency 15 `
   --memory 512Mi `
   --cpu 1 `
   --timeout 30s `
   --set-secrets DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest `
-  --set-env-vars ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=10080,TRANSBANK_ENVIRONMENT=integration,RUN_STARTUP_MIGRATIONS=false,DB_POOL_SIZE=5,DB_MAX_OVERFLOW=2,DB_POOL_TIMEOUT_SECONDS=5,DB_CONNECT_TIMEOUT_SECONDS=10
+  --set-env-vars ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=10080,TRANSBANK_ENVIRONMENT=integration,RUN_STARTUP_MIGRATIONS=false,ENABLE_DRIVER_PUSH_NOTIFICATIONS=false,DB_POOL_SIZE=8,DB_MAX_OVERFLOW=2,DB_POOL_TIMEOUT_SECONDS=5,DB_CONNECT_TIMEOUT_SECONDS=10
 ```
 
 The API does not run migrations automatically on every Cloud Run startup. This
@@ -71,7 +71,8 @@ python -m app.run_migrations
 If you need a temporary Cloud Run revision to run migrations during deploy, add:
 
 ```powershell
---set-env-vars RUN_STARTUP_MIGRATIONS=true
+$env:RUN_STARTUP_MIGRATIONS="true"
+powershell -ExecutionPolicy Bypass -File ..\scripts\backend-deploy-cloud-run.ps1
 ```
 
 Then deploy again with `RUN_STARTUP_MIGRATIONS=false` or without that variable.

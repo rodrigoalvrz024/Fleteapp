@@ -54,6 +54,34 @@ Para crear fletes de prueba:
 
 ```powershell
 $env:WRITE_FREIGHTS="true"
+$env:MAX_WRITE_ITERATIONS_PER_VU="1"
+powershell -ExecutionPolicy Bypass -File .\scripts\load-test-smoke.ps1
+```
+
+Con `MAX_WRITE_ITERATIONS_PER_VU=1`, cada usuario virtual crea como maximo
+un flete. Por ejemplo, `VUS=10` crea hasta 10 fletes de prueba.
+
+Para simular clientes reales, crea cuentas temporales durante el setup y reparte
+un cliente por usuario virtual:
+
+```powershell
+$env:REGISTER_CLIENTS="true"
+$env:REGISTER_CLIENT_COUNT="10"
+$env:VUS="10"
+$env:DURATION="1m"
+$env:WRITE_FREIGHTS="true"
+$env:MAX_WRITE_ITERATIONS_PER_VU="1"
+powershell -ExecutionPolicy Bypass -File .\scripts\load-test-smoke.ps1
+```
+
+El registro publico tiene rate limit. Si ya tienes cuentas de prueba, puedes
+reutilizarlas con una lista:
+
+```powershell
+$env:CLIENT_EMAILS="cliente1@fletgo.com,cliente2@fletgo.com"
+$env:CLIENT_PASSWORD="MISMO_PASSWORD_DE_PRUEBA"
+$env:WRITE_FREIGHTS="true"
+$env:MAX_WRITE_ITERATIONS_PER_VU="1"
 powershell -ExecutionPolicy Bypass -File .\scripts\load-test-smoke.ps1
 ```
 
@@ -70,8 +98,12 @@ Luego, si todo esta estable, ejecuta con creacion de fletes:
 
 ```powershell
 $env:WRITE_FREIGHTS="true"
+$env:MAX_WRITE_ITERATIONS_PER_VU="1"
 powershell -ExecutionPolicy Bypass -File .\scripts\load-test-ramp200.ps1
 ```
+
+Ojo: con `ramp200` y `MAX_WRITE_ITERATIONS_PER_VU=1`, se pueden crear hasta
+200 fletes. Primero valida escritura con 5, 10 o 25 usuarios.
 
 La prueba `ramp200` dura cerca de 17 minutos:
 

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     FREIGHT_EVIDENCE_VIEW_EXPIRE_MINUTES: int = 10
     PUBLIC_API_URL: str = ""
     ALLOW_EXTERNAL_DOCUMENT_REFS: bool = False
+    ENABLE_DRIVER_PUSH_NOTIFICATIONS: bool = False
     RUN_STARTUP_MIGRATIONS: bool = False
     DB_CONNECT_TIMEOUT_SECONDS: int = 10
     DB_POOL_SIZE: int = 5

@@ -149,6 +149,22 @@ STARTUP_MIGRATIONS = (
           WHERE driver_payouts.payment_id = payments.id
       )
     """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_freight_requests_client_created
+    ON freight_requests (client_id, created_at DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_freight_requests_driver_created
+    ON freight_requests (driver_id, created_at DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_freight_requests_status_driver
+    ON freight_requests (status, driver_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_trip_status_history_freight_created
+    ON trip_status_history (freight_id, created_at)
+    """,
 )
 
 
