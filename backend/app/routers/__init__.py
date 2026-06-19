@@ -1,1 +1,11 @@
-from app.routers import auth, users, drivers, freights, payments, payouts, ratings, admin
+from app.routers import (
+    admin,
+    analytics,
+    auth,
+    drivers,
+    freights,
+    payments,
+    payouts,
+    ratings,
+    users,
+)

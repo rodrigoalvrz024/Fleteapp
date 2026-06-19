@@ -6,6 +6,10 @@ backend/.env
 
 # Flutter
 mobile/.dart_tool/
+mobile/.dart_appdata/
+mobile/.dart_localappdata/
+mobile/.tool_appdata/
+mobile/.tool_localappdata/
 mobile/build/
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
@@ -20,6 +24,7 @@ mobile/android/local.properties
 firebase-debug.log*
 firepit-log.txt
 .firebase/
+reports/
 .dart-appdata/
 .local-tools/
 .idea/

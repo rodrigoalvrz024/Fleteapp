@@ -49,12 +49,32 @@ gcloud run deploy $env:SERVICE `
   --region $env:REGION `
   --allow-unauthenticated `
   --min-instances 0 `
-  --max-instances 2 `
+  --max-instances 5 `
+  --concurrency 25 `
   --memory 512Mi `
   --cpu 1 `
+  --timeout 30s `
   --set-secrets DATABASE_URL=DATABASE_URL:latest,SECRET_KEY=SECRET_KEY:latest `
-  --set-env-vars ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=10080,TRANSBANK_ENVIRONMENT=integration
+  --set-env-vars ALGORITHM=HS256,ACCESS_TOKEN_EXPIRE_MINUTES=10080,TRANSBANK_ENVIRONMENT=integration,RUN_STARTUP_MIGRATIONS=false,DB_POOL_SIZE=5,DB_MAX_OVERFLOW=2,DB_POOL_TIMEOUT_SECONDS=5,DB_CONNECT_TIMEOUT_SECONDS=10
 ```
+
+The API does not run migrations automatically on every Cloud Run startup. This
+keeps `/health` responsive even if the database is temporarily slow.
+
+For the first deploy, or after schema changes, run migrations intentionally with
+the same environment variables/secrets used by the service:
+
+```powershell
+python -m app.run_migrations
+```
+
+If you need a temporary Cloud Run revision to run migrations during deploy, add:
+
+```powershell
+--set-env-vars RUN_STARTUP_MIGRATIONS=true
+```
+
+Then deploy again with `RUN_STARTUP_MIGRATIONS=false` or without that variable.
 
 If Firebase push notifications are needed, add this to the deploy command:
 

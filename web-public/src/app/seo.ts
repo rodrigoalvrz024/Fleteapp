@@ -1,0 +1,51 @@
+import type { Metadata } from 'next';
+
+export const publicSiteUrl = 'https://fleteapp-public-8d8f7.web.app';
+export const appBaseUrl = 'https://fleteapp-8d8f7.web.app';
+export const publicApiBaseUrl = 'https://fleteapp-api-i3wy5watea-uc.a.run.app';
+
+type SeoConfig = {
+  title: string;
+  description: string;
+  path?: string;
+  keywords?: string[];
+};
+
+export function pageMetadata({
+  title,
+  description,
+  path = '/',
+  keywords = [],
+}: SeoConfig): Metadata {
+  const canonical = `${publicSiteUrl}${path === '/' ? '' : path}`;
+  const fullTitle = `${title} | FleteApp`;
+
+  return {
+    title: fullTitle,
+    description,
+    keywords: [
+      'fletes urbanos',
+      'fletes Chile',
+      'conductores verificados',
+      'mudanzas pequenas',
+      'transporte de carga urbana',
+      ...keywords,
+    ],
+    alternates: {
+      canonical,
+    },
+    openGraph: {
+      title: fullTitle,
+      description,
+      url: canonical,
+      siteName: 'FleteApp',
+      locale: 'es_CL',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: fullTitle,
+      description,
+    },
+  };
+}

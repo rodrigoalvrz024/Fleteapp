@@ -31,6 +31,22 @@ STARTUP_MIGRATIONS = (
     ADD COLUMN IF NOT EXISTS documents_deleted_at TIMESTAMP WITH TIME ZONE
     """,
     """
+    ALTER TABLE drivers
+    ADD COLUMN IF NOT EXISTS vehicle_doc_expiry TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE drivers
+    ADD COLUMN IF NOT EXISTS circulation_permit_expiry TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE drivers
+    ADD COLUMN IF NOT EXISTS technical_review_expiry TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE drivers
+    ADD COLUMN IF NOT EXISTS soap_expiry TIMESTAMP WITH TIME ZONE
+    """,
+    """
     ALTER TABLE freight_requests
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE
     """,

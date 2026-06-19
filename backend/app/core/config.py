@@ -8,8 +8,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: str = (
         "https://fleteapp-8d8f7.web.app,"
+        "https://fleteapp-public-8d8f7.web.app,"
         "http://127.0.0.1:8090,"
         "http://localhost:8090,"
+        "http://127.0.0.1:3000,"
+        "http://localhost:3000,"
+        "http://127.0.0.1:3001,"
+        "http://localhost:3001,"
         "http://127.0.0.1:8000,"
         "http://localhost:8000"
     )
@@ -34,6 +39,11 @@ class Settings(BaseSettings):
     FREIGHT_EVIDENCE_VIEW_EXPIRE_MINUTES: int = 10
     PUBLIC_API_URL: str = ""
     ALLOW_EXTERNAL_DOCUMENT_REFS: bool = False
+    RUN_STARTUP_MIGRATIONS: bool = False
+    DB_CONNECT_TIMEOUT_SECONDS: int = 10
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 2
+    DB_POOL_TIMEOUT_SECONDS: int = 5
 
     class Config:
         env_file = ".env"

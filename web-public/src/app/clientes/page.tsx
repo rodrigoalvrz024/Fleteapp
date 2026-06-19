@@ -1,34 +1,43 @@
 import { appBaseUrl } from '../site-shell';
 import { ProfilePage } from '../profile-pages';
+import { pageMetadata } from '../seo';
+
+export const metadata = pageMetadata({
+  title: 'Pedir fletes para muebles, compras y carga urbana',
+  description:
+    'Solicita fletes urbanos con precio visible, ayudantes opcionales, seguimiento del servicio, fotos de respaldo y PIN de entrega.',
+  path: '/clientes',
+  keywords: ['pedir flete online', 'flete para muebles', 'flete para compras grandes'],
+});
 
 export default function ClientsPage() {
   return (
     <ProfilePage
       eyebrow="Clientes"
-      title="Tu carga llega mejor cuando el traslado se prepara bien"
-      lead="Coordina muebles, compras grandes, mudanzas pequenas y otros traslados urbanos con informacion clara antes de confirmar."
+      title="Pide un flete para mover muebles, compras y carga urbana."
+      lead="Crea una solicitud, revisa el precio y coordina el traslado con respaldo desde tu cuenta."
       imageClass="clientsHero"
       primaryAction="Crear cuenta"
       primaryHref={`${appBaseUrl}/#/auth/register`}
       sections={[
         {
-          title: 'Prepara lo necesario',
-          body: 'Describe la carga, indica la ruta, elige el horario y agrega ayudantes cuando los necesites.',
+          title: 'Define la ruta',
+          body: 'Indica origen, destino, tipo de carga y horario para preparar el servicio con informacion suficiente.',
         },
         {
-          title: 'Confirma con claridad',
-          body: 'Revisa el precio estimado y los datos del servicio antes de crear la solicitud.',
+          title: 'Confirma con precio visible',
+          body: 'El valor se informa antes de avanzar para que puedas decidir sin coordinaciones informales.',
         },
         {
-          title: 'Conserva el respaldo',
-          body: 'Consulta el estado y el historial de cada traslado para soporte y futuras referencias.',
+          title: 'Recibe con respaldo',
+          body: 'Fotos de retiro, fotos de entrega y PIN ayudan a cerrar el servicio con evidencia clara.',
         },
       ]}
       highlights={[
-        'Conductores revisados',
-        'Precios visibles',
+        'Precio antes de confirmar',
+        'Pago protegido',
         'Ayudantes opcionales',
-        'Historial del cliente',
+        'Historial por flete',
       ]}
     />
   );

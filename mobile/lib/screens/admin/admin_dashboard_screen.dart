@@ -27,9 +27,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   final _auditActorIdController = TextEditingController();
   bool _loading = true;
   bool _auditLoading = false;
+  bool _insightsLoading = false;
   bool _actionLoading = false;
   String? _error;
   AdminMetrics? _metrics;
+  AdminOperations? _operations;
   List<AdminUser> _users = [];
   List<AdminDriver> _drivers = [];
   List<AdminPrivacyRequest> _privacyRequests = [];
@@ -37,11 +39,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   List<AdminOperationalAlert> _alerts = [];
   List<AdminLegalConsent> _legalConsents = [];
   List<PayoutModel> _payouts = [];
+  AdminEventInsights? _insights;
   String _auditEntityType = '';
   String _auditEventType = '';
   String _auditActorRole = '';
   DateTime? _auditFromDate;
   DateTime? _auditToDate;
+  int _insightDays = 30;
   int _tabIndex = 0;
 
   @override
@@ -86,12 +90,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     try {
       final results = await Future.wait([
         _service.getMetrics(),
+        _service.getOperations(),
         _service.listUsers(),
         _service.listDrivers(),
         _service.listPrivacyRequests(),
         _service.listOperationalAlerts(),
         _service.listPayouts(),
         _service.listLegalConsents(),
+        _service.getEventInsights(days: _insightDays, limit: 10),
         _service.listAuditEvents(
           limit: 100,
           entityType: _auditEntityType,
@@ -106,13 +112,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _metrics = results[0] as AdminMetrics;
-        _users = results[1] as List<AdminUser>;
-        _drivers = results[2] as List<AdminDriver>;
-        _privacyRequests = results[3] as List<AdminPrivacyRequest>;
-        _alerts = results[4] as List<AdminOperationalAlert>;
-        _payouts = results[5] as List<PayoutModel>;
-        _legalConsents = results[6] as List<AdminLegalConsent>;
-        _auditEvents = results[7] as List<AdminAuditEvent>;
+        _operations = results[1] as AdminOperations;
+        _users = results[2] as List<AdminUser>;
+        _drivers = results[3] as List<AdminDriver>;
+        _privacyRequests = results[4] as List<AdminPrivacyRequest>;
+        _alerts = results[5] as List<AdminOperationalAlert>;
+        _payouts = results[6] as List<PayoutModel>;
+        _legalConsents = results[7] as List<AdminLegalConsent>;
+        _insights = results[8] as AdminEventInsights;
+        _auditEvents = results[9] as List<AdminAuditEvent>;
       });
     } catch (_) {
       if (mounted) {
@@ -226,6 +234,95 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     } finally {
       if (mounted) setState(() => _auditLoading = false);
     }
+  }
+
+  Future<void> _loadInsights({int? days}) async {
+    final nextDays = days ?? _insightDays;
+    setState(() {
+      _insightDays = nextDays;
+      _insightsLoading = true;
+      _error = null;
+    });
+
+    try {
+      final insights = await _service.getEventInsights(
+        days: nextDays,
+        limit: 10,
+      );
+      if (!mounted) return;
+      setState(() => _insights = insights);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'No se pudieron cargar los insights.');
+      }
+    } finally {
+      if (mounted) setState(() => _insightsLoading = false);
+    }
+  }
+
+  String _csvCell(Object? value) {
+    final raw = (value ?? '').toString();
+    return '"${raw.replaceAll('"', '""')}"';
+  }
+
+  String _insightsCsv(AdminEventInsights insights) {
+    final rows = <List<Object?>>[
+      ['seccion', 'item', 'eventos', 'usuarios_unicos'],
+      for (final event in insights.eventsByType)
+        [
+          'tipo_evento',
+          event.eventType,
+          event.count,
+          event.uniqueAuthenticatedUsers
+        ],
+      for (final item in insights.topPublicPages)
+        [
+          'paginas_publicas',
+          item.entityId,
+          item.views,
+          item.uniqueAuthenticatedUsers
+        ],
+      for (final item in insights.topPublicCtas)
+        [
+          'ctas_publicos',
+          item.entityId,
+          item.views,
+          item.uniqueAuthenticatedUsers
+        ],
+      for (final item in insights.topFreightDetailViews)
+        [
+          'fletes_mas_abiertos',
+          item.entityId,
+          item.views,
+          item.uniqueAuthenticatedUsers
+        ],
+      for (final item in insights.topDriverProfileViews)
+        [
+          'perfiles_conductor',
+          item.entityId,
+          item.views,
+          item.uniqueAuthenticatedUsers
+        ],
+    ];
+    return rows.map((row) => row.map(_csvCell).join(',')).join('\r\n');
+  }
+
+  Future<void> _exportInsightsCsv() async {
+    final insights = _insights;
+    if (insights == null) return;
+    final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+    await downloadTextFile(
+      filename: 'fleteapp_insights_${insights.days}d_$stamp.csv',
+      content: _insightsCsv(insights),
+      mimeType: 'text/csv;charset=utf-8',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Insights exportados en CSV'),
+        backgroundColor: AppTheme.success,
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -391,6 +488,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             loading: _loading,
                             money: _money,
                           ),
+                          if (!_loading && _operations != null) ...[
+                            const SizedBox(height: 12),
+                            _CeoOperationsPanel(
+                              operations: _operations!,
+                              money: _money,
+                            ),
+                          ],
                           if (!_loading && _metrics != null) ...[
                             const SizedBox(height: 12),
                             _MonitoringPanel(
@@ -410,6 +514,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             privacyCount: _privacyRequests.length,
                             payoutCount: _payouts.length,
                             auditCount: _auditEvents.length,
+                            insightCount: _insights?.totalEvents ?? 0,
                             legalCount: _legalConsents.length,
                             onChanged: (value) =>
                                 setState(() => _tabIndex = value),
@@ -441,6 +546,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               onUpdate: _updatePrivacyRequest,
                             )
                           else if (_tabIndex == 4)
+                            _InsightsPanel(
+                              insights: _insights,
+                              loading: _insightsLoading,
+                              selectedDays: _insightDays,
+                              onDaysChanged: (days) =>
+                                  _loadInsights(days: days),
+                              onRefresh: () => _loadInsights(),
+                              onExportCsv: _exportInsightsCsv,
+                            )
+                          else if (_tabIndex == 5)
                             _AuditEventsPanel(
                               events: _auditEvents,
                               loading: _auditLoading,
@@ -772,6 +887,510 @@ class _MetricTile extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _CeoOperationsPanel extends StatelessWidget {
+  final AdminOperations operations;
+  final NumberFormat money;
+
+  const _CeoOperationsPanel({
+    required this.operations,
+    required this.money,
+  });
+
+  String _money(num value) => '\$${money.format(value)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final realtime = operations.realtime;
+    final funnel = operations.funnel14d;
+    final financial = operations.financial14d;
+    final driverCoverage = realtime.approvedDrivers == 0
+        ? 0
+        : (realtime.onlineDrivers / realtime.approvedDrivers) * 100;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: _adminBox(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: _PanelTitle(
+                  icon: Icons.speed_rounded,
+                  title: 'Operacion CEO',
+                ),
+              ),
+              Text(
+                'Actualizado ${_timeLabel(operations.generatedAt)}',
+                style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 780;
+              final metrics = [
+                _CeoMetricData(
+                  label: 'Solicitudes ultimo minuto',
+                  value: '${realtime.freightsLastMinute}',
+                  helper: '${realtime.freightsLastHour} en 60 min',
+                  icon: Icons.flash_on_rounded,
+                  color: AppTheme.primary,
+                ),
+                _CeoMetricData(
+                  label: 'Promedio por minuto',
+                  value: realtime.averageFreightsPerMinute60m.toString(),
+                  helper:
+                      '${realtime.averageFreightsPerHour24h} por hora en 24 h',
+                  icon: Icons.query_stats_rounded,
+                  color: AppTheme.accent,
+                ),
+                _CeoMetricData(
+                  label: 'Conductores online',
+                  value:
+                      '${realtime.onlineDrivers}/${realtime.approvedDrivers}',
+                  helper: '${driverCoverage.toStringAsFixed(0)}% cobertura',
+                  icon: Icons.cell_tower_rounded,
+                  color: AppTheme.success,
+                ),
+                _CeoMetricData(
+                  label: 'Comision potencial 24 h',
+                  value: _money(realtime.platformFeePotential24hClp),
+                  helper: _money(realtime.grossRequested24hClp),
+                  icon: Icons.account_balance_wallet_outlined,
+                  color: AppTheme.warning,
+                ),
+              ];
+
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: metrics.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: compact ? 2 : 4,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: compact ? 2.7 : 2.35,
+                ),
+                itemBuilder: (_, index) => _CeoMetricTile(data: metrics[index]),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final trendPanels = [
+                _TrendBarsPanel(
+                  title: 'Solicitudes por minuto',
+                  subtitle: 'Ultimos 60 min',
+                  buckets: operations.minute,
+                  labelKind: 'minute',
+                ),
+                _TrendBarsPanel(
+                  title: 'Solicitudes por hora',
+                  subtitle: 'Ultimas 24 h',
+                  buckets: operations.hourly,
+                  labelKind: 'hour',
+                ),
+                _TrendBarsPanel(
+                  title: 'Solicitudes por dia',
+                  subtitle: 'Ultimos 14 dias',
+                  buckets: operations.daily,
+                  labelKind: 'day',
+                ),
+                _FunnelPanel(
+                  funnel: funnel,
+                  financial: financial,
+                  money: money,
+                ),
+              ];
+
+              if (constraints.maxWidth > 980) {
+                return Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: trendPanels[0]),
+                        const SizedBox(width: 10),
+                        Expanded(child: trendPanels[1]),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: trendPanels[2]),
+                        const SizedBox(width: 10),
+                        Expanded(child: trendPanels[3]),
+                      ],
+                    ),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  for (var i = 0; i < trendPanels.length; i++) ...[
+                    trendPanels[i],
+                    if (i != trendPanels.length - 1) const SizedBox(height: 10),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CeoMetricData {
+  final String label;
+  final String value;
+  final String helper;
+  final IconData icon;
+  final Color color;
+
+  const _CeoMetricData({
+    required this.label,
+    required this.value,
+    required this.helper,
+    required this.icon,
+    required this.color,
+  });
+}
+
+class _CeoMetricTile extends StatelessWidget {
+  final _CeoMetricData data;
+
+  const _CeoMetricTile({required this.data});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: data.color.withValues(alpha: 0.16)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: data.color.withValues(alpha: 0.11),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(data.icon, color: data.color, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    data.value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.midnight,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    data.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.slate600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    data.helper,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.slate400,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _TrendBarsPanel extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final List<AdminOperationBucket> buckets;
+  final String labelKind;
+
+  const _TrendBarsPanel({
+    required this.title,
+    required this.subtitle,
+    required this.buckets,
+    required this.labelKind,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final maxCount = buckets.fold<int>(
+      0,
+      (max, item) => item.count > max ? item.count : max,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.slate200, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 96,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (var i = 0; i < buckets.length; i++) ...[
+                  Expanded(
+                    child: Tooltip(
+                      message:
+                          '${_bucketLabel(buckets[i].bucket, labelKind)}: ${buckets[i].count}',
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: FractionallySizedBox(
+                                heightFactor: maxCount == 0
+                                    ? 0.04
+                                    : (buckets[i].count / maxCount)
+                                        .clamp(0.04, 1),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: buckets[i].count == 0
+                                        ? AppTheme.slate200
+                                        : AppTheme.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _bucketLabel(buckets[i].bucket, labelKind),
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            style: const TextStyle(
+                              color: AppTheme.slate400,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (i != buckets.length - 1) const SizedBox(width: 3),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FunnelPanel extends StatelessWidget {
+  final AdminOperationsFunnel funnel;
+  final AdminOperationsFinancial financial;
+  final NumberFormat money;
+
+  const _FunnelPanel({
+    required this.funnel,
+    required this.financial,
+    required this.money,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      _FunnelItem('Creados', funnel.created, AppTheme.primary),
+      _FunnelItem('Aceptados', funnel.accepted, AppTheme.accent),
+      _FunnelItem('Completados', funnel.completed, AppTheme.success),
+      _FunnelItem('Cancelados', funnel.cancelled, AppTheme.error),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.slate200, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Embudo 14 dias',
+            style: TextStyle(
+              color: AppTheme.midnight,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < items.length; i++) ...[
+            _FunnelRow(
+              item: items[i],
+              total: funnel.created,
+            ),
+            if (i != items.length - 1) const SizedBox(height: 8),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'Aceptacion ${funnel.acceptanceRate}% · Cierre ${funnel.completionRate}%',
+            style: const TextStyle(
+              color: AppTheme.slate600,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Comision completada \$${money.format(financial.platformFeeCompletedClp)}',
+            style: const TextStyle(
+              color: AppTheme.slate400,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FunnelItem {
+  final String label;
+  final int count;
+  final Color color;
+
+  const _FunnelItem(this.label, this.count, this.color);
+}
+
+class _FunnelRow extends StatelessWidget {
+  final _FunnelItem item;
+  final int total;
+
+  const _FunnelRow({required this.item, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total == 0 ? 0.0 : (item.count / total).clamp(0.0, 1.0);
+    return Row(
+      children: [
+        SizedBox(
+          width: 78,
+          child: Text(
+            item.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.slate600,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 7,
+              backgroundColor: AppTheme.slate200,
+              valueColor: AlwaysStoppedAnimation<Color>(item.color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 32,
+          child: Text(
+            '${item.count}',
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              color: AppTheme.midnight,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _timeLabel(String value) {
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return '--:--';
+  return DateFormat('HH:mm').format(parsed.toLocal());
+}
+
+String _bucketLabel(String value, String kind) {
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return '';
+  return switch (kind) {
+    'minute' => DateFormat('mm').format(parsed.toLocal()),
+    'hour' => DateFormat('HH').format(parsed.toLocal()),
+    _ => DateFormat('d/M').format(parsed.toLocal()),
+  };
 }
 
 class _MonitoringPanel extends StatelessWidget {
@@ -1190,6 +1809,7 @@ class _TabSelector extends StatelessWidget {
   final int privacyCount;
   final int payoutCount;
   final int auditCount;
+  final int insightCount;
   final int legalCount;
   final ValueChanged<int> onChanged;
 
@@ -1200,6 +1820,7 @@ class _TabSelector extends StatelessWidget {
     required this.privacyCount,
     required this.payoutCount,
     required this.auditCount,
+    required this.insightCount,
     required this.legalCount,
     required this.onChanged,
   });
@@ -1243,17 +1864,24 @@ class _TabSelector extends StatelessWidget {
             ),
             _TabButton(
               selected: index == 4,
-              icon: Icons.history_rounded,
-              label: 'Historial',
-              count: auditCount,
+              icon: Icons.query_stats_rounded,
+              label: 'Insights',
+              count: insightCount,
               onTap: () => onChanged(4),
             ),
             _TabButton(
               selected: index == 5,
+              icon: Icons.history_rounded,
+              label: 'Historial',
+              count: auditCount,
+              onTap: () => onChanged(5),
+            ),
+            _TabButton(
+              selected: index == 6,
               icon: Icons.verified_user_outlined,
               label: 'Legal',
               count: legalCount,
-              onTap: () => onChanged(5),
+              onTap: () => onChanged(6),
             ),
           ],
         ),
@@ -1855,6 +2483,570 @@ class _PrivacyRequestActions extends StatelessWidget {
       ],
     );
   }
+}
+
+class _InsightsPanel extends StatelessWidget {
+  final AdminEventInsights? insights;
+  final bool loading;
+  final int selectedDays;
+  final ValueChanged<int> onDaysChanged;
+  final VoidCallback onRefresh;
+  final VoidCallback onExportCsv;
+
+  const _InsightsPanel({
+    required this.insights,
+    required this.loading,
+    required this.selectedDays,
+    required this.onDaysChanged,
+    required this.onRefresh,
+    required this.onExportCsv,
+  });
+
+  String _formatSince(String value) {
+    if (value.isEmpty) return '';
+    try {
+      return DateFormat('dd/MM/yyyy HH:mm').format(
+        DateTime.parse(value).toLocal(),
+      );
+    } catch (_) {
+      return value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = insights;
+    return _DataPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 720;
+                final title = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _PanelTitle(
+                      icon: Icons.query_stats_rounded,
+                      title: 'Insights de crecimiento',
+                    ),
+                    if (data != null && data.since.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Desde ${_formatSince(data.since)}',
+                        style: const TextStyle(
+                          color: AppTheme.slate400,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+                final actions = Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _InsightPeriodSelector(
+                      selectedDays: selectedDays,
+                      onChanged: onDaysChanged,
+                    ),
+                    IconButton.outlined(
+                      tooltip: 'Actualizar insights',
+                      onPressed: loading ? null : onRefresh,
+                      icon: const Icon(Icons.refresh_rounded),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(42, 42),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: data == null || loading ? null : onExportCsv,
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: const Text('CSV'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 42),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      title,
+                      const SizedBox(height: 12),
+                      actions,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: title),
+                    actions,
+                  ],
+                );
+              },
+            ),
+          ),
+          if (loading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          if (data == null)
+            const _InlineEmptyState(
+              icon: Icons.query_stats_rounded,
+              text: 'Sin insights cargados',
+            )
+          else ...[
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: _InsightSummaryGrid(insights: data),
+            ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+              child: _InsightRankingGrid(insights: data),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightPeriodSelector extends StatelessWidget {
+  final int selectedDays;
+  final ValueChanged<int> onChanged;
+
+  const _InsightPeriodSelector({
+    required this.selectedDays,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<int>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: 7, label: Text('7d')),
+          ButtonSegment(value: 30, label: Text('30d')),
+          ButtonSegment(value: 90, label: Text('90d')),
+        ],
+        selected: {selectedDays},
+        onSelectionChanged: (values) => onChanged(values.first),
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      );
+}
+
+class _InsightSummaryGrid extends StatelessWidget {
+  final AdminEventInsights insights;
+
+  const _InsightSummaryGrid({required this.insights});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      _MetricData(
+        label: 'Eventos medidos',
+        value: '${insights.totalEvents}',
+        icon: Icons.bolt_rounded,
+        color: AppTheme.primary,
+      ),
+      _MetricData(
+        label: 'Interaccion web',
+        value: '${insights.publicEngagement}',
+        icon: Icons.language_rounded,
+        color: AppTheme.accent,
+      ),
+      _MetricData(
+        label: 'Interaccion app',
+        value: '${insights.appEngagement}',
+        icon: Icons.phone_iphone_rounded,
+        color: AppTheme.success,
+      ),
+      _MetricData(
+        label: 'Fletes abiertos',
+        value: '${insights.countFor('app.freight_detail_view')}',
+        icon: Icons.route_outlined,
+        color: AppTheme.urgent,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth > 920
+            ? 4
+            : constraints.maxWidth > 560
+                ? 2
+                : 1;
+        return GridView.builder(
+          itemCount: data.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: columns == 1 ? 4.4 : 3.2,
+          ),
+          itemBuilder: (_, i) => _MetricTile(data: data[i]),
+        );
+      },
+    );
+  }
+}
+
+class _InsightRankingGrid extends StatelessWidget {
+  final AdminEventInsights insights;
+
+  const _InsightRankingGrid({required this.insights});
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = [
+      _InsightEventTypeSection(events: insights.eventsByType),
+      _InsightEntitySection(
+        title: 'Paginas publicas mas vistas',
+        icon: Icons.travel_explore_rounded,
+        emptyText: 'Sin vistas web publicas',
+        items: insights.topPublicPages,
+        color: AppTheme.accent,
+      ),
+      _InsightEntitySection(
+        title: 'CTAs con mas clicks',
+        icon: Icons.ads_click_rounded,
+        emptyText: 'Sin clicks comerciales',
+        items: insights.topPublicCtas,
+        color: AppTheme.primary,
+      ),
+      _InsightEntitySection(
+        title: 'Fletes mas abiertos',
+        icon: Icons.route_outlined,
+        emptyText: 'Sin aperturas de flete',
+        items: insights.topFreightDetailViews,
+        color: AppTheme.urgent,
+        prefix: 'Flete #',
+      ),
+      _InsightEntitySection(
+        title: 'Perfiles de conductor vistos',
+        icon: Icons.badge_outlined,
+        emptyText: 'Sin vistas de perfil conductor',
+        items: insights.topDriverProfileViews,
+        color: AppTheme.success,
+        prefix: 'Conductor #',
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 840) {
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final section in sections)
+                SizedBox(
+                  width: (constraints.maxWidth - 12) / 2,
+                  child: section,
+                ),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            for (var i = 0; i < sections.length; i++) ...[
+              sections[i],
+              if (i != sections.length - 1) const SizedBox(height: 12),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InsightEventTypeSection extends StatelessWidget {
+  final List<AdminInsightEventType> events;
+
+  const _InsightEventTypeSection({required this.events});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = events.fold(0, (sum, event) => sum + event.count);
+    final visibleEvents = events.take(8).toList();
+    return _InsightSectionShell(
+      icon: Icons.stacked_line_chart_rounded,
+      title: 'Eventos por tipo',
+      child: events.isEmpty
+          ? const _CompactEmpty(text: 'Sin eventos medidos')
+          : Column(
+              children: [
+                for (var i = 0; i < visibleEvents.length; i++) ...[
+                  _InsightEventRow(event: visibleEvents[i], total: total),
+                  if (i != visibleEvents.length - 1) const SizedBox(height: 10),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _InsightEntitySection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final String emptyText;
+  final List<AdminInsightEntity> items;
+  final Color color;
+  final String prefix;
+
+  const _InsightEntitySection({
+    required this.title,
+    required this.icon,
+    required this.emptyText,
+    required this.items,
+    required this.color,
+    this.prefix = '',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final topCount = items.isEmpty ? 0 : items.first.views;
+    return _InsightSectionShell(
+      icon: icon,
+      title: title,
+      child: items.isEmpty
+          ? _CompactEmpty(text: emptyText)
+          : Column(
+              children: [
+                for (var i = 0; i < items.length; i++) ...[
+                  _InsightEntityRow(
+                    item: items[i],
+                    rank: i + 1,
+                    maxViews: topCount,
+                    color: color,
+                    prefix: prefix,
+                  ),
+                  if (i != items.length - 1) const SizedBox(height: 10),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _InsightSectionShell extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  const _InsightSectionShell({
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PanelTitle(icon: icon, title: title),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      );
+}
+
+class _InsightEventRow extends StatelessWidget {
+  final AdminInsightEventType event;
+  final int total;
+
+  const _InsightEventRow({
+    required this.event,
+    required this.total,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = total <= 0 ? 0.0 : event.count / total;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                event.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.midnight,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            _StatusPill(label: '${event.count}', color: AppTheme.primary),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: progress.clamp(0.0, 1.0),
+            minHeight: 6,
+            color: AppTheme.primary,
+            backgroundColor: AppTheme.slate200,
+          ),
+        ),
+        if (event.uniqueAuthenticatedUsers > 0) ...[
+          const SizedBox(height: 5),
+          Text(
+            '${event.uniqueAuthenticatedUsers} usuarios autenticados',
+            style: const TextStyle(color: AppTheme.slate400, fontSize: 11),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _InsightEntityRow extends StatelessWidget {
+  final AdminInsightEntity item;
+  final int rank;
+  final int maxViews;
+  final Color color;
+  final String prefix;
+
+  const _InsightEntityRow({
+    required this.item,
+    required this.rank,
+    required this.maxViews,
+    required this.color,
+    required this.prefix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = maxViews <= 0 ? 0.0 : item.views / maxViews;
+    final title =
+        item.entityId.isEmpty ? 'Sin identificador' : '$prefix${item.entityId}';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            '$rank',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${item.views} vistas',
+                    style: const TextStyle(
+                      color: AppTheme.slate600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress.clamp(0.0, 1.0),
+                  minHeight: 6,
+                  color: color,
+                  backgroundColor: AppTheme.slate200,
+                ),
+              ),
+              if (item.uniqueAuthenticatedUsers > 0) ...[
+                const SizedBox(height: 5),
+                Text(
+                  '${item.uniqueAuthenticatedUsers} usuarios autenticados',
+                  style: const TextStyle(
+                    color: AppTheme.slate400,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactEmpty extends StatelessWidget {
+  final String text;
+
+  const _CompactEmpty({required this.text});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 88,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
+        ),
+      );
 }
 
 class _AuditEventsPanel extends StatelessWidget {

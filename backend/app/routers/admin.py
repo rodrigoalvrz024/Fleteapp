@@ -108,6 +108,22 @@ def _normalize_audit_entity_type(entity_type: str | None) -> str | None:
     return entity_type
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _freight_amount(freight: FreightRequest) -> float:
+    return float(freight.client_pays or freight.estimated_price or 0)
+
+
+def _freight_platform_fee(freight: FreightRequest) -> float:
+    return float(freight.platform_fee or 0)
+
+
 def _documents_snapshot(driver: Driver) -> dict:
     return {
         "license_image": bool(driver.license_image_url),
@@ -322,6 +338,344 @@ def _build_audit_query(
     if to_dt:
         query = query.filter(AuditEvent.occurred_at < to_dt)
     return query
+
+
+def _top_event_entities(
+    db: Session,
+    *,
+    since: datetime,
+    event_type: str,
+    entity_type: str,
+    limit: int,
+) -> list[dict]:
+    rows = (
+        db.query(
+            AuditEvent.entity_id,
+            func.count(AuditEvent.id),
+            func.count(func.distinct(AuditEvent.actor_user_id)),
+        )
+        .filter(
+            AuditEvent.occurred_at >= since,
+            AuditEvent.event_type == event_type,
+            AuditEvent.entity_type == entity_type,
+        )
+        .group_by(AuditEvent.entity_id)
+        .order_by(func.count(AuditEvent.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "entity_id": entity_id,
+            "views": count,
+            "unique_authenticated_users": unique_users,
+        }
+        for entity_id, count, unique_users in rows
+    ]
+
+
+@router.get("/insights/events")
+def event_insights(
+    days: int = 30,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    days = max(1, min(days, 365))
+    limit = max(1, min(limit, 50))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    event_rows = (
+        db.query(
+            AuditEvent.event_type,
+            func.count(AuditEvent.id),
+            func.count(func.distinct(AuditEvent.actor_user_id)),
+        )
+        .filter(AuditEvent.occurred_at >= since)
+        .group_by(AuditEvent.event_type)
+        .order_by(func.count(AuditEvent.id).desc())
+        .all()
+    )
+
+    return {
+        "period": {
+            "days": days,
+            "since": since.isoformat(),
+        },
+        "events_by_type": [
+            {
+                "event_type": event_type,
+                "count": count,
+                "unique_authenticated_users": unique_users,
+            }
+            for event_type, count, unique_users in event_rows
+        ],
+        "top_public_pages": _top_event_entities(
+            db,
+            since=since,
+            event_type="public.page_view",
+            entity_type="public_page",
+            limit=limit,
+        ),
+        "top_public_ctas": _top_event_entities(
+            db,
+            since=since,
+            event_type="public.cta_click",
+            entity_type="public_cta",
+            limit=limit,
+        ),
+        "top_freight_detail_views": _top_event_entities(
+            db,
+            since=since,
+            event_type="app.freight_detail_view",
+            entity_type="freight",
+            limit=limit,
+        ),
+        "top_driver_profile_views": _top_event_entities(
+            db,
+            since=since,
+            event_type="app.driver_profile_view",
+            entity_type="driver",
+            limit=limit,
+        ),
+    }
+
+
+@router.get("/operations")
+def operational_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    now = datetime.now(timezone.utc)
+    since_hour = now - timedelta(hours=1)
+    since_minute = now - timedelta(minutes=1)
+    since_24h = now - timedelta(hours=24)
+    since_14d = now - timedelta(days=14)
+
+    freights_14d = (
+        db.query(FreightRequest)
+        .filter(FreightRequest.created_at >= since_14d)
+        .all()
+    )
+    payments_14d = (
+        db.query(Payment)
+        .filter(Payment.created_at >= since_14d)
+        .all()
+    )
+
+    minute_buckets = {
+        (now.replace(second=0, microsecond=0) - timedelta(minutes=i)): {
+            "count": 0,
+            "client_pays_clp": 0.0,
+            "platform_fee_clp": 0.0,
+        }
+        for i in range(59, -1, -1)
+    }
+    hourly_buckets = {
+        (now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=i)): {
+            "count": 0,
+            "client_pays_clp": 0.0,
+            "platform_fee_clp": 0.0,
+        }
+        for i in range(23, -1, -1)
+    }
+    daily_buckets = {
+        (now.date() - timedelta(days=i)): {
+            "count": 0,
+            "completed": 0,
+            "cancelled": 0,
+            "client_pays_clp": 0.0,
+            "platform_fee_clp": 0.0,
+        }
+        for i in range(13, -1, -1)
+    }
+
+    freights_last_minute = 0
+    freights_last_hour = 0
+    freights_last_24h = 0
+    completed_24h = 0
+    cancelled_24h = 0
+    active_clients_24h: set[int] = set()
+
+    funnel = {
+        "created": len(freights_14d),
+        "accepted": 0,
+        "started": 0,
+        "completed": 0,
+        "cancelled": 0,
+    }
+    gross_requested_14d = 0.0
+    gross_completed_14d = 0.0
+    platform_fee_potential_14d = 0.0
+    platform_fee_completed_14d = 0.0
+    gross_requested_24h = 0.0
+    platform_fee_potential_24h = 0.0
+
+    for freight in freights_14d:
+        created_at = _as_utc(freight.created_at)
+        if not created_at:
+            continue
+        amount = _freight_amount(freight)
+        platform_fee = _freight_platform_fee(freight)
+        status = _status_value(freight.status)
+
+        gross_requested_14d += amount
+        platform_fee_potential_14d += platform_fee
+
+        if freight.accepted_at or freight.driver_id:
+            funnel["accepted"] += 1
+        if freight.started_at or status in {
+            FreightStatus.in_progress.value,
+            FreightStatus.completed.value,
+        }:
+            funnel["started"] += 1
+        if status == FreightStatus.completed.value:
+            funnel["completed"] += 1
+            gross_completed_14d += amount
+            platform_fee_completed_14d += platform_fee
+        if status == FreightStatus.cancelled.value:
+            funnel["cancelled"] += 1
+
+        if created_at >= since_minute:
+            freights_last_minute += 1
+        if created_at >= since_hour:
+            freights_last_hour += 1
+        if created_at >= since_24h:
+            freights_last_24h += 1
+            active_clients_24h.add(freight.client_id)
+            gross_requested_24h += amount
+            platform_fee_potential_24h += platform_fee
+            if status == FreightStatus.completed.value:
+                completed_24h += 1
+            if status == FreightStatus.cancelled.value:
+                cancelled_24h += 1
+
+        minute_key = created_at.replace(second=0, microsecond=0)
+        if minute_key in minute_buckets:
+            minute_buckets[minute_key]["count"] += 1
+            minute_buckets[minute_key]["client_pays_clp"] += amount
+            minute_buckets[minute_key]["platform_fee_clp"] += platform_fee
+
+        hour_key = created_at.replace(minute=0, second=0, microsecond=0)
+        if hour_key in hourly_buckets:
+            hourly_buckets[hour_key]["count"] += 1
+            hourly_buckets[hour_key]["client_pays_clp"] += amount
+            hourly_buckets[hour_key]["platform_fee_clp"] += platform_fee
+
+        day_key = created_at.date()
+        if day_key in daily_buckets:
+            daily_buckets[day_key]["count"] += 1
+            daily_buckets[day_key]["client_pays_clp"] += amount
+            daily_buckets[day_key]["platform_fee_clp"] += platform_fee
+            if status == FreightStatus.completed.value:
+                daily_buckets[day_key]["completed"] += 1
+            if status == FreightStatus.cancelled.value:
+                daily_buckets[day_key]["cancelled"] += 1
+
+    created_count = max(funnel["created"], 1)
+    freights_by_status = _count_by(db, FreightRequest.status)
+    active_freights = (
+        freights_by_status.get(FreightStatus.pending.value, 0)
+        + freights_by_status.get(FreightStatus.accepted.value, 0)
+        + freights_by_status.get(FreightStatus.in_progress.value, 0)
+    )
+    approved_drivers = (
+        db.query(Driver).filter(Driver.status == DriverStatus.approved).count()
+    )
+    online_drivers = (
+        db.query(Driver)
+        .filter(
+            Driver.status == DriverStatus.approved,
+            Driver.is_available == True,
+        )
+        .count()
+    )
+    pending_drivers = (
+        db.query(Driver).filter(Driver.status == DriverStatus.pending).count()
+    )
+    authorized_payments_14d = sum(
+        float(payment.amount or 0)
+        for payment in payments_14d
+        if _status_value(payment.status) == PaymentStatus.authorized.value
+    )
+
+    return {
+        "generated_at": now.isoformat(),
+        "period": {
+            "since_minute": since_minute.isoformat(),
+            "since_hour": since_hour.isoformat(),
+            "since_24h": since_24h.isoformat(),
+            "since_14d": since_14d.isoformat(),
+        },
+        "realtime": {
+            "freights_last_minute": freights_last_minute,
+            "freights_last_hour": freights_last_hour,
+            "freights_last_24h": freights_last_24h,
+            "average_freights_per_minute_60m": round(freights_last_hour / 60, 2),
+            "average_freights_per_hour_24h": round(freights_last_24h / 24, 2),
+            "active_freights": active_freights,
+            "pending_freights": freights_by_status.get(
+                FreightStatus.pending.value, 0
+            ),
+            "accepted_freights": freights_by_status.get(
+                FreightStatus.accepted.value, 0
+            ),
+            "in_progress_freights": freights_by_status.get(
+                FreightStatus.in_progress.value, 0
+            ),
+            "completed_24h": completed_24h,
+            "cancelled_24h": cancelled_24h,
+            "online_drivers": online_drivers,
+            "approved_drivers": approved_drivers,
+            "pending_drivers": pending_drivers,
+            "active_clients_24h": len(active_clients_24h),
+            "gross_requested_24h_clp": round(gross_requested_24h),
+            "platform_fee_potential_24h_clp": round(platform_fee_potential_24h),
+        },
+        "funnel_14d": {
+            **funnel,
+            "acceptance_rate": round((funnel["accepted"] / created_count) * 100, 1),
+            "start_rate": round((funnel["started"] / created_count) * 100, 1),
+            "completion_rate": round((funnel["completed"] / created_count) * 100, 1),
+            "cancellation_rate": round((funnel["cancelled"] / created_count) * 100, 1),
+        },
+        "financial_14d": {
+            "gross_requested_clp": round(gross_requested_14d),
+            "gross_completed_clp": round(gross_completed_14d),
+            "platform_fee_potential_clp": round(platform_fee_potential_14d),
+            "platform_fee_completed_clp": round(platform_fee_completed_14d),
+            "authorized_payments_clp": round(authorized_payments_14d),
+        },
+        "minute": [
+            {
+                "bucket": bucket.isoformat(),
+                "count": values["count"],
+                "client_pays_clp": round(values["client_pays_clp"]),
+                "platform_fee_clp": round(values["platform_fee_clp"]),
+            }
+            for bucket, values in minute_buckets.items()
+        ],
+        "hourly": [
+            {
+                "bucket": bucket.isoformat(),
+                "count": values["count"],
+                "client_pays_clp": round(values["client_pays_clp"]),
+                "platform_fee_clp": round(values["platform_fee_clp"]),
+            }
+            for bucket, values in hourly_buckets.items()
+        ],
+        "daily": [
+            {
+                "bucket": day.isoformat(),
+                "count": values["count"],
+                "completed": values["completed"],
+                "cancelled": values["cancelled"],
+                "client_pays_clp": round(values["client_pays_clp"]),
+                "platform_fee_clp": round(values["platform_fee_clp"]),
+            }
+            for day, values in daily_buckets.items()
+        ],
+    }
 
 
 @router.get("/audit-events")
@@ -732,10 +1086,16 @@ def approve_driver(
         raise HTTPException(400, "Falta licencia de conducir")
     if not (driver.vehicle_doc_url or driver.circulation_permit_url):
         raise HTTPException(400, "Falta permiso de circulacion")
+    if not (driver.vehicle_doc_expiry or driver.circulation_permit_expiry):
+        raise HTTPException(400, "Falta vencimiento del permiso de circulacion")
     if not driver.technical_review_url:
         raise HTTPException(400, "Falta revision tecnica")
+    if not driver.technical_review_expiry:
+        raise HTTPException(400, "Falta vencimiento de revision tecnica")
     if not driver.soap_url:
         raise HTTPException(400, "Falta SOAP")
+    if not driver.soap_expiry:
+        raise HTTPException(400, "Falta vencimiento de SOAP")
     status_before = _status_value(driver.status)
     documents_before = _documents_snapshot(driver)
     driver.status           = DriverStatus.approved

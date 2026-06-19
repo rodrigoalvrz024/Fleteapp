@@ -99,14 +99,25 @@ if (-not (Test-GoogleMapsApiKey $GoogleMapsApiKey)) {
 }
 
 $flutter = Get-FlutterCli
+$toolAppData = Join-Path $mobileDir '.tool_appdata'
+$toolLocalAppData = Join-Path $mobileDir '.tool_localappdata'
+$previousAppData = $env:APPDATA
+$previousLocalAppData = $env:LOCALAPPDATA
+
+New-Item -ItemType Directory -Force -Path $toolAppData | Out-Null
+New-Item -ItemType Directory -Force -Path $toolLocalAppData | Out-Null
 
 Push-Location $mobileDir
 try {
+  $env:APPDATA = $toolAppData
+  $env:LOCALAPPDATA = $toolLocalAppData
   & $flutter build web --release "--web-define=GOOGLE_MAPS_API_KEY=$GoogleMapsApiKey"
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
   }
 } finally {
+  $env:APPDATA = $previousAppData
+  $env:LOCALAPPDATA = $previousLocalAppData
   Pop-Location
 }
 

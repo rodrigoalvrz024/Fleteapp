@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../models/driver_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/driver_onboarding_service.dart';
 import '../../services/privacy_service.dart';
 import 'web_layout.dart';
 
@@ -17,8 +20,40 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _privacyService = PrivacyService();
+  final _driverService = DriverOnboardingService();
   Uint8List? _avatarBytes;
   bool _privacyLoading = false;
+  bool _driverProfileRequested = false;
+  bool _driverProfileLoading = false;
+  DriverModel? _driverProfile;
+  String? _driverProfileError;
+
+  void _ensureDriverProfile(String role) {
+    if (role != 'driver' || _driverProfileRequested) return;
+    _driverProfileRequested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDriverProfile());
+  }
+
+  Future<void> _loadDriverProfile() async {
+    if (!mounted) return;
+    setState(() {
+      _driverProfileLoading = true;
+      _driverProfileError = null;
+    });
+    try {
+      final driver = await _driverService.getMyDriver();
+      if (!mounted) return;
+      setState(() => _driverProfile = driver);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _driverProfile = null;
+        _driverProfileError = 'No pudimos cargar tu perfil de conductor.';
+      });
+    } finally {
+      if (mounted) setState(() => _driverProfileLoading = false);
+    }
+  }
 
   Future<void> _pickAvatar() async {
     HapticFeedback.lightImpact();
@@ -185,6 +220,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final email = user?.email ?? '';
     final phone = user?.phone ?? 'Sin teléfono';
     final role = user?.role ?? 'client';
+    _ensureDriverProfile(role);
     final initials =
         name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join();
 
@@ -283,6 +319,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 24),
 
           // ── 1. Información personal ──────────────────
+          if (role == 'driver') ...[
+            _DriverProfilePanel(
+              driver: _driverProfile,
+              loading: _driverProfileLoading,
+              error: _driverProfileError,
+              onRefresh: _loadDriverProfile,
+              onOnboarding: () => context.push('/app/driver/onboarding'),
+              onTrips: () => context.push('/app/driver/trips'),
+              onPayouts: () => context.push('/app/driver/payouts'),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           const _SectionTitle('Información personal'),
           const SizedBox(height: 8),
           _Card(children: [
@@ -485,6 +534,956 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 }
 
 // ── Widgets base ────────────────────────────────────────────
+
+class _DriverProfilePanel extends StatelessWidget {
+  final DriverModel? driver;
+  final bool loading;
+  final String? error;
+  final Future<void> Function() onRefresh;
+  final VoidCallback onOnboarding;
+  final VoidCallback onTrips;
+  final VoidCallback onPayouts;
+
+  const _DriverProfilePanel({
+    required this.driver,
+    required this.loading,
+    required this.error,
+    required this.onRefresh,
+    required this.onOnboarding,
+    required this.onTrips,
+    required this.onPayouts,
+  });
+
+  Color get _statusColor {
+    final status = driver?.status;
+    if (status == 'approved') return AppTheme.success;
+    if (status == 'pending' || status == 'under_review') {
+      return AppTheme.warning;
+    }
+    if (status == 'rejected' || status == 'suspended') return AppTheme.error;
+    return AppTheme.slate400;
+  }
+
+  String get _statusLabel {
+    final current = driver;
+    if (current == null) return 'Sin perfil';
+    if (current.isApproved) return 'Aprobado para operar';
+    if (current.isUnderReview) return 'En revision';
+    if (current.isRejected) return 'Requiere actualizacion';
+    return 'Perfil incompleto';
+  }
+
+  String _licenseExpiryLabel(DateTime? value) {
+    if (value == null) return 'Sin vencimiento registrado';
+    return 'Vence ${DateFormat('dd/MM/yyyy').format(value.toLocal())}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = driver;
+    if (loading && current == null) {
+      return const _Card(
+        children: [
+          SizedBox(
+            height: 160,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
+        ],
+      );
+    }
+
+    if (error != null && current == null) {
+      return _Card(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppTheme.error,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        error!,
+                        style: const TextStyle(
+                          color: AppTheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onRefresh,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (current == null) {
+      return _Card(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _DriverPanelHeader(
+                  icon: Icons.badge_outlined,
+                  title: 'Perfil de conductor',
+                  subtitle: 'Crea tu perfil para comenzar la revision.',
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: onOnboarding,
+                  icon: const Icon(Icons.assignment_ind_outlined, size: 18),
+                  label: const Text('Crear perfil de conductor'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    final vehicle = current.vehicles.isNotEmpty ? current.vehicles.first : null;
+    final documents = [
+      _DriverDocState('Licencia', current.licenseImageUrl != null),
+      _DriverDocState(
+        'Permiso/certificado vehiculo',
+        current.circulationPermitUrl != null || current.vehicleDocUrl != null,
+      ),
+      _DriverDocState('Revision tecnica', current.technicalReviewUrl != null),
+      _DriverDocState('SOAP', current.soapUrl != null),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitle('Perfil de conductor'),
+        const SizedBox(height: 8),
+        _Card(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DriverPanelHeader(
+                          icon: Icons.verified_user_outlined,
+                          title: _statusLabel,
+                          subtitle: current.rejectionReason?.isNotEmpty == true
+                              ? current.rejectionReason!
+                              : 'ID conductor #${current.id} - RUT ${current.rut}',
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Actualizar perfil',
+                        onPressed: loading ? null : onRefresh,
+                        icon: loading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _DriverStatusBanner(
+                    label: _statusLabel,
+                    color: _statusColor,
+                    message: current.isApproved
+                        ? 'Tu cuenta puede recibir y aceptar fletes.'
+                        : current.isUnderReview
+                            ? 'El equipo esta revisando tus documentos.'
+                            : 'Completa o actualiza tus documentos para operar.',
+                  ),
+                  const SizedBox(height: 14),
+                  _DriverReadinessPanel(
+                    driver: current,
+                    onAction: onOnboarding,
+                  ),
+                  const SizedBox(height: 14),
+                  _DriverOperationalStats(driver: current),
+                  const SizedBox(height: 14),
+                  _DriverExpiryPanel(driver: current),
+                  const SizedBox(height: 14),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 620;
+                      final license = _DriverInfoTile(
+                        icon: Icons.credit_card_rounded,
+                        label: 'Licencia',
+                        value: current.licenseNumber ?? 'Sin numero',
+                        helper: _licenseExpiryLabel(current.licenseExpiry),
+                      );
+                      final vehicleTile = _DriverInfoTile(
+                        icon: Icons.local_shipping_outlined,
+                        label: 'Vehiculo',
+                        value: vehicle == null
+                            ? 'Sin vehiculo registrado'
+                            : '${vehicle.brand} ${vehicle.model} ${vehicle.year}',
+                        helper: vehicle == null
+                            ? 'Agrega un vehiculo en onboarding'
+                            : '${vehicle.plate} - ${vehicle.color}',
+                      );
+                      if (compact) {
+                        return Column(
+                          children: [
+                            license,
+                            const SizedBox(height: 10),
+                            vehicleTile,
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: license),
+                          const SizedBox(width: 10),
+                          Expanded(child: vehicleTile),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  _DriverDocumentChecklist(documents: documents),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _DriverQuickAction(
+                        icon: Icons.assignment_outlined,
+                        label: 'Documentos',
+                        onTap: onOnboarding,
+                      ),
+                      _DriverQuickAction(
+                        icon: Icons.route_outlined,
+                        label: 'Mis viajes',
+                        onTap: onTrips,
+                      ),
+                      _DriverQuickAction(
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Liquidaciones',
+                        onTap: onPayouts,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DriverPanelHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _DriverPanelHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppTheme.primary, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.slate400,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _DriverStatusBanner extends StatelessWidget {
+  final String label;
+  final String message;
+  final Color color;
+
+  const _DriverStatusBanner({
+    required this.label,
+    required this.message,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: AppTheme.slate600,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _DriverReadinessPanel extends StatelessWidget {
+  final DriverModel driver;
+  final VoidCallback onAction;
+
+  const _DriverReadinessPanel({
+    required this.driver,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = driver.canOperate;
+    final color = ready ? AppTheme.success : AppTheme.warning;
+    final blockers = driver.operationalBlockers.take(5).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                ready
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.warning_amber_rounded,
+                color: color,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  ready ? 'Listo para operar' : 'No listo para operar',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            ready
+                ? 'Puedes conectarte y aceptar fletes disponibles.'
+                : blockers.isEmpty
+                    ? 'Revisa tu aprobacion, vehiculo y documentos vigentes.'
+                    : 'Resuelve estos puntos antes de conectarte.',
+            style: const TextStyle(
+              color: AppTheme.slate600,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          if (!ready && blockers.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final blocker in blockers) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.error_outline_rounded,
+                      color: color,
+                      size: 15,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      blocker,
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ],
+          ],
+          if (!ready) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.assignment_outlined, size: 16),
+                label: const Text('Actualizar documentos'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.primary,
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DriverOperationalStats extends StatelessWidget {
+  final DriverModel driver;
+
+  const _DriverOperationalStats({required this.driver});
+
+  @override
+  Widget build(BuildContext context) {
+    final rating = driver.ratingCount > 0
+        ? driver.ratingAverage.toStringAsFixed(1)
+        : 'Nuevo';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final items = [
+          _DriverMetricData(
+            icon: Icons.power_settings_new_rounded,
+            label: 'Disponibilidad',
+            value: driver.isAvailable ? 'En linea' : 'Fuera de linea',
+            color: driver.isAvailable ? AppTheme.success : AppTheme.slate400,
+          ),
+          _DriverMetricData(
+            icon: Icons.star_rounded,
+            label: 'Rating',
+            value: rating,
+            helper: driver.ratingCount > 0
+                ? '${driver.ratingCount} calificaciones'
+                : 'Sin calificaciones',
+            color: AppTheme.accent,
+          ),
+          _DriverMetricData(
+            icon: Icons.route_outlined,
+            label: 'Viajes',
+            value: '${driver.totalTrips}',
+            helper: 'Completados',
+            color: AppTheme.primary,
+          ),
+        ];
+        if (compact) {
+          return Column(
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                _DriverMetricTile(data: items[i]),
+                if (i != items.length - 1) const SizedBox(height: 10),
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              Expanded(child: _DriverMetricTile(data: items[i])),
+              if (i != items.length - 1) const SizedBox(width: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DriverMetricData {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? helper;
+  final Color color;
+
+  const _DriverMetricData({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.helper,
+    required this.color,
+  });
+}
+
+class _DriverMetricTile extends StatelessWidget {
+  final _DriverMetricData data;
+
+  const _DriverMetricTile({required this.data});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: data.color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: data.color.withValues(alpha: 0.12)),
+        ),
+        child: Row(
+          children: [
+            Icon(data.icon, color: data.color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.slate400,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    data.value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.midnight,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if ((data.helper ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      data.helper!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.slate400,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _DriverExpiryPanel extends StatelessWidget {
+  final DriverModel driver;
+
+  const _DriverExpiryPanel({required this.driver});
+
+  List<_DriverExpiryItem> get _items => [
+        _DriverExpiryItem(
+          label: 'Licencia',
+          expiry: driver.licenseExpiry,
+          uploaded: driver.licenseImageUrl != null,
+        ),
+        _DriverExpiryItem(
+          label: 'Permiso circulacion',
+          expiry: driver.circulationPermitExpiry ?? driver.vehicleDocExpiry,
+          uploaded:
+              driver.circulationPermitUrl != null || driver.vehicleDocUrl != null,
+        ),
+        _DriverExpiryItem(
+          label: 'Revision tecnica',
+          expiry: driver.technicalReviewExpiry,
+          uploaded: driver.technicalReviewUrl != null,
+        ),
+        _DriverExpiryItem(
+          label: 'SOAP',
+          expiry: driver.soapExpiry,
+          uploaded: driver.soapUrl != null,
+        ),
+      ];
+
+  Color _colorFor(_DriverExpiryItem item) {
+    final days = driver.daysUntil(item.expiry);
+    if (!item.uploaded || item.expiry == null) return AppTheme.slate400;
+    if (days != null && days < 0) return AppTheme.error;
+    if (days != null && days <= 30) return AppTheme.warning;
+    return AppTheme.success;
+  }
+
+  String _statusFor(_DriverExpiryItem item) {
+    final days = driver.daysUntil(item.expiry);
+    if (!item.uploaded) return 'Pendiente';
+    if (item.expiry == null) return 'Sin fecha';
+    if (days == null) return 'Registrado';
+    if (days < 0) return 'Vencido';
+    if (days == 0) return 'Vence hoy';
+    if (days <= 30) return '$days dias';
+    return 'Vigente';
+  }
+
+  String _detailFor(_DriverExpiryItem item) {
+    if (!item.uploaded) return 'Documento no cargado';
+    final expiry = item.expiry;
+    if (expiry == null) return 'Agrega vencimiento para activar alertas';
+    return DateFormat('dd/MM/yyyy').format(expiry.toLocal());
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Vencimientos documentales',
+              style: TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (var i = 0; i < _items.length; i++) ...[
+              _DriverExpiryRow(
+                item: _items[i],
+                color: _colorFor(_items[i]),
+                status: _statusFor(_items[i]),
+                detail: _detailFor(_items[i]),
+              ),
+              if (i != _items.length - 1) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      );
+}
+
+class _DriverExpiryItem {
+  final String label;
+  final DateTime? expiry;
+  final bool uploaded;
+
+  const _DriverExpiryItem({
+    required this.label,
+    required this.expiry,
+    required this.uploaded,
+  });
+}
+
+class _DriverExpiryRow extends StatelessWidget {
+  final _DriverExpiryItem item;
+  final Color color;
+  final String status;
+  final String detail;
+
+  const _DriverExpiryRow({
+    required this.item,
+    required this.color,
+    required this.status,
+    required this.detail,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(
+            status == 'Vencido'
+                ? Icons.error_outline_rounded
+                : Icons.event_available_outlined,
+            color: color,
+            size: 18,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.label,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    color: AppTheme.slate400,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            status,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      );
+}
+
+class _DriverInfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String helper;
+
+  const _DriverInfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.helper,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppTheme.slate400, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppTheme.slate400,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.midnight,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    helper,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.slate400,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _DriverDocState {
+  final String label;
+  final bool done;
+
+  const _DriverDocState(this.label, this.done);
+}
+
+class _DriverDocumentChecklist extends StatelessWidget {
+  final List<_DriverDocState> documents;
+
+  const _DriverDocumentChecklist({required this.documents});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.slate200, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Documentos operativos',
+              style: TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (var i = 0; i < documents.length; i++) ...[
+              _DriverDocumentRow(document: documents[i]),
+              if (i != documents.length - 1) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      );
+}
+
+class _DriverDocumentRow extends StatelessWidget {
+  final _DriverDocState document;
+
+  const _DriverDocumentRow({required this.document});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(
+            document.done
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: document.done ? AppTheme.success : AppTheme.slate400,
+            size: 18,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              document.label,
+              style: const TextStyle(
+                color: AppTheme.slate600,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            document.done ? 'Cargado' : 'Pendiente',
+            style: TextStyle(
+              color: document.done ? AppTheme.success : AppTheme.warning,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      );
+}
+
+class _DriverQuickAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _DriverQuickAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 17),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 42),
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+}
 
 class _SectionTitle extends StatelessWidget {
   final String text;

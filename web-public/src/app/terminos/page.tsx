@@ -1,18 +1,37 @@
 import Link from 'next/link';
 import { termsSections } from '../legal-content';
+import { pageMetadata } from '../seo';
+import { SiteFooter } from '../site-shell';
+
+export const metadata = pageMetadata({
+  title: 'Terminos de uso',
+  description:
+    'Terminos de uso de FleteApp para clientes, conductores, pagos, documentos, seguridad y responsabilidades operacionales.',
+  path: '/terminos',
+  keywords: ['terminos fleteapp', 'condiciones fletes', 'legal fletes'],
+});
 
 export default function TermsPage() {
   return (
     <main className="legalPage">
       <header className="legalHeader">
-        <Link href="/">Volver a FleteApp</Link>
-        <h1>Términos de uso FleteApp</h1>
+        <Link className="legalBack" href="/">Volver a FleteApp</Link>
+        <p className="eyebrow darkEyebrow">Legal</p>
+        <h1>Terminos de uso FleteApp</h1>
         <p>
-          Versión 2026-05-26. Estos términos regulan el uso de la plataforma
-          pública y de la app operacional.
+          Version 2026-05-26. Estos terminos regulan el uso de la plataforma
+          publica y de la app operacional.
         </p>
       </header>
-      <section className="legalContent" aria-label="Términos de uso">
+      <section className="legalSummary" aria-label="Resumen legal">
+        <strong>Resumen</strong>
+        <span>
+          La app permite solicitar, aceptar y cerrar fletes con respaldo. Las
+          cuentas deben usar informacion real y los conductores deben mantener
+          sus documentos vigentes.
+        </span>
+      </section>
+      <section className="legalContent" aria-label="Terminos de uso">
         {termsSections.map((section) => (
           <article className="legalSection" key={section.title}>
             <h2>{section.title}</h2>
@@ -20,6 +39,7 @@ export default function TermsPage() {
           </article>
         ))}
       </section>
+      <SiteFooter />
     </main>
   );
 }

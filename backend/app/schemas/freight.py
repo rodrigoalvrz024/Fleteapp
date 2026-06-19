@@ -50,6 +50,26 @@ class EvidenceViewResponse(BaseModel):
     expires_at: datetime
 
 
+class FreightDriverVehicleSummary(BaseModel):
+    type:           Optional[str] = None
+    brand:          Optional[str] = None
+    model:          Optional[str] = None
+    year:           Optional[int] = None
+    plate:          Optional[str] = None
+    color:          Optional[str] = None
+
+
+class FreightDriverSummary(BaseModel):
+    id:                int
+    full_name:         str
+    rating_average:    float = 0
+    rating_count:      int = 0
+    total_trips:       int = 0
+    is_verified:       bool = False
+    profile_image_url: Optional[str] = None
+    vehicle:           Optional[FreightDriverVehicleSummary] = None
+
+
 class FreightResponse(BaseModel):
     id:                  int
     client_id:           int
@@ -84,6 +104,7 @@ class FreightResponse(BaseModel):
     payment_status:      Optional[str] = None
     rating_score:        Optional[float] = None
     rating_comment:      Optional[str] = None
+    driver_summary:      Optional[FreightDriverSummary] = None
     status_history:      List[StatusHistoryResponse] = []
 
     class Config:

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/freight_model.dart';
+import '../services/driver_onboarding_service.dart';
 import '../services/freight_service.dart';
 
 class DriverState {
@@ -12,6 +14,7 @@ class DriverState {
   final int completedToday;
   final double earningsToday;
   final double rating;
+  final String? error;
 
   const DriverState({
     this.isOnline = false,
@@ -22,6 +25,7 @@ class DriverState {
     this.completedToday = 0,
     this.earningsToday = 0,
     this.rating = 5.0,
+    this.error,
   });
 
   DriverState copyWith({
@@ -35,6 +39,8 @@ class DriverState {
     int? completedToday,
     double? earningsToday,
     double? rating,
+    String? error,
+    bool clearError = false,
   }) =>
       DriverState(
         isOnline: isOnline ?? this.isOnline,
@@ -47,11 +53,13 @@ class DriverState {
         completedToday: completedToday ?? this.completedToday,
         earningsToday: earningsToday ?? this.earningsToday,
         rating: rating ?? this.rating,
+        error: clearError ? null : (error ?? this.error),
       );
 }
 
 class DriverNotifier extends StateNotifier<DriverState> {
   final FreightService _service = FreightService();
+  final DriverOnboardingService _driverService = DriverOnboardingService();
   Timer? _pollingTimer;
   final Set<int> _seenFreightIds = {};
 
@@ -60,18 +68,32 @@ class DriverNotifier extends StateNotifier<DriverState> {
   // ── Online/Offline ──────────────────────────────────────
 
   Future<void> goOnline() async {
-    state = state.copyWith(isOnline: true, isLoading: true);
-    await Future.delayed(const Duration(milliseconds: 500));
-    state = state.copyWith(isLoading: false);
-    _startPolling();
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _driverService.updateAvailability(true);
+      state = state.copyWith(isOnline: true, isLoading: false);
+      _startPolling();
+    } catch (e) {
+      state = state.copyWith(
+        isOnline: false,
+        isLoading: false,
+        availableFreights: [],
+        clearIncoming: true,
+        error: _parseAvailabilityError(e),
+      );
+    }
   }
 
   Future<void> goOffline() async {
     _stopPolling();
+    try {
+      await _driverService.updateAvailability(false);
+    } catch (_) {}
     state = state.copyWith(
       isOnline: false,
       availableFreights: [],
       clearIncoming: true,
+      clearError: true,
     );
   }
 
@@ -88,6 +110,42 @@ class DriverNotifier extends StateNotifier<DriverState> {
   void _stopPolling() {
     _pollingTimer?.cancel();
     _pollingTimer = null;
+  }
+
+  String _parseAvailabilityError(Object error) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      final data = error.response?.data;
+      final detail = data is Map ? data['detail'] : null;
+
+      if (detail is Map) {
+        final message = detail['message']?.toString().trim();
+        final blockers = detail['blockers'];
+        if (blockers is List && blockers.isNotEmpty) {
+          final items = blockers
+              .map((item) => item.toString().trim())
+              .where((item) => item.isNotEmpty)
+              .take(4)
+              .join(', ');
+          if (items.isNotEmpty) {
+            return '${message?.isNotEmpty == true ? message : 'No puedes conectarte'}: $items.';
+          }
+        }
+        if (message?.isNotEmpty == true) return message!;
+      }
+
+      if (detail is String && detail.trim().isNotEmpty) {
+        return detail.trim();
+      }
+      if (status == 403) {
+        return 'No puedes conectarte. Revisa tu aprobacion y documentos.';
+      }
+      if (status != null) {
+        return 'No pudimos cambiar tu disponibilidad. Codigo $status.';
+      }
+    }
+
+    return 'No puedes conectarte. Revisa tu aprobacion y vencimientos.';
   }
 
   Future<void> _fetchFreights() async {

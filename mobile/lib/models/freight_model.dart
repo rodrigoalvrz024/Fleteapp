@@ -1,5 +1,91 @@
 import 'package:flutter/material.dart';
 
+class FreightDriverVehicleSummary {
+  final String? type;
+  final String? brand;
+  final String? model;
+  final int? year;
+  final String? plate;
+  final String? color;
+
+  const FreightDriverVehicleSummary({
+    this.type,
+    this.brand,
+    this.model,
+    this.year,
+    this.plate,
+    this.color,
+  });
+
+  factory FreightDriverVehicleSummary.fromJson(Map<String, dynamic> json) =>
+      FreightDriverVehicleSummary(
+        type: json['type'],
+        brand: json['brand'],
+        model: json['model'],
+        year: (json['year'] as num?)?.toInt(),
+        plate: json['plate'],
+        color: json['color'],
+      );
+
+  String get displayName {
+    final parts = [brand, model, if (year != null) '$year']
+        .where((part) => part != null && part.trim().isNotEmpty)
+        .join(' ');
+    return parts.isEmpty ? 'Vehiculo registrado' : parts;
+  }
+
+  String get displayDetail {
+    final parts = [plate, color]
+        .where((part) => part != null && part.trim().isNotEmpty)
+        .join(' - ');
+    return parts.isEmpty ? 'Datos del vehiculo verificados' : parts;
+  }
+}
+
+class FreightDriverSummary {
+  final int id;
+  final String fullName;
+  final double ratingAverage;
+  final int ratingCount;
+  final int totalTrips;
+  final bool isVerified;
+  final String? profileImageUrl;
+  final FreightDriverVehicleSummary? vehicle;
+
+  const FreightDriverSummary({
+    required this.id,
+    required this.fullName,
+    this.ratingAverage = 0,
+    this.ratingCount = 0,
+    this.totalTrips = 0,
+    this.isVerified = false,
+    this.profileImageUrl,
+    this.vehicle,
+  });
+
+  factory FreightDriverSummary.fromJson(Map<String, dynamic> json) =>
+      FreightDriverSummary(
+        id: json['id'],
+        fullName: json['full_name'] ?? 'Conductor',
+        ratingAverage: (json['rating_average'] as num?)?.toDouble() ?? 0,
+        ratingCount: (json['rating_count'] as num?)?.toInt() ?? 0,
+        totalTrips: (json['total_trips'] as num?)?.toInt() ?? 0,
+        isVerified: json['is_verified'] == true,
+        profileImageUrl: json['profile_image_url'],
+        vehicle: json['vehicle'] is Map
+            ? FreightDriverVehicleSummary.fromJson(
+                Map<String, dynamic>.from(json['vehicle'] as Map),
+              )
+            : null,
+      );
+
+  String get firstName {
+    final clean = fullName.trim();
+    if (clean.isEmpty) return 'Conductor';
+    return clean.split(' ').first;
+  }
+}
+
 class FreightModel {
   final int id;
   final int clientId;
@@ -29,6 +115,7 @@ class FreightModel {
   final String? paymentStatus;
   final double? ratingScore;
   final String? ratingComment;
+  final FreightDriverSummary? driverSummary;
 
   FreightModel({
     required this.id,
@@ -59,6 +146,7 @@ class FreightModel {
     this.paymentStatus,
     this.ratingScore,
     this.ratingComment,
+    this.driverSummary,
   });
 
   factory FreightModel.fromJson(Map<String, dynamic> j) => FreightModel(
@@ -92,6 +180,11 @@ class FreightModel {
         paymentStatus: j['payment_status'],
         ratingScore: (j['rating_score'] as num?)?.toDouble(),
         ratingComment: j['rating_comment'],
+        driverSummary: j['driver_summary'] is Map
+            ? FreightDriverSummary.fromJson(
+                Map<String, dynamic>.from(j['driver_summary'] as Map),
+              )
+            : null,
       );
 
   String get statusLabel {

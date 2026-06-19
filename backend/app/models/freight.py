@@ -109,6 +109,37 @@ class FreightRequest(Base):
     def rating_comment(self) -> str | None:
         return self.rating.comment if self.rating else None
 
+    @property
+    def driver_summary(self) -> dict | None:
+        if not self.driver:
+            return None
+
+        vehicle = self.driver.vehicle
+        return {
+            "id": self.driver.id,
+            "full_name": self.driver.user.full_name if self.driver.user else "Conductor",
+            "rating_average": self.driver.rating_average or 0,
+            "rating_count": self.driver.rating_count or 0,
+            "total_trips": self.driver.total_trips or 0,
+            "is_verified": (
+                self.driver.status.value
+                if hasattr(self.driver.status, "value")
+                else str(self.driver.status)
+            )
+            == "approved",
+            "profile_image_url": None,
+            "vehicle": {
+                "type": vehicle.type.value if hasattr(vehicle.type, "value") else str(vehicle.type),
+                "brand": vehicle.brand,
+                "model": vehicle.model,
+                "year": vehicle.year,
+                "plate": vehicle.plate,
+                "color": vehicle.color,
+            }
+            if vehicle
+            else None,
+        }
+
 
 class TripStatusHistory(Base):
     __tablename__ = "trip_status_history"

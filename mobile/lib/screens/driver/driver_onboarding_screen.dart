@@ -21,6 +21,9 @@ class _DriverOnboardingScreenState
   static const _totalSteps = 5;
   int _step = 0;
   bool _forceEdit = false;
+  DateTime? _circulationPermitExpiry;
+  DateTime? _technicalReviewExpiry;
+  DateTime? _soapExpiry;
 
   @override
   void initState() {
@@ -91,6 +94,23 @@ class _DriverOnboardingScreenState
         ),
       ),
     );
+  }
+
+  DateTime? _effectiveExpiry(DateTime? local, DateTime? remote) =>
+      local ?? remote;
+
+  Future<void> _pickDocumentExpiry({
+    required DateTime? current,
+    required ValueChanged<DateTime> onSelected,
+  }) async {
+    final now = DateTime.now();
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime(now.year + 1, now.month, now.day),
+      firstDate: now,
+      lastDate: DateTime(now.year + 12),
+    );
+    if (selected != null) onSelected(selected);
   }
 
   @override
@@ -170,11 +190,16 @@ class _DriverOnboardingScreenState
 
   int _firstMissingStep(DriverModel driver) {
     if (driver.licenseImageUrl == null) return 0;
-    if (driver.circulationPermitUrl == null && driver.vehicleDocUrl == null) {
+    if ((driver.circulationPermitUrl == null && driver.vehicleDocUrl == null) ||
+        (driver.circulationPermitExpiry == null &&
+            driver.vehicleDocExpiry == null)) {
       return 1;
     }
-    if (driver.technicalReviewUrl == null) return 2;
-    if (driver.soapUrl == null) return 3;
+    if (driver.technicalReviewUrl == null ||
+        driver.technicalReviewExpiry == null) {
+      return 2;
+    }
+    if (driver.soapUrl == null || driver.soapExpiry == null) return 3;
     return 4;
   }
 
@@ -195,53 +220,86 @@ class _DriverOnboardingScreenState
               : null,
         );
       case 1:
+        final expiry = _effectiveExpiry(
+          _circulationPermitExpiry,
+          driver.circulationPermitExpiry ?? driver.vehicleDocExpiry,
+        );
         return _DocumentStep(
           title: 'Permiso de circulacion',
           subtitle: 'Sube el permiso vigente del vehiculo que usaras.',
           icon: Icons.article_outlined,
           imageUrl: driver.circulationPermitUrl ?? driver.vehicleDocUrl,
+          expiry: expiry,
+          expiryLabel: 'Vencimiento del permiso',
+          onPickExpiry: () => _pickDocumentExpiry(
+            current: expiry,
+            onSelected: (value) =>
+                setState(() => _circulationPermitExpiry = value),
+          ),
           onPick: () => _showPickerSheet(context, (file) async {
             await ref
                 .read(onboardingProvider.notifier)
-                .uploadCirculationPermit(file);
+                .uploadCirculationPermit(file, expiresAt: expiry);
             if (mounted) setState(() => _step = 2);
           }),
           onBack: () => setState(() => _step = 0),
           onNext: (driver.circulationPermitUrl != null ||
-                  driver.vehicleDocUrl != null)
+                  driver.vehicleDocUrl != null) &&
+                  expiry != null
               ? () => setState(() => _step = 2)
               : null,
         );
       case 2:
+        final expiry = _effectiveExpiry(
+          _technicalReviewExpiry,
+          driver.technicalReviewExpiry,
+        );
         return _DocumentStep(
           title: 'Revision tecnica',
           subtitle: 'Sube la revision tecnica vigente del vehiculo.',
           icon: Icons.fact_check_outlined,
           imageUrl: driver.technicalReviewUrl,
+          expiry: expiry,
+          expiryLabel: 'Vencimiento de revision tecnica',
+          onPickExpiry: () => _pickDocumentExpiry(
+            current: expiry,
+            onSelected: (value) =>
+                setState(() => _technicalReviewExpiry = value),
+          ),
           onPick: () => _showPickerSheet(context, (file) async {
             await ref
                 .read(onboardingProvider.notifier)
-                .uploadTechnicalReview(file);
+                .uploadTechnicalReview(file, expiresAt: expiry);
             if (mounted) setState(() => _step = 3);
           }),
           onBack: () => setState(() => _step = 1),
-          onNext: driver.technicalReviewUrl != null
+          onNext: driver.technicalReviewUrl != null && expiry != null
               ? () => setState(() => _step = 3)
               : null,
         );
       case 3:
+        final expiry = _effectiveExpiry(_soapExpiry, driver.soapExpiry);
         return _DocumentStep(
           title: 'SOAP',
           subtitle: 'Sube el seguro obligatorio vigente.',
           icon: Icons.verified_user_outlined,
           imageUrl: driver.soapUrl,
+          expiry: expiry,
+          expiryLabel: 'Vencimiento del SOAP',
+          onPickExpiry: () => _pickDocumentExpiry(
+            current: expiry,
+            onSelected: (value) => setState(() => _soapExpiry = value),
+          ),
           onPick: () => _showPickerSheet(context, (file) async {
-            await ref.read(onboardingProvider.notifier).uploadSoap(file);
+            await ref
+                .read(onboardingProvider.notifier)
+                .uploadSoap(file, expiresAt: expiry);
             if (mounted) setState(() => _step = 4);
           }),
           onBack: () => setState(() => _step = 2),
-          onNext:
-              driver.soapUrl != null ? () => setState(() => _step = 4) : null,
+          onNext: driver.soapUrl != null && expiry != null
+              ? () => setState(() => _step = 4)
+              : null,
         );
       case 4:
         return _VehicleStep(
@@ -602,6 +660,9 @@ class _DocumentStep extends StatelessWidget {
   final String subtitle;
   final IconData icon;
   final String? imageUrl;
+  final DateTime? expiry;
+  final String? expiryLabel;
+  final VoidCallback? onPickExpiry;
   final VoidCallback onPick;
   final VoidCallback? onBack;
   final VoidCallback? onNext;
@@ -611,10 +672,18 @@ class _DocumentStep extends StatelessWidget {
     required this.subtitle,
     required this.icon,
     required this.imageUrl,
+    this.expiry,
+    this.expiryLabel,
+    this.onPickExpiry,
     required this.onPick,
     this.onBack,
     this.onNext,
   });
+
+  bool get _requiresExpiry => onPickExpiry != null;
+
+  String _formatExpiry(DateTime value) =>
+      '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 
   @override
   Widget build(BuildContext context) => Column(
@@ -638,8 +707,78 @@ class _DocumentStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
+          if (_requiresExpiry) ...[
+            InkWell(
+              onTap: onPickExpiry,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color:
+                        expiry == null ? AppTheme.warning : AppTheme.slate200,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_available_outlined,
+                      color:
+                          expiry == null ? AppTheme.warning : AppTheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            expiryLabel ?? 'Vencimiento',
+                            style: const TextStyle(
+                              color: AppTheme.slate400,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            expiry == null
+                                ? 'Selecciona una fecha'
+                                : _formatExpiry(expiry!),
+                            style: TextStyle(
+                              color: expiry == null
+                                  ? AppTheme.warning
+                                  : AppTheme.midnight,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppTheme.slate400,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           GestureDetector(
-            onTap: onPick,
+            onTap: _requiresExpiry && expiry == null
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Selecciona la fecha de vencimiento.'),
+                        backgroundColor: AppTheme.warning,
+                      ),
+                    );
+                  }
+                : onPick,
             child: Container(
               width: double.infinity,
               height: 190,

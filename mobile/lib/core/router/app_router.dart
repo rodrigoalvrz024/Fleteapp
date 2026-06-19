@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,6 +22,7 @@ import '../../screens/driver/driver_trips_screen.dart';
 import '../../screens/legal/legal_document_screen.dart';
 import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
+import '../../services/analytics_service.dart';
 
 String _withQuery(String path, GoRouterState state) {
   final query = state.uri.queryParameters;
@@ -27,8 +31,14 @@ String _withQuery(String path, GoRouterState state) {
       : Uri(path: path, queryParameters: query).toString();
 }
 
+String? _trackRouteView(BuildContext _, GoRouterState state) {
+  unawaited(AnalyticsService().trackScreen(state.uri.path));
+  return null;
+}
+
 final _router = GoRouter(
   initialLocation: '/',
+  redirect: _trackRouteView,
   routes: [
     // Public marketing lives in the Next.js site. The Flutter app starts here.
     GoRoute(

@@ -16,6 +16,7 @@ from app.schemas.driver import (
     VehicleResponse,
 )
 from app.services.audit_service import record_audit_event
+from app.services.driver_operational_service import require_driver_can_operate
 from app.services.storage_service import upload_driver_document
 
 router = APIRouter(prefix="/drivers", tags=["Conductores"])
@@ -28,6 +29,26 @@ DOCUMENT_FIELDS = {
     "technical_review": "technical_review_url",
     "soap": "soap_url",
 }
+
+DOCUMENT_EXPIRY_FIELDS = {
+    "license_image": "license_expiry",
+    "vehicle_doc": "vehicle_doc_expiry",
+    "circulation_permit": "circulation_permit_expiry",
+    "technical_review": "technical_review_expiry",
+    "soap": "soap_expiry",
+}
+
+
+def _parse_optional_datetime(value) -> datetime | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Fecha de vencimiento invalida")
 
 
 @router.post("/register", response_model=DriverResponse, status_code=201)
@@ -64,12 +85,32 @@ def register_driver(
 
 @router.get("/me", response_model=DriverResponse)
 def get_driver_profile(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("driver")),
 ):
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
     if not driver:
         raise HTTPException(status_code=404, detail="Perfil de conductor no encontrado")
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="driver",
+        entity_id=driver.id,
+        event_type="app.driver_profile_view",
+        request=request,
+        metadata={
+            "driver_status": driver.status.value
+            if hasattr(driver.status, "value")
+            else str(driver.status),
+            "is_available": driver.is_available,
+            "has_vehicle": driver.vehicle is not None,
+            "rating_average": driver.rating_average,
+            "rating_count": driver.rating_count,
+            "total_trips": driver.total_trips,
+        },
+    )
+    db.commit()
     return driver
 
 
@@ -90,6 +131,8 @@ def update_driver(
         if driver.license_expiry
         else None,
     }
+    if data.is_available is True:
+        require_driver_can_operate(driver)
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(driver, field, value)
     driver.last_modified_by = current_user.id
@@ -169,6 +212,12 @@ async def upload_driver_file(
 
     url = await upload_driver_document(selected_file, driver.id, selected_field)
     setattr(driver, DOCUMENT_FIELDS[selected_field], url)
+    expiry_field = DOCUMENT_EXPIRY_FIELDS.get(selected_field)
+    expiry_value = _parse_optional_datetime(
+        form.get(f"{selected_field}_expiry") or form.get("expires_at")
+    )
+    if expiry_field and expiry_value:
+        setattr(driver, expiry_field, expiry_value)
     driver.last_modified_by = current_user.id
     record_audit_event(
         db,
@@ -179,6 +228,8 @@ async def upload_driver_file(
         after_data={
             "document_type": selected_field,
             "content_type": selected_file.content_type,
+            "expiry_field": expiry_field,
+            "expires_at": expiry_value.isoformat() if expiry_value else None,
         },
         request=request,
     )
@@ -202,10 +253,22 @@ def submit_driver_for_review(
         raise HTTPException(status_code=400, detail="Debes subir tu licencia de conducir")
     if not (driver.vehicle_doc_url or driver.circulation_permit_url):
         raise HTTPException(status_code=400, detail="Debes subir el permiso de circulacion")
+    if not (driver.vehicle_doc_expiry or driver.circulation_permit_expiry):
+        raise HTTPException(
+            status_code=400,
+            detail="Debes registrar el vencimiento del permiso de circulacion",
+        )
     if not driver.technical_review_url:
         raise HTTPException(status_code=400, detail="Debes subir la revision tecnica")
+    if not driver.technical_review_expiry:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes registrar el vencimiento de la revision tecnica",
+        )
     if not driver.soap_url:
         raise HTTPException(status_code=400, detail="Debes subir el SOAP")
+    if not driver.soap_expiry:
+        raise HTTPException(status_code=400, detail="Debes registrar el vencimiento del SOAP")
 
     status_before = driver.status.value if hasattr(driver.status, "value") else str(driver.status)
     driver.status = DriverStatus.pending

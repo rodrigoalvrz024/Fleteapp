@@ -84,10 +84,10 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     }
   }
 
-  Future<void> uploadVehicleDoc(XFile file) async {
+  Future<void> uploadVehicleDoc(XFile file, {DateTime? expiresAt}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _service.uploadImage(file, 'vehicle_doc');
+      await _service.uploadImage(file, 'vehicle_doc', expiresAt: expiresAt);
       await load();
     } catch (_) {
       state = state.copyWith(
@@ -97,10 +97,14 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     }
   }
 
-  Future<void> uploadCirculationPermit(XFile file) async {
+  Future<void> uploadCirculationPermit(XFile file, {DateTime? expiresAt}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _service.uploadImage(file, 'circulation_permit');
+      await _service.uploadImage(
+        file,
+        'circulation_permit',
+        expiresAt: expiresAt,
+      );
       await load();
     } catch (_) {
       state = state.copyWith(
@@ -110,10 +114,14 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     }
   }
 
-  Future<void> uploadTechnicalReview(XFile file) async {
+  Future<void> uploadTechnicalReview(XFile file, {DateTime? expiresAt}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _service.uploadImage(file, 'technical_review');
+      await _service.uploadImage(
+        file,
+        'technical_review',
+        expiresAt: expiresAt,
+      );
       await load();
     } catch (_) {
       state = state.copyWith(
@@ -123,10 +131,10 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     }
   }
 
-  Future<void> uploadSoap(XFile file) async {
+  Future<void> uploadSoap(XFile file, {DateTime? expiresAt}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _service.uploadImage(file, 'soap');
+      await _service.uploadImage(file, 'soap', expiresAt: expiresAt);
       await load();
     } catch (_) {
       state = state.copyWith(isLoading: false, error: 'Error subiendo SOAP');

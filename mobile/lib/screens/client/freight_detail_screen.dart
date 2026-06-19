@@ -314,6 +314,10 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
           ),
           const SizedBox(height: 24),
           StatusTrackerWidget(currentStatus: freight.status),
+          if (freight.driverSummary != null) ...[
+            const SizedBox(height: 16),
+            _AssignedDriverCard(driver: freight.driverSummary!),
+          ],
           const SizedBox(height: 16),
           FreightInfoCard(
             title: 'Ruta',
@@ -569,6 +573,221 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
       ),
     );
   }
+}
+
+class _AssignedDriverCard extends StatelessWidget {
+  final FreightDriverSummary driver;
+
+  const _AssignedDriverCard({required this.driver});
+
+  @override
+  Widget build(BuildContext context) {
+    final vehicle = driver.vehicle;
+    final ratingText = driver.ratingCount > 0
+        ? '${driver.ratingAverage.toStringAsFixed(1)} (${driver.ratingCount})'
+        : 'Nuevo';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AppTheme.cardDecoration(radius: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  image: driver.profileImageUrl != null &&
+                          driver.profileImageUrl!.isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(driver.profileImageUrl!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: driver.profileImageUrl == null ||
+                        driver.profileImageUrl!.isEmpty
+                    ? Center(
+                        child: Text(
+                          driver.firstName.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            driver.fullName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.midnight,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (driver.isVerified)
+                          const _DriverVerifiedBadge(),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      vehicle?.displayName ?? 'Vehiculo por confirmar',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.slate600,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      vehicle?.displayDetail ??
+                          'Datos visibles cuando el conductor este asignado',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.slate400,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _DriverSignal(
+                  icon: Icons.star_rounded,
+                  label: 'Rating',
+                  value: ratingText,
+                  color: AppTheme.accent,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DriverSignal(
+                  icon: Icons.route_outlined,
+                  label: 'Viajes',
+                  value: '${driver.totalTrips}',
+                  color: AppTheme.success,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DriverSignal(
+                  icon: Icons.verified_user_outlined,
+                  label: 'Estado',
+                  value: driver.isVerified ? 'Verificado' : 'En revision',
+                  color:
+                      driver.isVerified ? AppTheme.success : AppTheme.warning,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DriverVerifiedBadge extends StatelessWidget {
+  const _DriverVerifiedBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.success.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_rounded, size: 13, color: AppTheme.success),
+            SizedBox(width: 4),
+            Text(
+              'Verificado',
+              style: TextStyle(
+                color: AppTheme.success,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _DriverSignal extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _DriverSignal({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.12)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 17),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.slate400,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _FreightDetailHero extends StatelessWidget {

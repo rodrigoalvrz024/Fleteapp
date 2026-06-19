@@ -33,14 +33,36 @@ export function ProfilePage({
           <h1>{title}</h1>
           <p>{lead}</p>
           <div className="heroActions">
-            <a className="primaryAction lightSolid" href={primaryHref}>
+            <a
+              className="primaryAction lightSolid"
+              href={primaryHref}
+              data-analytics-event="public.cta_click"
+              data-analytics-entity-id={`${eyebrow.toLowerCase()}_hero_primary`}
+            >
               {primaryAction}
             </a>
-            <a className="secondaryAction light" href={`${appBaseUrl}/#/auth/login`}>
+            <a
+              className="secondaryAction light"
+              href={`${appBaseUrl}/#/auth/login`}
+              data-analytics-event="public.cta_click"
+              data-analytics-entity-id={`${eyebrow.toLowerCase()}_hero_login`}
+            >
               Ingresar
             </a>
           </div>
         </div>
+      </section>
+
+      <section className="audienceIntro">
+        <div>
+          <p className="eyebrow darkEyebrow">Operacion</p>
+          <h2>Una experiencia clara antes, durante y despues del flete.</h2>
+        </div>
+        <p>
+          FleteApp separa la informacion publica del espacio privado. La web
+          explica; la app registra solicitudes, documentos, evidencia, pagos y
+          seguimiento operativo.
+        </p>
       </section>
 
       <section className="profileContent">
@@ -64,18 +86,28 @@ export function ProfilePage({
 
       <section className="ctaBand">
         <div>
-          <p className="eyebrow">Siguiente paso</p>
-          <h2>Continua en FleteApp</h2>
+          <p className="eyebrow darkEyebrow">Siguiente paso</p>
+          <h2>Continua en la app privada de FleteApp.</h2>
           <p>
             Crea tu cuenta para guardar solicitudes, documentos e historial en
             un espacio privado.
           </p>
         </div>
         <div className="ctaActions">
-          <a className="primaryAction dark" href={primaryHref}>
+          <a
+            className="primaryAction dark"
+            href={primaryHref}
+            data-analytics-event="public.cta_click"
+            data-analytics-entity-id={`${eyebrow.toLowerCase()}_bottom_primary`}
+          >
             {primaryAction}
           </a>
-          <a className="secondaryAction darkLine" href={`${appBaseUrl}/#/auth/login`}>
+          <a
+            className="secondaryAction darkLine"
+            href={`${appBaseUrl}/#/auth/login`}
+            data-analytics-event="public.cta_click"
+            data-analytics-entity-id={`${eyebrow.toLowerCase()}_bottom_login`}
+          >
             Ingresar
           </a>
         </div>

@@ -5,26 +5,26 @@ export const termsSections = [
   },
   {
     title: 'Cuentas de usuario',
-    body: 'Cada persona debe entregar información verdadera, mantener segura su contraseña y usar una cuenta propia. FleteApp puede suspender cuentas cuando exista fraude, uso indebido o riesgo para otros usuarios.',
+    body: 'Cada persona debe entregar informacion verdadera, mantener segura su contrasena y usar una cuenta propia. FleteApp puede suspender cuentas cuando exista fraude, uso indebido o riesgo para otros usuarios.',
   },
   {
     title: 'Conductores y documentos',
-    body: 'Los conductores deben mantener licencia vigente, permiso de circulación, revisión técnica, SOAP y datos del vehículo actualizados. La aprobación puede ser rechazada o suspendida si la información no es verificable.',
+    body: 'Los conductores deben mantener licencia vigente, permiso de circulacion, revision tecnica, SOAP y datos del vehiculo actualizados. La aprobacion puede ser rechazada o suspendida si la informacion no es verificable.',
   },
   {
     title: 'Servicios y pagos',
-    body: 'Los precios, comisiones, pagos al conductor y cargos al cliente se informan antes o durante la solicitud según corresponda. Los valores pueden cambiar por distancia, urgencia, ayudantes u otros factores operativos.',
+    body: 'Los precios, comisiones, pagos al conductor y cargos al cliente se informan antes o durante la solicitud segun corresponda. Los valores pueden cambiar por distancia, urgencia, ayudantes u otros factores operativos.',
   },
   {
     title: 'Seguridad y responsabilidad',
-    body: 'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. FleteApp puede investigar incidentes y limitar el acceso para proteger la operación.',
+    body: 'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. FleteApp puede investigar incidentes y limitar el acceso para proteger la operacion.',
   },
 ];
 
 export const privacySections = [
   {
     title: 'Datos que tratamos',
-    body: 'Podemos tratar datos de identificación, contacto, ubicación operativa, solicitudes de flete, pagos, calificaciones y documentos necesarios para validar conductores y vehículos.',
+    body: 'Podemos tratar datos de identificacion, contacto, ubicacion operativa, solicitudes de flete, pagos, calificaciones y documentos necesarios para validar conductores y vehiculos.',
   },
   {
     title: 'Finalidades',
@@ -32,14 +32,14 @@ export const privacySections = [
   },
   {
     title: 'Documentos de conductor',
-    body: 'La licencia, permiso de circulación, revisión técnica y SOAP se usan para revisar la aptitud del conductor y del vehículo. No pediremos reconocimiento facial ni verificación biométrica en esta etapa.',
+    body: 'La licencia, permiso de circulacion, revision tecnica y SOAP se usan para revisar la aptitud del conductor y del vehiculo. No pediremos reconocimiento facial ni verificacion biometrica en esta etapa.',
   },
   {
     title: 'Conservacion y seguridad',
-    body: 'Guardamos la información mientras sea necesaria para operar la cuenta, cumplir obligaciones, resolver disputas o prevenir fraude. Aplicamos controles de acceso y almacenamiento seguro para reducir riesgos.',
+    body: 'Guardamos la informacion mientras sea necesaria para operar la cuenta, cumplir obligaciones, resolver disputas o prevenir fraude. Aplicamos controles de acceso y almacenamiento seguro para reducir riesgos.',
   },
   {
     title: 'Derechos de las personas',
-    body: 'Puedes solicitar acceso, rectificación, eliminación, bloqueo u oposición cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de FleteApp desde los canales oficiales.',
+    body: 'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de FleteApp desde los canales oficiales.',
   },
 ];

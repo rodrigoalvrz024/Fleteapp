@@ -25,6 +25,7 @@ from app.schemas.freight import (
     FreightStatusUpdate,
 )
 from app.services.audit_service import record_audit_event
+from app.services.driver_operational_service import require_driver_can_operate
 from app.services.freight_service import calculate_distance_km, can_transition, estimate_price
 from app.services.storage_service import (
     create_freight_evidence_view_token,
@@ -60,10 +61,10 @@ def _require_freight_view_access(
             return
         if (
             driver
-            and driver.status == DriverStatus.approved
             and freight.status == FreightStatus.pending
             and freight.driver_id is None
         ):
+            require_driver_can_operate(driver)
             return
     raise HTTPException(status_code=403, detail="No tienes permiso para ver este flete")
 
@@ -196,13 +197,18 @@ def list_freights(status: str = None, db: Session = Depends(get_db), current_use
     elif current_user.role == UserRole.driver:
         driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
         if status == "available":
-            if driver and driver.status == DriverStatus.approved:
+            if not driver:
+                query = query.filter(False)
+            else:
+                try:
+                    require_driver_can_operate(driver)
+                except HTTPException:
+                    query = query.filter(False)
+                    return query.order_by(FreightRequest.created_at.desc()).all()
                 query = query.filter(
                     FreightRequest.status == FreightStatus.pending,
                     FreightRequest.driver_id == None,
                 )
-            else:
-                query = query.filter(False)
         else:
             query = query.filter(FreightRequest.driver_id == driver.id) if driver else query.filter(False)
     if status and status != "available":
@@ -210,11 +216,55 @@ def list_freights(status: str = None, db: Session = Depends(get_db), current_use
     return query.order_by(FreightRequest.created_at.desc()).all()
 
 @router.get("/{freight_id}", response_model=FreightResponse)
-def get_freight(freight_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_freight(
+    freight_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
     _require_freight_view_access(freight, db, current_user)
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="app.freight_detail_view",
+        request=request,
+        metadata={
+            "viewer_role": current_user.role.value
+            if hasattr(current_user.role, "value")
+            else str(current_user.role),
+            "status": freight.status.value
+            if hasattr(freight.status, "value")
+            else str(freight.status),
+            "client_id": freight.client_id,
+            "driver_id": freight.driver_id,
+            "distance_km": freight.distance_km,
+            "is_urgent": freight.is_urgent,
+            "requires_helpers": freight.requires_helpers,
+            "estimated_price": freight.estimated_price,
+        },
+    )
+    if current_user.role == UserRole.client and freight.driver_id:
+        record_audit_event(
+            db,
+            actor=current_user,
+            entity_type="driver",
+            entity_id=freight.driver_id,
+            event_type="app.driver_profile_view",
+            request=request,
+            metadata={
+                "source": "freight_detail_driver_summary",
+                "freight_id": freight.id,
+                "status": freight.status.value
+                if hasattr(freight.status, "value")
+                else str(freight.status),
+            },
+        )
+    db.commit()
     return freight
 
 
@@ -369,8 +419,9 @@ def view_evidence(token: str, db: Session = Depends(get_db)):
 @router.put("/{freight_id}/accept", response_model=FreightResponse)
 def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_role("driver"))):
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
-    if not driver or driver.status != "approved":
+    if not driver or driver.status != DriverStatus.approved:
         raise HTTPException(status_code=403, detail="Conductor no aprobado")
+    require_driver_can_operate(driver)
 
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight or freight.status != FreightStatus.pending:

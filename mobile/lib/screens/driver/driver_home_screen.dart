@@ -167,6 +167,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                       ),
                     ]),
                     const SizedBox(height: 16),
+                    if (driver.error != null) ...[
+                      _DriverErrorBanner(
+                        message: driver.error!,
+                        onAction: () => context.push('/app/profile'),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     // ── Toggle online/offline ──────────────
                     GestureDetector(
@@ -969,6 +976,85 @@ class _FreightsCounter extends StatelessWidget {
                     )),
               ),
           ]),
+        ),
+      );
+}
+
+class _DriverErrorBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback onAction;
+
+  const _DriverErrorBanner({
+    required this.message,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.warning.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.warning.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: AppTheme.warning,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'No pudimos conectarte',
+                    style: TextStyle(
+                      color: AppTheme.midnight,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: AppTheme.slate600,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: onAction,
+                    icon: const Icon(Icons.assignment_outlined, size: 17),
+                    label: const Text('Revisar perfil'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.warning,
+                      side: BorderSide(
+                        color: AppTheme.warning.withValues(alpha: 0.35),
+                      ),
+                      minimumSize: const Size(0, 40),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       );
 }

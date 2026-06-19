@@ -25,13 +25,19 @@ class DriverOnboardingService {
     return DriverModel.fromJson(res.data);
   }
 
-  Future<String> uploadImage(XFile file, String field) async {
+  Future<String> uploadImage(
+    XFile file,
+    String field, {
+    DateTime? expiresAt,
+  }) async {
     final bytes = await file.readAsBytes();
     final formData = FormData.fromMap({
       field: MultipartFile.fromBytes(
         bytes,
         filename: file.name,
       ),
+      if (expiresAt != null)
+        '${field}_expiry': expiresAt.toUtc().toIso8601String(),
     });
     final res = await ApiService()
         .uploadForm('${ApiConstants.driverMe}/upload', formData);
@@ -45,6 +51,13 @@ class DriverOnboardingService {
 
   Future<DriverModel> submitForReview() async {
     final res = await _api.put('${ApiConstants.driverMe}/submit');
+    return DriverModel.fromJson(res.data);
+  }
+
+  Future<DriverModel> updateAvailability(bool isAvailable) async {
+    final res = await _api.put(ApiConstants.driverMe, {
+      'is_available': isAvailable,
+    });
     return DriverModel.fromJson(res.data);
   }
 }

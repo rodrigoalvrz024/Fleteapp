@@ -125,6 +125,321 @@ class AdminOperationalAlert {
       );
 }
 
+class AdminInsightEventType {
+  final String eventType;
+  final int count;
+  final int uniqueAuthenticatedUsers;
+
+  const AdminInsightEventType({
+    required this.eventType,
+    required this.count,
+    required this.uniqueAuthenticatedUsers,
+  });
+
+  factory AdminInsightEventType.fromJson(Map<String, dynamic> json) =>
+      AdminInsightEventType(
+        eventType: json['event_type'] ?? '',
+        count: (json['count'] as num?)?.toInt() ?? 0,
+        uniqueAuthenticatedUsers:
+            (json['unique_authenticated_users'] as num?)?.toInt() ?? 0,
+      );
+
+  String get label => switch (eventType) {
+        'public.page_view' => 'Vistas web publica',
+        'public.cta_click' => 'Clicks comerciales',
+        'public.audience_click' => 'Clicks por audiencia',
+        'app.screen_view' => 'Pantallas app',
+        'app.freight_detail_view' => 'Aperturas de flete',
+        'app.driver_profile_view' => 'Aperturas perfil conductor',
+        'app.driver_available_freight_view' => 'Fletes disponibles vistos',
+        'user.registered' => 'Usuarios registrados',
+        'freight.created' => 'Fletes creados',
+        'freight.accepted' => 'Fletes aceptados',
+        'freight.status_changed' => 'Cambios de estado',
+        'payment.authorized' => 'Pagos autorizados',
+        _ => eventType,
+      };
+}
+
+class AdminInsightEntity {
+  final String entityId;
+  final int views;
+  final int uniqueAuthenticatedUsers;
+
+  const AdminInsightEntity({
+    required this.entityId,
+    required this.views,
+    required this.uniqueAuthenticatedUsers,
+  });
+
+  factory AdminInsightEntity.fromJson(Map<String, dynamic> json) =>
+      AdminInsightEntity(
+        entityId: json['entity_id']?.toString() ?? '',
+        views: (json['views'] as num?)?.toInt() ?? 0,
+        uniqueAuthenticatedUsers:
+            (json['unique_authenticated_users'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class AdminEventInsights {
+  final int days;
+  final String since;
+  final List<AdminInsightEventType> eventsByType;
+  final List<AdminInsightEntity> topPublicPages;
+  final List<AdminInsightEntity> topPublicCtas;
+  final List<AdminInsightEntity> topFreightDetailViews;
+  final List<AdminInsightEntity> topDriverProfileViews;
+
+  const AdminEventInsights({
+    required this.days,
+    required this.since,
+    required this.eventsByType,
+    required this.topPublicPages,
+    required this.topPublicCtas,
+    required this.topFreightDetailViews,
+    required this.topDriverProfileViews,
+  });
+
+  factory AdminEventInsights.fromJson(Map<String, dynamic> json) {
+    final period = json['period'] as Map<String, dynamic>? ?? {};
+    List<AdminInsightEventType> eventList(String key) =>
+        ((json[key] ?? []) as List)
+            .map((item) => AdminInsightEventType.fromJson(item))
+            .toList();
+    List<AdminInsightEntity> entityList(String key) =>
+        ((json[key] ?? []) as List)
+            .map((item) => AdminInsightEntity.fromJson(item))
+            .toList();
+
+    return AdminEventInsights(
+      days: (period['days'] as num?)?.toInt() ?? 30,
+      since: period['since'] ?? '',
+      eventsByType: eventList('events_by_type'),
+      topPublicPages: entityList('top_public_pages'),
+      topPublicCtas: entityList('top_public_ctas'),
+      topFreightDetailViews: entityList('top_freight_detail_views'),
+      topDriverProfileViews: entityList('top_driver_profile_views'),
+    );
+  }
+
+  int get totalEvents =>
+      eventsByType.fold(0, (total, event) => total + event.count);
+
+  int countFor(String eventType) => eventsByType
+      .where((event) => event.eventType == eventType)
+      .fold(0, (total, event) => total + event.count);
+
+  int get publicEngagement =>
+      countFor('public.page_view') +
+      countFor('public.cta_click') +
+      countFor('public.audience_click');
+
+  int get appEngagement =>
+      countFor('app.screen_view') +
+      countFor('app.freight_detail_view') +
+      countFor('app.driver_profile_view') +
+      countFor('app.driver_available_freight_view');
+}
+
+class AdminOperationBucket {
+  final String bucket;
+  final int count;
+  final int completed;
+  final int cancelled;
+  final num clientPaysClp;
+  final num platformFeeClp;
+
+  const AdminOperationBucket({
+    required this.bucket,
+    required this.count,
+    this.completed = 0,
+    this.cancelled = 0,
+    required this.clientPaysClp,
+    required this.platformFeeClp,
+  });
+
+  factory AdminOperationBucket.fromJson(Map<String, dynamic> json) =>
+      AdminOperationBucket(
+        bucket: json['bucket'] ?? '',
+        count: (json['count'] as num?)?.toInt() ?? 0,
+        completed: (json['completed'] as num?)?.toInt() ?? 0,
+        cancelled: (json['cancelled'] as num?)?.toInt() ?? 0,
+        clientPaysClp: json['client_pays_clp'] ?? 0,
+        platformFeeClp: json['platform_fee_clp'] ?? 0,
+      );
+}
+
+class AdminOperationsRealtime {
+  final int freightsLastMinute;
+  final int freightsLastHour;
+  final int freightsLast24h;
+  final num averageFreightsPerMinute60m;
+  final num averageFreightsPerHour24h;
+  final int activeFreights;
+  final int pendingFreights;
+  final int acceptedFreights;
+  final int inProgressFreights;
+  final int completed24h;
+  final int cancelled24h;
+  final int onlineDrivers;
+  final int approvedDrivers;
+  final int pendingDrivers;
+  final int activeClients24h;
+  final num grossRequested24hClp;
+  final num platformFeePotential24hClp;
+
+  const AdminOperationsRealtime({
+    required this.freightsLastMinute,
+    required this.freightsLastHour,
+    required this.freightsLast24h,
+    required this.averageFreightsPerMinute60m,
+    required this.averageFreightsPerHour24h,
+    required this.activeFreights,
+    required this.pendingFreights,
+    required this.acceptedFreights,
+    required this.inProgressFreights,
+    required this.completed24h,
+    required this.cancelled24h,
+    required this.onlineDrivers,
+    required this.approvedDrivers,
+    required this.pendingDrivers,
+    required this.activeClients24h,
+    required this.grossRequested24hClp,
+    required this.platformFeePotential24hClp,
+  });
+
+  factory AdminOperationsRealtime.fromJson(Map<String, dynamic> json) =>
+      AdminOperationsRealtime(
+        freightsLastMinute:
+            (json['freights_last_minute'] as num?)?.toInt() ?? 0,
+        freightsLastHour: (json['freights_last_hour'] as num?)?.toInt() ?? 0,
+        freightsLast24h: (json['freights_last_24h'] as num?)?.toInt() ?? 0,
+        averageFreightsPerMinute60m:
+            json['average_freights_per_minute_60m'] ?? 0,
+        averageFreightsPerHour24h:
+            json['average_freights_per_hour_24h'] ?? 0,
+        activeFreights: (json['active_freights'] as num?)?.toInt() ?? 0,
+        pendingFreights: (json['pending_freights'] as num?)?.toInt() ?? 0,
+        acceptedFreights: (json['accepted_freights'] as num?)?.toInt() ?? 0,
+        inProgressFreights:
+            (json['in_progress_freights'] as num?)?.toInt() ?? 0,
+        completed24h: (json['completed_24h'] as num?)?.toInt() ?? 0,
+        cancelled24h: (json['cancelled_24h'] as num?)?.toInt() ?? 0,
+        onlineDrivers: (json['online_drivers'] as num?)?.toInt() ?? 0,
+        approvedDrivers: (json['approved_drivers'] as num?)?.toInt() ?? 0,
+        pendingDrivers: (json['pending_drivers'] as num?)?.toInt() ?? 0,
+        activeClients24h: (json['active_clients_24h'] as num?)?.toInt() ?? 0,
+        grossRequested24hClp: json['gross_requested_24h_clp'] ?? 0,
+        platformFeePotential24hClp:
+            json['platform_fee_potential_24h_clp'] ?? 0,
+      );
+}
+
+class AdminOperationsFunnel {
+  final int created;
+  final int accepted;
+  final int started;
+  final int completed;
+  final int cancelled;
+  final num acceptanceRate;
+  final num startRate;
+  final num completionRate;
+  final num cancellationRate;
+
+  const AdminOperationsFunnel({
+    required this.created,
+    required this.accepted,
+    required this.started,
+    required this.completed,
+    required this.cancelled,
+    required this.acceptanceRate,
+    required this.startRate,
+    required this.completionRate,
+    required this.cancellationRate,
+  });
+
+  factory AdminOperationsFunnel.fromJson(Map<String, dynamic> json) =>
+      AdminOperationsFunnel(
+        created: (json['created'] as num?)?.toInt() ?? 0,
+        accepted: (json['accepted'] as num?)?.toInt() ?? 0,
+        started: (json['started'] as num?)?.toInt() ?? 0,
+        completed: (json['completed'] as num?)?.toInt() ?? 0,
+        cancelled: (json['cancelled'] as num?)?.toInt() ?? 0,
+        acceptanceRate: json['acceptance_rate'] ?? 0,
+        startRate: json['start_rate'] ?? 0,
+        completionRate: json['completion_rate'] ?? 0,
+        cancellationRate: json['cancellation_rate'] ?? 0,
+      );
+}
+
+class AdminOperationsFinancial {
+  final num grossRequestedClp;
+  final num grossCompletedClp;
+  final num platformFeePotentialClp;
+  final num platformFeeCompletedClp;
+  final num authorizedPaymentsClp;
+
+  const AdminOperationsFinancial({
+    required this.grossRequestedClp,
+    required this.grossCompletedClp,
+    required this.platformFeePotentialClp,
+    required this.platformFeeCompletedClp,
+    required this.authorizedPaymentsClp,
+  });
+
+  factory AdminOperationsFinancial.fromJson(Map<String, dynamic> json) =>
+      AdminOperationsFinancial(
+        grossRequestedClp: json['gross_requested_clp'] ?? 0,
+        grossCompletedClp: json['gross_completed_clp'] ?? 0,
+        platformFeePotentialClp: json['platform_fee_potential_clp'] ?? 0,
+        platformFeeCompletedClp: json['platform_fee_completed_clp'] ?? 0,
+        authorizedPaymentsClp: json['authorized_payments_clp'] ?? 0,
+      );
+}
+
+class AdminOperations {
+  final String generatedAt;
+  final AdminOperationsRealtime realtime;
+  final AdminOperationsFunnel funnel14d;
+  final AdminOperationsFinancial financial14d;
+  final List<AdminOperationBucket> minute;
+  final List<AdminOperationBucket> hourly;
+  final List<AdminOperationBucket> daily;
+
+  const AdminOperations({
+    required this.generatedAt,
+    required this.realtime,
+    required this.funnel14d,
+    required this.financial14d,
+    required this.minute,
+    required this.hourly,
+    required this.daily,
+  });
+
+  factory AdminOperations.fromJson(Map<String, dynamic> json) {
+    List<AdminOperationBucket> buckets(String key) =>
+        ((json[key] ?? []) as List)
+            .map((item) => AdminOperationBucket.fromJson(item))
+            .toList();
+
+    return AdminOperations(
+      generatedAt: json['generated_at'] ?? '',
+      realtime: AdminOperationsRealtime.fromJson(
+        json['realtime'] as Map<String, dynamic>? ?? {},
+      ),
+      funnel14d: AdminOperationsFunnel.fromJson(
+        json['funnel_14d'] as Map<String, dynamic>? ?? {},
+      ),
+      financial14d: AdminOperationsFinancial.fromJson(
+        json['financial_14d'] as Map<String, dynamic>? ?? {},
+      ),
+      minute: buckets('minute'),
+      hourly: buckets('hourly'),
+      daily: buckets('daily'),
+    );
+  }
+}
+
 class AdminPrivacyRequest {
   final int id;
   final int userId;
@@ -600,6 +915,22 @@ class AdminService {
   Future<AdminMetrics> getMetrics() async {
     final res = await _api.get('/admin/metrics');
     return AdminMetrics.fromJson(res.data);
+  }
+
+  Future<AdminEventInsights> getEventInsights({
+    int days = 30,
+    int limit = 10,
+  }) async {
+    final res = await _api.get(
+      '/admin/insights/events',
+      params: {'days': days, 'limit': limit},
+    );
+    return AdminEventInsights.fromJson(res.data);
+  }
+
+  Future<AdminOperations> getOperations() async {
+    final res = await _api.get('/admin/operations');
+    return AdminOperations.fromJson(res.data);
   }
 
   Future<List<AdminUser>> listUsers() async {
