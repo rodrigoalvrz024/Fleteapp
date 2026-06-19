@@ -1,9 +1,8 @@
-import asyncio
 import secrets
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -22,6 +21,7 @@ from app.schemas.freight import (
     DeliveryPinResponse,
     EvidenceViewResponse,
     FreightCreate,
+    FreightCreateResponse,
     FreightResponse,
     FreightStatusUpdate,
 )
@@ -125,10 +125,11 @@ def _require_assigned_driver(
         )
     return driver
 
-@router.post("", response_model=FreightResponse, status_code=201)
-async def create_freight(
+@router.post("", response_model=FreightCreateResponse, status_code=201)
+def create_freight(
     data: FreightCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client"))
 ):
@@ -196,16 +197,15 @@ async def create_freight(
     db.refresh(freight)
 
     if settings.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
-        asyncio.create_task(
-            _notify_available_drivers(
-                title="Nuevo flete disponible",
-                body=f"{'URGENTE' if data.is_urgent else 'Programado'} - ${prices['client_pays']:,.0f} CLP",
-                data={
-                    "freight_id": str(freight.id),
-                    "type": "new_freight",
-                    "mode": prices["mode"],
-                },
-            )
+        background_tasks.add_task(
+            _notify_available_drivers,
+            title="Nuevo flete disponible",
+            body=f"{'URGENTE' if data.is_urgent else 'Programado'} - ${prices['client_pays']:,.0f} CLP",
+            data={
+                "freight_id": str(freight.id),
+                "type": "new_freight",
+                "mode": prices["mode"],
+            },
         )
     return freight
 

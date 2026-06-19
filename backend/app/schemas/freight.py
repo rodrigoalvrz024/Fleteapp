@@ -40,6 +40,41 @@ class FreightStatusUpdate(BaseModel):
     confirmation_pin: Optional[str] = None
 
 
+class FreightCreateResponse(BaseModel):
+    id:                  int
+    client_id:           int
+    driver_id:           Optional[int]
+    origin_address:      str
+    destination_address: str
+    origin_lat:          Optional[float]
+    origin_lng:          Optional[float]
+    destination_lat:     Optional[float]
+    destination_lng:     Optional[float]
+    distance_km:         Optional[float]
+    cargo_description:   str
+    cargo_weight_kg:     float
+    requires_helpers:    int
+    is_urgent:           bool = False
+    mode:                Optional[str] = "scheduled"
+    base_price:          Optional[float]
+    client_pays:         Optional[float]
+    driver_receives:     Optional[float]
+    platform_fee:        Optional[float]
+    helpers_cost:        Optional[float]
+    estimated_price:     Optional[float]
+    final_price:         Optional[float]
+    status:              FreightStatus
+    scheduled_at:        Optional[datetime]
+    created_at:          datetime
+    has_pickup_photo:    bool = False
+    has_delivery_photo:  bool = False
+    delivery_pin_ready:  bool = False
+    delivery_pin_verified: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 class DeliveryPinResponse(BaseModel):
     pin: str
     generated_at: datetime

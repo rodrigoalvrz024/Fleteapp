@@ -11,7 +11,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.rating import Rating
-from app.schemas.freight import FreightResponse, FreightStatusUpdate
+from app.schemas.freight import FreightCreateResponse, FreightResponse, FreightStatusUpdate
 from app.services.freight_service import can_transition
 from app.services.storage_service import _detect_upload_type
 
@@ -74,6 +74,17 @@ class FreightCompletionFlowTests(unittest.TestCase):
             confirmation_pin="1234",
         )
         self.assertEqual(request.confirmation_pin, "1234")
+
+    def test_create_response_keeps_relationship_fields_out(self):
+        freight = self._freight()
+        response = FreightCreateResponse.model_validate(freight).model_dump()
+
+        self.assertEqual(response["id"], freight.id)
+        self.assertTrue(response["has_pickup_photo"])
+        self.assertNotIn("status_history", response)
+        self.assertNotIn("payment_status", response)
+        self.assertNotIn("rating_score", response)
+        self.assertNotIn("driver_summary", response)
 
     def test_completion_transition_is_only_allowed_from_in_progress(self):
         self.assertTrue(
