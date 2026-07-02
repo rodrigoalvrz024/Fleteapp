@@ -83,6 +83,28 @@ If Firebase push notifications are needed, add this to the deploy command:
 --set-secrets FIREBASE_CREDENTIALS_JSON=FIREBASE_CREDENTIALS_JSON:latest
 ```
 
+## Cloud Tasks notifications
+
+Driver push notifications can run through Cloud Tasks so `POST /freights` stays
+fast and the notification work is retried outside the user request.
+
+From the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-cloud-tasks-notifications.ps1
+```
+
+The script creates or updates:
+
+- Cloud Tasks queue: `freight-notifications`
+- Task caller service account: `fleteapp-tasks-invoker`
+- IAM permissions for Cloud Run and Cloud Tasks
+- Cloud Run env vars for `ENABLE_DRIVER_PUSH_NOTIFICATIONS` and
+  `NOTIFICATION_TASKS_ENABLED`
+
+Run this script after backend deploys if the deploy command was executed without
+the Cloud Tasks environment variables.
+
 ## Verify
 
 Cloud Run prints the service URL after deployment. Test:

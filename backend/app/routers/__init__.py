@@ -4,6 +4,7 @@ from app.routers import (
     auth,
     drivers,
     freights,
+    internal_tasks,
     payments,
     payouts,
     ratings,

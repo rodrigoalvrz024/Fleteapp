@@ -16,6 +16,12 @@ $dbPoolTimeout = if ([string]::IsNullOrWhiteSpace($env:DB_POOL_TIMEOUT_SECONDS))
 $dbConnectTimeout = if ([string]::IsNullOrWhiteSpace($env:DB_CONNECT_TIMEOUT_SECONDS)) { '10' } else { $env:DB_CONNECT_TIMEOUT_SECONDS }
 $runStartupMigrations = if ([string]::IsNullOrWhiteSpace($env:RUN_STARTUP_MIGRATIONS)) { 'false' } else { $env:RUN_STARTUP_MIGRATIONS }
 $driverPushNotifications = if ([string]::IsNullOrWhiteSpace($env:ENABLE_DRIVER_PUSH_NOTIFICATIONS)) { 'false' } else { $env:ENABLE_DRIVER_PUSH_NOTIFICATIONS }
+$notificationTasksEnabled = if ([string]::IsNullOrWhiteSpace($env:NOTIFICATION_TASKS_ENABLED)) { 'false' } else { $env:NOTIFICATION_TASKS_ENABLED }
+$cloudTasksLocation = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_LOCATION)) { $region } else { $env:CLOUD_TASKS_LOCATION }
+$cloudTasksQueue = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_QUEUE)) { 'freight-notifications' } else { $env:CLOUD_TASKS_QUEUE }
+$cloudTasksServiceAccount = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_SERVICE_ACCOUNT)) { '' } else { $env:CLOUD_TASKS_SERVICE_ACCOUNT }
+$cloudTasksTargetBaseUrl = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_TARGET_BASE_URL)) { '' } else { $env:CLOUD_TASKS_TARGET_BASE_URL }
+$cloudTasksAudience = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_AUDIENCE)) { $cloudTasksTargetBaseUrl } else { $env:CLOUD_TASKS_AUDIENCE }
 
 function Get-GcloudCli {
   $command = Get-Command gcloud -ErrorAction SilentlyContinue
@@ -38,6 +44,7 @@ Write-Host "Cloud Run: max-instances=$maxInstances concurrency=$concurrency memo
 Write-Host "Postgres pool por instancia: pool_size=$dbPoolSize max_overflow=$dbMaxOverflow"
 Write-Host "RUN_STARTUP_MIGRATIONS=$runStartupMigrations"
 Write-Host "ENABLE_DRIVER_PUSH_NOTIFICATIONS=$driverPushNotifications"
+Write-Host "NOTIFICATION_TASKS_ENABLED=$notificationTasksEnabled"
 & $gcloud run deploy $service `
   --source $backendDir `
   --region $region `
@@ -49,7 +56,7 @@ Write-Host "ENABLE_DRIVER_PUSH_NOTIFICATIONS=$driverPushNotifications"
   --memory $memory `
   --cpu $cpu `
   --timeout $timeout `
-  --update-env-vars "RUN_STARTUP_MIGRATIONS=$runStartupMigrations,ENABLE_DRIVER_PUSH_NOTIFICATIONS=$driverPushNotifications,DB_POOL_SIZE=$dbPoolSize,DB_MAX_OVERFLOW=$dbMaxOverflow,DB_POOL_TIMEOUT_SECONDS=$dbPoolTimeout,DB_CONNECT_TIMEOUT_SECONDS=$dbConnectTimeout"
+  --update-env-vars "RUN_STARTUP_MIGRATIONS=$runStartupMigrations,ENABLE_DRIVER_PUSH_NOTIFICATIONS=$driverPushNotifications,NOTIFICATION_TASKS_ENABLED=$notificationTasksEnabled,GOOGLE_CLOUD_PROJECT=$projectId,CLOUD_TASKS_LOCATION=$cloudTasksLocation,CLOUD_TASKS_QUEUE=$cloudTasksQueue,CLOUD_TASKS_SERVICE_ACCOUNT=$cloudTasksServiceAccount,CLOUD_TASKS_TARGET_BASE_URL=$cloudTasksTargetBaseUrl,CLOUD_TASKS_AUDIENCE=$cloudTasksAudience,DB_POOL_SIZE=$dbPoolSize,DB_MAX_OVERFLOW=$dbMaxOverflow,DB_POOL_TIMEOUT_SECONDS=$dbPoolTimeout,DB_CONNECT_TIMEOUT_SECONDS=$dbConnectTimeout"
 
 if ($LASTEXITCODE -ne 0) {
   throw 'No se pudo desplegar Cloud Run.'

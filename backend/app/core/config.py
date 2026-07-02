@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     PUBLIC_API_URL: str = ""
     ALLOW_EXTERNAL_DOCUMENT_REFS: bool = False
     ENABLE_DRIVER_PUSH_NOTIFICATIONS: bool = False
+    NOTIFICATION_TASKS_ENABLED: bool = False
+    GOOGLE_CLOUD_PROJECT: str = ""
+    CLOUD_TASKS_LOCATION: str = "us-central1"
+    CLOUD_TASKS_QUEUE: str = "freight-notifications"
+    CLOUD_TASKS_SERVICE_ACCOUNT: str = ""
+    CLOUD_TASKS_TARGET_BASE_URL: str = ""
+    CLOUD_TASKS_AUDIENCE: str = ""
     RUN_STARTUP_MIGRATIONS: bool = False
     DB_CONNECT_TIMEOUT_SECONDS: int = 10
     DB_POOL_SIZE: int = 5

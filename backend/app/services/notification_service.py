@@ -102,7 +102,7 @@ async def send_notification_to_drivers(
     title: str,
     body: str,
     data: dict = {}
-) -> None:
+) -> int:
     """Envía notificación a todos los conductores disponibles y aprobados."""
     from app.models.driver import Driver, DriverStatus
     from app.models.user import User
@@ -125,6 +125,7 @@ async def send_notification_to_drivers(
             sent += 1
 
     print(f"Notificaciones enviadas a {sent} conductores")
+    return sent
 
 
 async def send_notification_to_user(

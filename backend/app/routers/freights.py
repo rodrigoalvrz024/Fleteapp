@@ -28,6 +28,7 @@ from app.schemas.freight import (
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
 from app.services.freight_service import calculate_distance_km, can_transition, estimate_price
+from app.services.cloud_tasks_service import enqueue_freight_driver_notification_task
 from app.services.storage_service import (
     create_freight_evidence_view_token,
     decode_freight_evidence_view_token,
@@ -197,16 +198,31 @@ def create_freight(
     db.refresh(freight)
 
     if settings.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
-        background_tasks.add_task(
-            _notify_available_drivers,
-            title="Nuevo flete disponible",
-            body=f"{'URGENTE' if data.is_urgent else 'Programado'} - ${prices['client_pays']:,.0f} CLP",
-            data={
-                "freight_id": str(freight.id),
-                "type": "new_freight",
-                "mode": prices["mode"],
-            },
+        notification_title = "Nuevo flete disponible"
+        notification_body = (
+            f"{'URGENTE' if data.is_urgent else 'Programado'} - "
+            f"${prices['client_pays']:,.0f} CLP"
         )
+        notification_data = {
+            "freight_id": str(freight.id),
+            "type": "new_freight",
+            "mode": prices["mode"],
+        }
+        if settings.NOTIFICATION_TASKS_ENABLED:
+            background_tasks.add_task(
+                enqueue_freight_driver_notification_task,
+                freight_id=freight.id,
+                title=notification_title,
+                body=notification_body,
+                data=notification_data,
+            )
+        else:
+            background_tasks.add_task(
+                _notify_available_drivers,
+                title=notification_title,
+                body=notification_body,
+                data=notification_data,
+            )
     return freight
 
 @router.get("", response_model=List[FreightResponse])
