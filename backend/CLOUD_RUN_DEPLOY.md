@@ -49,6 +49,13 @@ Optional, only if push notifications are needed:
 printf "PASTE_FIREBASE_JSON_ON_ONE_LINE" | gcloud secrets create FIREBASE_CREDENTIALS_JSON --data-file=-
 ```
 
+Or configure it from the downloaded Firebase Admin JSON without pasting it in
+the terminal:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-firebase-credentials-secret.ps1
+```
+
 ## Deploy
 
 From this `backend` folder:
