@@ -48,9 +48,13 @@ if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
 }
 $databaseUrl = $databaseUrl.Trim()
 $databaseUrl = $databaseUrl.Trim('"', "'")
-$databaseUrl = $databaseUrl -replace '\s+', ''
+$databaseUrl = $databaseUrl -replace '[\r\n\t]', ''
 $databaseUrl = $databaseUrl -replace '\\', ''
-$databaseUrl = $databaseUrl -replace 'sslmode=(%22|%27|"|'')?require(%22|%27|"|'')?', 'sslmode=require'
+$databaseUrl = [regex]::Replace(
+  $databaseUrl,
+  '([?&]sslmode=)[^&\r\n]*',
+  '${1}require'
+)
 if (-not $databaseUrl.StartsWith('postgresql://')) {
   throw 'DATABASE_URL debe comenzar con postgresql://'
 }
@@ -62,23 +66,34 @@ if ($databaseUrl -notmatch 'sslmode=require') {
   $databaseUrl = "$databaseUrl${separator}sslmode=require"
   Write-Host "Se agrego sslmode=require a la URL."
 }
-if ($databaseUrl -match 'sslmode=.*["'']') {
-  throw 'DATABASE_URL contiene comillas en sslmode. Copia la URL sin comillas y vuelve a intentar.'
+if ($databaseUrl -match 'sslmode=[^&]*["''\s]') {
+  throw 'DATABASE_URL contiene espacios o comillas en sslmode. Copia la URL sin comillas y vuelve a intentar.'
 }
+
+$secretFile = New-TemporaryFile
+try {
+  [System.IO.File]::WriteAllText(
+    $secretFile.FullName,
+    $databaseUrl,
+    [System.Text.UTF8Encoding]::new($false)
+  )
 
 & $gcloud secrets describe DATABASE_URL --project $projectId *> $null
 if ($LASTEXITCODE -ne 0) {
   Write-Host "Creando secret DATABASE_URL..."
-  $databaseUrl | & $gcloud secrets create DATABASE_URL --project $projectId --data-file=-
+  & $gcloud secrets create DATABASE_URL --project $projectId --data-file $secretFile.FullName
   if ($LASTEXITCODE -ne 0) {
     throw 'No se pudo crear DATABASE_URL.'
   }
 } else {
   Write-Host "Agregando nueva version al secret DATABASE_URL..."
-  $databaseUrl | & $gcloud secrets versions add DATABASE_URL --project $projectId --data-file=-
+  & $gcloud secrets versions add DATABASE_URL --project $projectId --data-file $secretFile.FullName
   if ($LASTEXITCODE -ne 0) {
     throw 'No se pudo agregar version a DATABASE_URL.'
   }
+}
+} finally {
+  Remove-Item -LiteralPath $secretFile.FullName -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "Forzando nueva revision de Cloud Run para tomar DATABASE_URL:latest..."
