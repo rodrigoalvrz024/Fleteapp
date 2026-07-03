@@ -46,6 +46,13 @@ $databaseUrl = ConvertFrom-SecureInput $secureDatabaseUrl
 if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
   throw 'DATABASE_URL no puede estar vacio.'
 }
+$databaseUrl = $databaseUrl.Trim()
+$databaseUrl = $databaseUrl.Trim('"', "'")
+$databaseUrl = $databaseUrl -replace '\s+', ''
+$databaseUrl = $databaseUrl -replace 'sslmode=%22require%22', 'sslmode=require'
+$databaseUrl = $databaseUrl -replace 'sslmode="require"', 'sslmode=require'
+$databaseUrl = $databaseUrl -replace "sslmode='require'", 'sslmode=require'
+$databaseUrl = $databaseUrl -replace 'sslmode=%27require%27', 'sslmode=require'
 if (-not $databaseUrl.StartsWith('postgresql://')) {
   throw 'DATABASE_URL debe comenzar con postgresql://'
 }
