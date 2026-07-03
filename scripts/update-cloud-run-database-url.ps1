@@ -49,10 +49,8 @@ if ([string]::IsNullOrWhiteSpace($databaseUrl)) {
 $databaseUrl = $databaseUrl.Trim()
 $databaseUrl = $databaseUrl.Trim('"', "'")
 $databaseUrl = $databaseUrl -replace '\s+', ''
-$databaseUrl = $databaseUrl -replace 'sslmode=%22require%22', 'sslmode=require'
-$databaseUrl = $databaseUrl -replace 'sslmode="require"', 'sslmode=require'
-$databaseUrl = $databaseUrl -replace "sslmode='require'", 'sslmode=require'
-$databaseUrl = $databaseUrl -replace 'sslmode=%27require%27', 'sslmode=require'
+$databaseUrl = $databaseUrl -replace '\\', ''
+$databaseUrl = $databaseUrl -replace 'sslmode=(%22|%27|"|'')?require(%22|%27|"|'')?', 'sslmode=require'
 if (-not $databaseUrl.StartsWith('postgresql://')) {
   throw 'DATABASE_URL debe comenzar con postgresql://'
 }
@@ -63,6 +61,9 @@ if ($databaseUrl -notmatch 'sslmode=require') {
   $separator = if ($databaseUrl.Contains('?')) { '&' } else { '?' }
   $databaseUrl = "$databaseUrl${separator}sslmode=require"
   Write-Host "Se agrego sslmode=require a la URL."
+}
+if ($databaseUrl -match 'sslmode=.*["'']') {
+  throw 'DATABASE_URL contiene comillas en sslmode. Copia la URL sin comillas y vuelve a intentar.'
 }
 
 & $gcloud secrets describe DATABASE_URL --project $projectId *> $null
