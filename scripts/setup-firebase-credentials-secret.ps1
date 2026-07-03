@@ -80,17 +80,41 @@ if ([string]::IsNullOrWhiteSpace($credentials.private_key)) {
 Write-Host "Credencial detectada para project_id=$($credentials.project_id)"
 Write-Host "client_email=$($credentials.client_email)"
 
-& $gcloud secrets describe $secretName --project $projectId *> $null
+$secretExists = $false
+$secretNames = & $gcloud secrets list `
+  --project $projectId `
+  --format 'value(name)'
 if ($LASTEXITCODE -ne 0) {
+  throw 'No se pudo listar secrets en Google Cloud.'
+}
+foreach ($name in $secretNames) {
+  if ($name -eq $secretName -or $name -like "*/$secretName") {
+    $secretExists = $true
+  }
+}
+
+$secretFile = New-TemporaryFile
+try {
+  $compactJson = $credentials | ConvertTo-Json -Depth 20 -Compress
+  [System.IO.File]::WriteAllText(
+    $secretFile.FullName,
+    $compactJson,
+    [System.Text.UTF8Encoding]::new($false)
+  )
+
+if (-not $secretExists) {
   Write-Host "Creando secret $secretName..."
   Invoke-Gcloud secrets create $secretName `
     --project $projectId `
-    --data-file $jsonPath
+    --data-file $secretFile.FullName
 } else {
   Write-Host "Agregando nueva version al secret $secretName..."
   Invoke-Gcloud secrets versions add $secretName `
     --project $projectId `
-    --data-file $jsonPath
+    --data-file $secretFile.FullName
+}
+} finally {
+  Remove-Item -LiteralPath $secretFile.FullName -Force -ErrorAction SilentlyContinue
 }
 
 $runtimeServiceAccount = Get-CloudRunServiceAccount
