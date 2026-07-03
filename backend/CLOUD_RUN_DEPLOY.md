@@ -33,6 +33,16 @@ printf "postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT.supabase.co:5432/pos
 printf "change-me-to-a-long-random-secret" | gcloud secrets create SECRET_KEY --data-file=-
 ```
 
+If Supabase gives you a new Transaction pooler URL, update `DATABASE_URL`
+without writing it to a file:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\update-cloud-run-database-url.ps1
+```
+
+Run it from the repository root and paste the pooler URL only into the local
+PowerShell prompt.
+
 Optional, only if push notifications are needed:
 
 ```powershell
