@@ -31,6 +31,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       try {
         final user = await _service.getMe();
         state = AuthState(user: user);
+        await _syncNotificationToken();
       } catch (_) {
         await _service.logout();
         state = const AuthState();
@@ -44,11 +45,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final data = await _service.login(email: email, password: password);
       final user = UserModel.fromJson(data['user']);
       state = AuthState(user: user);
-
-      // Registrar token FCM
-      NotificationService.registerTokenOnBackend((token) async {
-        await ApiService().put('/users/me', {'fcm_token': token});
-      });
+      await _syncNotificationToken();
 
       return true;
     } catch (e) {
@@ -81,6 +78,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       final user = UserModel.fromJson(data['user']);
       state = AuthState(user: user);
+      await _syncNotificationToken();
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _parseError(e));
@@ -89,6 +87,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    try {
+      await ApiService().put('/users/me', {'fcm_token': ''});
+    } catch (_) {}
     await _service.logout();
     // Limpiar estado completamente — el router detecta
     // isAuthenticated=false y redirige a /login sin splash
@@ -125,6 +126,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (msg.contains('401')) return 'Credenciales incorrectas';
     if (msg.contains('403')) return 'Cuenta suspendida';
     return 'Error de conexión. Intenta de nuevo.';
+  }
+
+  Future<void> _syncNotificationToken() async {
+    await NotificationService.registerTokenOnBackend((token) async {
+      await ApiService().put('/users/me', {'fcm_token': token});
+    });
   }
 }
 

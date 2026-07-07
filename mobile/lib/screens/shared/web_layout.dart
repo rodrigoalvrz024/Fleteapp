@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'freight_truck_loader.dart';
 
 class WebPageScaffold extends StatelessWidget {
   final String title;
@@ -84,15 +85,14 @@ class WebPageBody extends StatelessWidget {
 }
 
 class WebLoadingState extends StatelessWidget {
-  const WebLoadingState({super.key});
+  final String label;
+
+  const WebLoadingState({super.key, this.label = 'Cargando'});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        color: AppTheme.primary,
-      ),
+    return Center(
+      child: FreightTruckLoader(label: label),
     );
   }
 }

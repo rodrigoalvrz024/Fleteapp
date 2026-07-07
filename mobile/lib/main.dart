@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme/app_theme.dart';
@@ -8,11 +9,19 @@ import 'core/router/app_router.dart';
 import 'firebase_options.dart';
 import 'services/notification_service.dart';
 
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  if (kIsWeb) return;
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es', null);
+  await _initializeFirebaseServices();
   runApp(const ProviderScope(child: FleteApp()));
-  _initializeFirebaseServices();
 }
 
 Future<void> _initializeFirebaseServices() async {
@@ -25,6 +34,9 @@ Future<void> _initializeFirebaseServices() async {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
     } else {
       await Firebase.initializeApp();
+    }
+    if (!kIsWeb) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     }
     await NotificationService.initialize();
   } catch (e) {
@@ -41,6 +53,7 @@ class FleteApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'FleteApp',
       theme: AppTheme.light,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       routerConfig: router,
       locale: const Locale('es'),
       debugShowCheckedModeBanner: false,

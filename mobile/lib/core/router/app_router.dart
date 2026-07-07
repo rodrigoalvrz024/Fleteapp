@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,6 +24,9 @@ import '../../screens/shared/profile_screen.dart';
 import '../../screens/shared/splash_screen.dart';
 import '../../services/analytics_service.dart';
 
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 String _withQuery(String path, GoRouterState state) {
   final query = state.uri.queryParameters;
   return query.isEmpty
@@ -37,6 +40,7 @@ String? _trackRouteView(BuildContext _, GoRouterState state) {
 }
 
 final _router = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/',
   redirect: _trackRouteView,
   routes: [
@@ -228,3 +232,17 @@ final _router = GoRouter(
 );
 
 final routerProvider = Provider<GoRouter>((_) => _router);
+
+void openRouteFromNotification(Map<String, dynamic> data) {
+  final explicitRoute = data['route']?.toString();
+  if (explicitRoute != null && explicitRoute.startsWith('/')) {
+    _router.go(explicitRoute);
+    return;
+  }
+
+  final type = data['type']?.toString();
+  final freightId = int.tryParse(data['freight_id']?.toString() ?? '');
+  if (type == 'new_freight' && freightId != null) {
+    _router.go('/app/driver/freights/$freightId');
+  }
+}

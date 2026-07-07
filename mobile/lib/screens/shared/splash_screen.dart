@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/driver_onboarding_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'freight_truck_loader.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -253,13 +254,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 1.6,
-                        ),
+                      FreightTruckLoader(
+                        width: 118,
+                        showLabel: false,
+                        color: Colors.white,
+                        fillColor: Colors.white,
+                        trackColor: Colors.white.withValues(alpha: 0.14),
                       ),
                       const SizedBox(height: 10),
                       AnimatedSwitcher(
