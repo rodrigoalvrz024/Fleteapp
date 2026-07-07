@@ -51,6 +51,8 @@ FILE_SIGNATURES = {
     "image/webp": (b"RIFF",),
     "application/pdf": (b"%PDF-",),
 }
+PNG_METADATA_CHUNKS = {b"eXIf", b"iTXt", b"tEXt", b"tIME", b"zTXt"}
+WEBP_METADATA_CHUNKS = {b"EXIF", b"ICCP", b"XMP "}
 
 
 def _max_upload_bytes() -> int:
@@ -129,6 +131,109 @@ def _detect_upload_type(content: bytes, declared_type: str, filename: str) -> st
     return declared_type
 
 
+def _strip_image_metadata(content_type: str, content: bytes) -> bytes:
+    if content_type == "image/jpeg":
+        return _strip_jpeg_metadata(content)
+    if content_type == "image/png":
+        return _strip_png_metadata(content)
+    if content_type == "image/webp":
+        return _strip_webp_metadata(content)
+    return content
+
+
+def _strip_jpeg_metadata(content: bytes) -> bytes:
+    if not content.startswith(b"\xff\xd8"):
+        return content
+
+    output = bytearray(content[:2])
+    index = 2
+    length = len(content)
+    while index < length:
+        if content[index] != 0xFF:
+            return content
+        while index < length and content[index] == 0xFF:
+            index += 1
+        if index >= length:
+            return content
+
+        marker = content[index]
+        index += 1
+        if marker == 0xDA:  # Start of scan: image payload follows.
+            output.extend((0xFF, marker))
+            output.extend(content[index:])
+            return bytes(output)
+        if marker == 0xD9:
+            output.extend((0xFF, marker))
+            return bytes(output)
+        if marker == 0x01 or 0xD0 <= marker <= 0xD7:
+            output.extend((0xFF, marker))
+            continue
+        if index + 2 > length:
+            return content
+
+        segment_length = int.from_bytes(content[index : index + 2], "big")
+        if segment_length < 2 or index + segment_length > length:
+            return content
+
+        segment = content[index : index + segment_length]
+        is_metadata_segment = 0xE0 <= marker <= 0xEF or marker == 0xFE
+        if not is_metadata_segment:
+            output.extend((0xFF, marker))
+            output.extend(segment)
+        index += segment_length
+
+    return bytes(output)
+
+
+def _strip_png_metadata(content: bytes) -> bytes:
+    signature = b"\x89PNG\r\n\x1a\n"
+    if not content.startswith(signature):
+        return content
+
+    output = bytearray(signature)
+    index = len(signature)
+    length = len(content)
+    while index + 12 <= length:
+        chunk_length = int.from_bytes(content[index : index + 4], "big")
+        chunk_type = content[index + 4 : index + 8]
+        chunk_end = index + 12 + chunk_length
+        if chunk_end > length:
+            return content
+        if chunk_type not in PNG_METADATA_CHUNKS:
+            output.extend(content[index:chunk_end])
+        index = chunk_end
+        if chunk_type == b"IEND":
+            return bytes(output)
+    return content
+
+
+def _strip_webp_metadata(content: bytes) -> bytes:
+    if not (
+        content.startswith(b"RIFF")
+        and len(content) >= 12
+        and content[8:12] == b"WEBP"
+    ):
+        return content
+
+    output = bytearray(b"RIFF\x00\x00\x00\x00WEBP")
+    index = 12
+    length = len(content)
+    while index + 8 <= length:
+        chunk_type = content[index : index + 4]
+        chunk_size = int.from_bytes(content[index + 4 : index + 8], "little")
+        chunk_end = index + 8 + chunk_size
+        padded_end = chunk_end + (chunk_size % 2)
+        if padded_end > length:
+            return content
+        if chunk_type not in WEBP_METADATA_CHUNKS:
+            output.extend(content[index:padded_end])
+        index = padded_end
+
+    riff_size = len(output) - 8
+    output[4:8] = riff_size.to_bytes(4, "little")
+    return bytes(output)
+
+
 def _bucket():
     _ensure_storage_configured()
     return storage.Client().bucket(settings.DRIVER_DOCUMENTS_BUCKET)
@@ -154,6 +259,8 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"El archivo supera el maximo de {settings.DRIVER_DOCUMENT_MAX_MB} MB.",
         )
+    _validate_file_signature(content_type, content)
+    content = _strip_image_metadata(content_type, content)
     _validate_file_signature(content_type, content)
 
     object_name = _object_name(driver_id, field, extension)
@@ -182,6 +289,8 @@ async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"La foto supera el maximo de {settings.FREIGHT_EVIDENCE_MAX_MB} MB.",
         )
+    _validate_file_signature(content_type, content)
+    content = _strip_image_metadata(content_type, content)
     _validate_file_signature(content_type, content)
 
     object_name = (

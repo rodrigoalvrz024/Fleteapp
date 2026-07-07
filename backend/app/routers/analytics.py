@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import check_rate_limit
 from app.core.security import decode_token
 from app.database import get_db
 from app.models.user import User
@@ -89,6 +90,21 @@ def record_analytics_event(
     current_user = _optional_current_user(credentials, db)
     if data.event_type in AUTHENTICATED_EVENTS and not current_user:
         raise HTTPException(status_code=401, detail="Autenticacion requerida")
+    if current_user:
+        check_rate_limit(
+            request,
+            scope="analytics-events-user",
+            identifier=str(current_user.id),
+            max_attempts=300,
+            window_seconds=60,
+        )
+    else:
+        check_rate_limit(
+            request,
+            scope="analytics-events-public",
+            max_attempts=120,
+            window_seconds=60,
+        )
 
     record_audit_event(
         db,

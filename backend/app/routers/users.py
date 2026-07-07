@@ -12,6 +12,15 @@ from app.core.security import get_current_user
 from app.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
+SENSITIVE_AUDIT_FIELDS = {"fcm_token"}
+
+
+def _redact_user_audit_data(data: dict) -> dict:
+    redacted = data.copy()
+    for field in SENSITIVE_AUDIT_FIELDS:
+        if field in redacted:
+            redacted[field] = "[redacted]" if redacted[field] else None
+    return redacted
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
@@ -30,7 +39,8 @@ def update_me(
         "avatar_url": current_user.avatar_url,
         "fcm_token": current_user.fcm_token,
     }
-    for field, value in data.model_dump(exclude_none=True).items():
+    update_data = data.model_dump(exclude_none=True)
+    for field, value in update_data.items():
         setattr(current_user, field, value)
     current_user.last_modified_by = current_user.id
     record_audit_event(
@@ -39,8 +49,8 @@ def update_me(
         entity_type="user",
         entity_id=current_user.id,
         event_type="user.updated",
-        before_data=before_data,
-        after_data=data.model_dump(exclude_none=True),
+        before_data=_redact_user_audit_data(before_data),
+        after_data=_redact_user_audit_data(update_data),
         request=request,
     )
     db.commit()

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import check_rate_limit
 from app.core.security import get_current_user, require_role
 from app.database import get_db
 from app.models.driver import Driver, DriverStatus
@@ -194,6 +195,13 @@ async def upload_driver_file(
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
     if not driver:
         raise HTTPException(status_code=404, detail="Perfil de conductor no encontrado")
+    check_rate_limit(
+        request,
+        scope="driver-document-upload",
+        identifier=str(current_user.id),
+        max_attempts=30,
+        window_seconds=60 * 60,
+    )
 
     form = await request.form()
     selected_field = None

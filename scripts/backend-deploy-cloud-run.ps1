@@ -15,13 +15,13 @@ $dbMaxOverflow = if ([string]::IsNullOrWhiteSpace($env:DB_MAX_OVERFLOW)) { '2' }
 $dbPoolTimeout = if ([string]::IsNullOrWhiteSpace($env:DB_POOL_TIMEOUT_SECONDS)) { '5' } else { $env:DB_POOL_TIMEOUT_SECONDS }
 $dbConnectTimeout = if ([string]::IsNullOrWhiteSpace($env:DB_CONNECT_TIMEOUT_SECONDS)) { '10' } else { $env:DB_CONNECT_TIMEOUT_SECONDS }
 $runStartupMigrations = if ([string]::IsNullOrWhiteSpace($env:RUN_STARTUP_MIGRATIONS)) { 'false' } else { $env:RUN_STARTUP_MIGRATIONS }
-$driverPushNotifications = if ([string]::IsNullOrWhiteSpace($env:ENABLE_DRIVER_PUSH_NOTIFICATIONS)) { 'false' } else { $env:ENABLE_DRIVER_PUSH_NOTIFICATIONS }
-$notificationTasksEnabled = if ([string]::IsNullOrWhiteSpace($env:NOTIFICATION_TASKS_ENABLED)) { 'false' } else { $env:NOTIFICATION_TASKS_ENABLED }
-$cloudTasksLocation = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_LOCATION)) { $region } else { $env:CLOUD_TASKS_LOCATION }
-$cloudTasksQueue = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_QUEUE)) { 'freight-notifications' } else { $env:CLOUD_TASKS_QUEUE }
-$cloudTasksServiceAccount = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_SERVICE_ACCOUNT)) { '' } else { $env:CLOUD_TASKS_SERVICE_ACCOUNT }
-$cloudTasksTargetBaseUrl = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_TARGET_BASE_URL)) { '' } else { $env:CLOUD_TASKS_TARGET_BASE_URL }
-$cloudTasksAudience = if ([string]::IsNullOrWhiteSpace($env:CLOUD_TASKS_AUDIENCE)) { $cloudTasksTargetBaseUrl } else { $env:CLOUD_TASKS_AUDIENCE }
+$driverPushNotifications = $env:ENABLE_DRIVER_PUSH_NOTIFICATIONS
+$notificationTasksEnabled = $env:NOTIFICATION_TASKS_ENABLED
+$cloudTasksLocation = $env:CLOUD_TASKS_LOCATION
+$cloudTasksQueue = $env:CLOUD_TASKS_QUEUE
+$cloudTasksServiceAccount = $env:CLOUD_TASKS_SERVICE_ACCOUNT
+$cloudTasksTargetBaseUrl = $env:CLOUD_TASKS_TARGET_BASE_URL
+$cloudTasksAudience = $env:CLOUD_TASKS_AUDIENCE
 
 function Get-GcloudCli {
   $command = Get-Command gcloud -ErrorAction SilentlyContinue
@@ -38,6 +38,47 @@ function Get-GcloudCli {
 }
 
 $gcloud = Get-GcloudCli
+$currentServiceEnv = @{}
+
+function Load-CurrentServiceEnv {
+  $json = & $gcloud run services describe $service `
+    --region $region `
+    --project $projectId `
+    --format json 2>$null
+
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json)) {
+    return @{}
+  }
+
+  $serviceConfig = $json | ConvertFrom-Json
+  $envItems = $serviceConfig.spec.template.spec.containers[0].env
+  $result = @{}
+  foreach ($item in $envItems) {
+    if ($item.name -and $null -ne $item.value) {
+      $result[$item.name] = [string]$item.value
+    }
+  }
+  return $result
+}
+
+function Resolve-DeployEnv([string]$Candidate, [string]$Name, [string]$Fallback) {
+  if (-not [string]::IsNullOrWhiteSpace($Candidate)) {
+    return $Candidate
+  }
+  if ($currentServiceEnv.ContainsKey($Name) -and -not [string]::IsNullOrWhiteSpace($currentServiceEnv[$Name])) {
+    return $currentServiceEnv[$Name]
+  }
+  return $Fallback
+}
+
+$currentServiceEnv = Load-CurrentServiceEnv
+$driverPushNotifications = Resolve-DeployEnv $driverPushNotifications 'ENABLE_DRIVER_PUSH_NOTIFICATIONS' 'false'
+$notificationTasksEnabled = Resolve-DeployEnv $notificationTasksEnabled 'NOTIFICATION_TASKS_ENABLED' 'false'
+$cloudTasksLocation = Resolve-DeployEnv $cloudTasksLocation 'CLOUD_TASKS_LOCATION' $region
+$cloudTasksQueue = Resolve-DeployEnv $cloudTasksQueue 'CLOUD_TASKS_QUEUE' 'freight-notifications'
+$cloudTasksServiceAccount = Resolve-DeployEnv $cloudTasksServiceAccount 'CLOUD_TASKS_SERVICE_ACCOUNT' ''
+$cloudTasksTargetBaseUrl = Resolve-DeployEnv $cloudTasksTargetBaseUrl 'CLOUD_TASKS_TARGET_BASE_URL' ''
+$cloudTasksAudience = Resolve-DeployEnv $cloudTasksAudience 'CLOUD_TASKS_AUDIENCE' $cloudTasksTargetBaseUrl
 
 Write-Host "Desplegando backend $service en $projectId/$region..."
 Write-Host "Cloud Run: max-instances=$maxInstances concurrency=$concurrency memory=$memory cpu=$cpu timeout=$timeout"

@@ -13,7 +13,7 @@ from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.rating import Rating
 from app.schemas.freight import FreightCreateResponse, FreightResponse, FreightStatusUpdate
 from app.services.freight_service import can_transition
-from app.services.storage_service import _detect_upload_type
+from app.services.storage_service import _detect_upload_type, _strip_image_metadata
 
 
 class FreightCompletionFlowTests(unittest.TestCase):
@@ -105,6 +105,23 @@ class FreightCompletionFlowTests(unittest.TestCase):
             _detect_upload_type(content, "application/octet-stream", "foto.HEIC"),
             "image/heic",
         )
+
+    def test_storage_strips_jpeg_metadata_before_private_upload(self):
+        metadata = b"Exif\x00\x00GPS LOCATION"
+        content = (
+            b"\xff\xd8"
+            b"\xff\xe1"
+            + (len(metadata) + 2).to_bytes(2, "big")
+            + metadata
+            + b"\xff\xda"
+            + b"\x00\x08scan-bytes"
+        )
+
+        stripped = _strip_image_metadata("image/jpeg", content)
+
+        self.assertTrue(stripped.startswith(b"\xff\xd8"))
+        self.assertIn(b"\xff\xda", stripped)
+        self.assertNotIn(b"GPS LOCATION", stripped)
 
 
 if __name__ == "__main__":

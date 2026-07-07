@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.config import settings
+from app.core.rate_limit import check_rate_limit
 from app.core.security import (
     get_current_user,
     hash_password,
@@ -134,6 +135,13 @@ def create_freight(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client"))
 ):
+    check_rate_limit(
+        request,
+        scope="freight-create",
+        identifier=str(current_user.id),
+        max_attempts=30,
+        window_seconds=60 * 60,
+    )
     dist   = calculate_distance_km(
         data.origin_lat, data.origin_lng,
         data.destination_lat, data.destination_lng
@@ -207,6 +215,7 @@ def create_freight(
             "freight_id": str(freight.id),
             "type": "new_freight",
             "mode": prices["mode"],
+            "route": f"/app/driver/freights/{freight.id}",
         }
         if settings.NOTIFICATION_TASKS_ENABLED:
             background_tasks.add_task(
@@ -317,6 +326,13 @@ def generate_delivery_pin(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client")),
 ):
+    check_rate_limit(
+        request,
+        scope="freight-delivery-pin",
+        identifier=f"{current_user.id}:{freight_id}",
+        max_attempts=10,
+        window_seconds=15 * 60,
+    )
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
@@ -357,6 +373,13 @@ async def upload_evidence(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("driver")),
 ):
+    check_rate_limit(
+        request,
+        scope="freight-evidence-upload",
+        identifier=f"{current_user.id}:{freight_id}:{kind}",
+        max_attempts=20,
+        window_seconds=60 * 60,
+    )
     fields = EVIDENCE_FIELDS.get(kind)
     if not fields:
         raise HTTPException(status_code=400, detail="Tipo de evidencia invalido")
@@ -465,16 +488,29 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=403, detail="Conductor no aprobado")
     require_driver_can_operate(driver)
 
-    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
-    if not freight or freight.status != FreightStatus.pending:
+    accepted_at = datetime.now(timezone.utc)
+    updated_rows = (
+        db.query(FreightRequest)
+        .filter(
+            FreightRequest.id == freight_id,
+            FreightRequest.status == FreightStatus.pending,
+            FreightRequest.driver_id.is_(None),
+        )
+        .update(
+            {
+                FreightRequest.driver_id: driver.id,
+                FreightRequest.status: FreightStatus.accepted,
+                FreightRequest.accepted_at: accepted_at,
+                FreightRequest.last_modified_by: current_user.id,
+            },
+            synchronize_session=False,
+        )
+    )
+    if updated_rows != 1:
+        db.rollback()
         raise HTTPException(status_code=400, detail="Flete no disponible")
 
-    status_before = freight.status.value if hasattr(freight.status, "value") else str(freight.status)
-    freight.driver_id = driver.id
-    freight.status = FreightStatus.accepted
-    freight.accepted_at = datetime.utcnow()
-    freight.last_modified_by = current_user.id
-
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     history = TripStatusHistory(freight_id=freight.id, status=FreightStatus.accepted, note=f"Aceptado por conductor {driver.id}")
     db.add(history)
     record_audit_event(
@@ -483,11 +519,11 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
         entity_type="freight",
         entity_id=freight.id,
         event_type="freight.accepted",
-        before_data={"status": status_before, "driver_id": None},
+        before_data={"status": FreightStatus.pending.value, "driver_id": None},
         after_data={
             "status": FreightStatus.accepted.value,
             "driver_id": driver.id,
-            "accepted_at": freight.accepted_at.isoformat(),
+            "accepted_at": accepted_at.isoformat(),
         },
         metadata={"driver_profile_id": driver.id},
     )
@@ -589,6 +625,7 @@ from app.services.freight_service import estimate_price
 
 @router.post("/estimate")
 async def estimate_freight(
+    request: Request,
     origin_lat:       float,
     origin_lng:       float,
     destination_lat:  float,
@@ -599,6 +636,13 @@ async def estimate_freight(
     scheduled_at:     Optional[datetime] = None,
     current_user = Depends(get_current_user)
 ):
+    check_rate_limit(
+        request,
+        scope="freight-estimate",
+        identifier=str(current_user.id),
+        max_attempts=120,
+        window_seconds=60 * 60,
+    )
     from app.services.maps_service import get_distance_and_duration
     from datetime import datetime as dt
 

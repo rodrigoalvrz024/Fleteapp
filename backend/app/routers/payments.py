@@ -9,6 +9,7 @@ from app.models.user import User, UserRole
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus, PaymentMethod
 from app.schemas.payment import PaymentCreate, PaymentResponse, WebpayInitResponse
+from app.core.rate_limit import check_rate_limit
 from app.core.security import get_current_user, require_role
 from app.core.config import settings
 from app.services.audit_service import record_audit_event
@@ -33,6 +34,13 @@ def initiate_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client")),
 ):
+    check_rate_limit(
+        request,
+        scope="payment-initiate",
+        identifier=f"{current_user.id}:{data.freight_id}",
+        max_attempts=10,
+        window_seconds=15 * 60,
+    )
     if data.method != PaymentMethod.webpay:
         raise HTTPException(
             status_code=400,
