@@ -781,7 +781,7 @@ def export_audit_events(
                 _csv_safe(json.dumps(event.event_metadata or {}, ensure_ascii=False)),
             ]
         )
-    filename = f"fleteapp_audit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = f"muvv_audit_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
     return Response(
         content=output.getvalue(),
         media_type="text/csv; charset=utf-8",

@@ -24,7 +24,7 @@ class LegalDocumentScreen extends StatelessWidget {
         children: [
           _Header(
             title:
-                _isTerms ? 'Terminos de uso FleteApp' : 'Privacidad FleteApp',
+                _isTerms ? 'Terminos de uso muvv' : 'Privacidad muvv',
             subtitle: _isTerms
                 ? 'Estos terminos regulan el uso de la plataforma.'
                 : 'Este documento explica como cuidamos tus datos.',
@@ -128,11 +128,11 @@ class _LegalSection {
 const _termsSections = [
   _LegalSection(
     'Uso de la plataforma',
-    'FleteApp conecta clientes que solicitan fletes con conductores independientes. La plataforma permite crear solicitudes, aceptar servicios, coordinar traslados y revisar el estado de cada flete.',
+    'muvv conecta clientes que solicitan fletes con conductores independientes. La plataforma permite crear solicitudes, aceptar servicios, coordinar traslados y revisar el estado de cada flete.',
   ),
   _LegalSection(
     'Cuentas de usuario',
-    'Cada persona debe entregar informacion verdadera, mantener segura su contrasena y usar una cuenta propia. FleteApp puede suspender cuentas cuando exista fraude, uso indebido o riesgo para otros usuarios.',
+    'Cada persona debe entregar informacion verdadera, mantener segura su contrasena y usar una cuenta propia. muvv puede suspender cuentas cuando exista fraude, uso indebido o riesgo para otros usuarios.',
   ),
   _LegalSection(
     'Conductores y documentos',
@@ -144,7 +144,7 @@ const _termsSections = [
   ),
   _LegalSection(
     'Seguridad y responsabilidad',
-    'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. FleteApp puede investigar incidentes y limitar el acceso para proteger la operacion.',
+    'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. muvv puede investigar incidentes y limitar el acceso para proteger la operacion.',
   ),
 ];
 
@@ -167,6 +167,6 @@ const _privacySections = [
   ),
   _LegalSection(
     'Derechos de las personas',
-    'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de FleteApp desde los canales oficiales.',
+    'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de muvv desde los canales oficiales.',
   ),
 ];

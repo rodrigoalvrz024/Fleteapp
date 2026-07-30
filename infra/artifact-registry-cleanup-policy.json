@@ -1,0 +1,17 @@
+[
+  {
+    "name": "delete-old-docker-images",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "olderThan": "1d"
+    }
+  },
+  {
+    "name": "keep-recent-docker-images",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {
+      "keepCount": 10
+    }
+  }
+]

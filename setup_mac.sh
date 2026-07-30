@@ -6,7 +6,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo "================================"
-echo "  FleteApp — Setup Mac"
+echo "  muvv — Setup Mac"
 echo "================================"
 
 echo -e "\n${BLUE}[1/5] Homebrew...${NC}"
@@ -27,9 +27,9 @@ brew install postgresql@15 2>/dev/null || true
 brew services start postgresql@15
 export PATH="/opt/homebrew/opt/postgresql@15/bin:$PATH"
 sleep 2
-psql postgres -c "CREATE USER fleteapp_user WITH PASSWORD 'fleteapp123';" 2>/dev/null || true
-psql postgres -c "CREATE DATABASE fleteapp_db OWNER fleteapp_user;" 2>/dev/null || true
-psql postgres -c "GRANT ALL PRIVILEGES ON DATABASE fleteapp_db TO fleteapp_user;" 2>/dev/null || true
+psql postgres -c "CREATE USER muvv_user WITH PASSWORD 'muvv123';" 2>/dev/null || true
+psql postgres -c "CREATE DATABASE muvv_db OWNER muvv_user;" 2>/dev/null || true
+psql postgres -c "GRANT ALL PRIVILEGES ON DATABASE muvv_db TO muvv_user;" 2>/dev/null || true
 echo -e "${GREEN}✓ PostgreSQL y BD listos${NC}"
 
 echo -e "\n${BLUE}[4/5] Backend Python...${NC}"

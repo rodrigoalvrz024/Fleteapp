@@ -1,4 +1,4 @@
-# FleteApp load tests
+# muvv load tests
 
 Pruebas de carga con `k6` para validar si backend, Supabase y Cloud Run soportan uso simultaneo.
 
@@ -120,8 +120,8 @@ En la salida de `k6`:
 - `http_req_failed`: ideal bajo 2%.
 - `http_req_duration p(95)`: ideal bajo 1200 ms.
 - `http_req_duration p(99)`: ideal bajo 2500 ms.
-- `fleteapp_freight_creates`: cantidad de fletes creados si `WRITE_FREIGHTS=true`.
-- `fleteapp_freight_list_latency`: latencia de listados de fletes.
+- `muvv_freight_creates`: cantidad de fletes creados si `WRITE_FREIGHTS=true`.
+- `muvv_freight_list_latency`: latencia de listados de fletes.
 
 Los scripts guardan automaticamente un resumen JSON en `reports/load-tests/`.
 Esa carpeta queda fuera de Git porque contiene resultados locales de prueba.

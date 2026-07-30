@@ -1310,7 +1310,7 @@ class _SupportSheet extends StatelessWidget {
   Future<void> _whatsapp() async {
     final uri = Uri.parse(
       'https://wa.me/56912345678?text='
-      '${Uri.encodeComponent("Hola, soy conductor de FleteApp y necesito ayuda.")}',
+      '${Uri.encodeComponent("Hola, soy conductor de muvv y necesito ayuda.")}',
     );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -1320,7 +1320,7 @@ class _SupportSheet extends StatelessWidget {
   Future<void> _email() async {
     final uri = Uri(
       scheme: 'mailto',
-      path: 'conductores@fleteapp.cl',
+      path: 'conductores@muvv.cl',
       query: 'subject=${Uri.encodeComponent("Soporte conductor")}'
           '&body=${Uri.encodeComponent("Hola,\n\n")}',
     );
@@ -1368,7 +1368,7 @@ class _SupportSheet extends StatelessWidget {
             _SupportOpt(
               icon: Icons.mail_outline_rounded,
               label: 'Correo',
-              sub: 'conductores@fleteapp.cl',
+              sub: 'conductores@muvv.cl',
               color: AppTheme.primary,
               onTap: _email,
             ),

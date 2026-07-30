@@ -1,8 +1,9 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$projectId = 'fleteapp-8d8f7'
-$siteId = 'fleteapp-public-8d8f7'
+$projectId = if ([string]::IsNullOrWhiteSpace($env:PROJECT_ID)) { 'fleteapp-8d8f7' } else { $env:PROJECT_ID }
+$siteId = if ([string]::IsNullOrWhiteSpace($env:FIREBASE_PUBLIC_SITE_ID)) { "$projectId-public" } else { $env:FIREBASE_PUBLIC_SITE_ID }
+$appSiteId = if ([string]::IsNullOrWhiteSpace($env:FIREBASE_APP_SITE_ID)) { $projectId } else { $env:FIREBASE_APP_SITE_ID }
 
 function Get-FirebaseCli {
   $command = Get-Command firebase -ErrorAction SilentlyContinue
@@ -20,4 +21,12 @@ if ($LASTEXITCODE -ne 0) {
   Write-Warning 'Si el sitio ya existia, puedes continuar. Si no existia, copia el error y revisamos.'
 }
 
+& $firebase target:apply hosting app $appSiteId --project $projectId
+if ($LASTEXITCODE -ne 0) {
+  throw 'No se pudo aplicar el target hosting app.'
+}
+
 & $firebase target:apply hosting public $siteId --project $projectId
+if ($LASTEXITCODE -ne 0) {
+  throw 'No se pudo aplicar el target hosting public.'
+}

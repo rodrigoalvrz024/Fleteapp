@@ -172,7 +172,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                       opacity: _titleOpacity,
                       duration: const Duration(milliseconds: 280),
                       curve: Curves.easeOut,
-                      child: const Text('FleteApp',
+                      child: const Text('muvv',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 32,

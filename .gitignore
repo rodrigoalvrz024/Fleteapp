@@ -27,6 +27,7 @@ firepit-log.txt
 reports/
 .dart-appdata/
 .local-tools/
+scripts/new-google-account.env.ps1
 .idea/
 mobile/ios/Runner/AppDelegate.swift
 mobile/ios/Flutter/Debug.xcconfig

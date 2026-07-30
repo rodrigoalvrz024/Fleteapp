@@ -1,4 +1,4 @@
-# FleteApp iOS Push Notifications
+# muvv iOS Push Notifications
 
 Las notificaciones iOS requieren configuracion externa en Apple Developer,
 Firebase y Xcode. No guardar llaves privadas en el repositorio.
@@ -6,7 +6,7 @@ Firebase y Xcode. No guardar llaves privadas en el repositorio.
 ## 1. Firebase iOS
 
 1. En Firebase Console, abre el proyecto `fleteapp-8d8f7`.
-2. Agrega una app iOS con bundle id `com.fleteapp.fleteapp`.
+2. Agrega una app iOS con bundle id `cl.muvv.app`.
 3. Descarga `GoogleService-Info.plist`.
 4. Copia el archivo en `mobile/ios/Runner/GoogleService-Info.plist`.
 5. No lo subas a Git. Ya esta ignorado por `.gitignore`.
@@ -27,7 +27,7 @@ Estado local: `GoogleService-Info.plist` ya fue copiado en `Runner`.
    - Push Notifications
    - Background Modes > Remote notifications
 3. Verifica que `GoogleService-Info.plist` este incluido en el target Runner.
-4. Verifica que el bundle id sea exactamente `com.fleteapp.fleteapp`.
+4. Verifica que el bundle id sea exactamente `cl.muvv.app`.
 5. Si Xcode no muestra el archivo plist en el target, arrastralo a `Runner`
    marcando `Copy items if needed` y seleccionando el target `Runner`.
 

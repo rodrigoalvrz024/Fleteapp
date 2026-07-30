@@ -21,7 +21,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es', null);
   await _initializeFirebaseServices();
-  runApp(const ProviderScope(child: FleteApp()));
+  runApp(const ProviderScope(child: MuvvApp()));
 }
 
 Future<void> _initializeFirebaseServices() async {
@@ -44,14 +44,14 @@ Future<void> _initializeFirebaseServices() async {
   }
 }
 
-class FleteApp extends ConsumerWidget {
-  const FleteApp({super.key});
+class MuvvApp extends ConsumerWidget {
+  const MuvvApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'FleteApp',
+      title: 'muvv',
       theme: AppTheme.light,
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       routerConfig: router,

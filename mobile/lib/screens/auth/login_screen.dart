@@ -9,7 +9,10 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import 'widgets/auth_visuals.dart';
 
-const _publicHomeUrl = 'https://fleteapp-public-8d8f7.web.app';
+const _publicHomeUrl = String.fromEnvironment(
+  'PUBLIC_HOME_URL',
+  defaultValue: 'https://fleteapp-public-8d8f7.web.app',
+);
 
 Future<void> _openPublicHome() async {
   await launchUrl(Uri.parse(_publicHomeUrl), webOnlyWindowName: '_self');
@@ -267,7 +270,7 @@ class _BrandMark extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Text(
-          'FleteApp',
+          'muvv',
           style: GoogleFonts.manrope(
             color: Colors.white,
             fontSize: 18,
@@ -406,7 +409,7 @@ class _LoginHeroCopy extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'FleteApp',
+            'muvv',
             style: GoogleFonts.manrope(
               color: Colors.white,
               fontSize: compact ? 48 : 72,
@@ -540,7 +543,7 @@ class _LoginPanel extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Accede a tu cuenta FleteApp.',
+                'Accede a tu cuenta muvv.',
                 style: TextStyle(
                   color: AppTheme.slate600,
                   fontSize: 15,

@@ -1,4 +1,4 @@
-package com.fleteapp.fleteapp
+package cl.muvv.app
 
 import io.flutter.embedding.android.FlutterActivity
 

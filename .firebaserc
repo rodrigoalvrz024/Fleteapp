@@ -1,15 +1,15 @@
 {
   "projects": {
-    "default": "fleteapp-8d8f7"
+    "default": "muvv-dev"
   },
   "targets": {
-    "fleteapp-8d8f7": {
+    "muvv-dev": {
       "hosting": {
         "app": [
-          "fleteapp-8d8f7"
+          "muvv-dev"
         ],
         "public": [
-          "fleteapp-public-8d8f7"
+          "muvv-dev-public"
         ]
       }
     }

@@ -24,10 +24,10 @@ const MAX_WRITE_ITERATIONS_PER_VU = Number(__ENV.MAX_WRITE_ITERATIONS_PER_VU || 
 const LOAD_TEST_RUN_ID =
   __ENV.LOAD_TEST_RUN_ID || new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
 
-export const errorRate = new Rate('fleteapp_errors');
-export const freightCreates = new Counter('fleteapp_freight_creates');
-export const freightCreateLatency = new Trend('fleteapp_freight_create_latency');
-export const freightListLatency = new Trend('fleteapp_freight_list_latency');
+export const errorRate = new Rate('muvv_errors');
+export const freightCreates = new Counter('muvv_freight_creates');
+export const freightCreateLatency = new Trend('muvv_freight_create_latency');
+export const freightListLatency = new Trend('muvv_freight_list_latency');
 
 export const options = buildOptions(PROFILE);
 
@@ -50,8 +50,8 @@ function buildOptions(profile) {
       thresholds: {
         http_req_failed: ['rate<0.02'],
         http_req_duration: ['p(95)<1200', 'p(99)<2500'],
-        fleteapp_errors: ['rate<0.02'],
-        fleteapp_freight_list_latency: ['p(95)<1000'],
+        muvv_errors: ['rate<0.02'],
+        muvv_freight_list_latency: ['p(95)<1000'],
       },
     };
   }
@@ -67,7 +67,7 @@ function buildOptions(profile) {
     thresholds: {
       http_req_failed: ['rate<0.05'],
       http_req_duration: ['p(95)<1500'],
-      fleteapp_errors: ['rate<0.05'],
+      muvv_errors: ['rate<0.05'],
     },
   };
 }

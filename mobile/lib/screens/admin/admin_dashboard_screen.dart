@@ -212,7 +212,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       );
       final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
       await downloadTextFile(
-        filename: 'fleteapp_historial_$stamp.csv',
+        filename: 'muvv_historial_$stamp.csv',
         content: csv,
         mimeType: 'text/csv;charset=utf-8',
       );
@@ -312,7 +312,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     if (insights == null) return;
     final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
     await downloadTextFile(
-      filename: 'fleteapp_insights_${insights.days}d_$stamp.csv',
+      filename: 'muvv_insights_${insights.days}d_$stamp.csv',
       content: _insightsCsv(insights),
       mimeType: 'text/csv;charset=utf-8',
     );

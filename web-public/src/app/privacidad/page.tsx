@@ -6,18 +6,18 @@ import { SiteFooter } from '../site-shell';
 export const metadata = pageMetadata({
   title: 'Politica de privacidad',
   description:
-    'Politica de privacidad de FleteApp sobre datos de cuenta, ubicacion operativa, solicitudes, pagos y documentos de conductor.',
+    'Politica de privacidad de muvv sobre datos de cuenta, ubicacion operativa, solicitudes, pagos y documentos de conductor.',
   path: '/privacidad',
-  keywords: ['privacidad fleteapp', 'datos personales chile', 'proteccion de datos'],
+  keywords: ['privacidad muvv', 'datos personales chile', 'proteccion de datos'],
 });
 
 export default function PrivacyPage() {
   return (
     <main className="legalPage">
       <header className="legalHeader">
-        <Link className="legalBack" href="/">Volver a FleteApp</Link>
+        <Link className="legalBack" href="/">Volver a muvv</Link>
         <p className="eyebrow darkEyebrow">Privacidad</p>
-        <h1>Politica de privacidad FleteApp</h1>
+        <h1>Politica de privacidad muvv</h1>
         <p>
           Version 2026-05-26. Este documento explica que datos tratamos, para
           que los usamos y como protegemos la informacion operacional.

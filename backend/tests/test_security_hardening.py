@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault(
     "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost/fleteapp_test",
+    "postgresql://postgres:postgres@localhost/muvv_test",
 )
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 

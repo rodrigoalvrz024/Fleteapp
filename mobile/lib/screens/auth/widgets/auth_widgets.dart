@@ -113,7 +113,7 @@ class AuthBrand extends StatelessWidget {
         ),
         const SizedBox(width: 9),
         const Text(
-          'FleteApp',
+          'muvv',
           style: TextStyle(
             color: AppTheme.slate600,
             fontSize: 14,

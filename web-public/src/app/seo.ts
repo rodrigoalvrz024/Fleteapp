@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
 
-export const publicSiteUrl = 'https://fleteapp-public-8d8f7.web.app';
-export const appBaseUrl = 'https://fleteapp-8d8f7.web.app';
-export const publicApiBaseUrl = 'https://fleteapp-api-i3wy5watea-uc.a.run.app';
+export const publicSiteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://fleteapp-public-8d8f7.web.app';
+export const appBaseUrl =
+  process.env.NEXT_PUBLIC_APP_URL ?? 'https://fleteapp-8d8f7.web.app';
+export const publicApiBaseUrl =
+  process.env.NEXT_PUBLIC_API_URL ??
+  'https://fleteapp-api-i3wy5watea-uc.a.run.app';
 
 type SeoConfig = {
   title: string;
@@ -18,7 +22,7 @@ export function pageMetadata({
   keywords = [],
 }: SeoConfig): Metadata {
   const canonical = `${publicSiteUrl}${path === '/' ? '' : path}`;
-  const fullTitle = `${title} | FleteApp`;
+  const fullTitle = `${title} | muvv`;
 
   return {
     title: fullTitle,
@@ -38,7 +42,7 @@ export function pageMetadata({
       title: fullTitle,
       description,
       url: canonical,
-      siteName: 'FleteApp',
+      siteName: 'muvv',
       locale: 'es_CL',
       type: 'website',
     },

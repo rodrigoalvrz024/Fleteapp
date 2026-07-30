@@ -111,14 +111,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       scheme: 'mailto',
       path: email,
       query: 'subject=${Uri.encodeComponent(subject)}'
-          '&body=${Uri.encodeComponent("Hola equipo FleteApp,\n\n")}',
+          '&body=${Uri.encodeComponent("Hola equipo muvv,\n\n")}',
     );
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
   Future<void> _launchWhatsApp() async {
     const phone = '56912345678';
-    const message = 'Hola, necesito ayuda con mi cuenta de FleteApp.';
+    const message = 'Hola, necesito ayuda con mi cuenta de muvv.';
     final uri =
         Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
     if (await canLaunchUrl(uri)) {
@@ -485,10 +485,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             _Item(
               icon: Icons.mail_outline_rounded,
               label: 'Contactar soporte',
-              value: 'soporte@fleteapp.cl',
+              value: 'soporte@muvv.cl',
               onTap: () => _launchEmail(
-                'soporte@fleteapp.cl',
-                'Ayuda con mi cuenta FleteApp',
+                'soporte@muvv.cl',
+                'Ayuda con mi cuenta muvv',
               ),
             ),
             _Div(),
@@ -524,7 +524,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           const SizedBox(height: 32),
           const Center(
-            child: Text('FleteApp v1.0.0',
+            child: Text('muvv v1.0.0',
                 style: TextStyle(fontSize: 11, color: AppTheme.slate400)),
           ),
         ],
@@ -2216,13 +2216,13 @@ class _HelpSheet extends StatelessWidget {
           _HelpItem(
             icon: Icons.mail_outline_rounded,
             label: 'Enviar correo al soporte',
-            sub: 'soporte@fleteapp.cl',
+            sub: 'soporte@muvv.cl',
             onTap: () async {
               final uri = Uri(
                 scheme: 'mailto',
-                path: 'soporte@fleteapp.cl',
+                path: 'soporte@muvv.cl',
                 query: 'subject=${Uri.encodeComponent("Ayuda con mi cuenta")}'
-                    '&body=${Uri.encodeComponent("Hola equipo FleteApp,\n\n")}',
+                    '&body=${Uri.encodeComponent("Hola equipo muvv,\n\n")}',
               );
               if (await canLaunchUrl(uri)) await launchUrl(uri);
             },
@@ -2235,7 +2235,7 @@ class _HelpSheet extends StatelessWidget {
             onTap: () async {
               final uri = Uri.parse(
                 'https://wa.me/56912345678?text='
-                '${Uri.encodeComponent("Hola, necesito ayuda con FleteApp.")}',
+                '${Uri.encodeComponent("Hola, necesito ayuda con muvv.")}',
               );
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);

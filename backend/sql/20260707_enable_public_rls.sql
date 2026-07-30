@@ -1,4 +1,4 @@
--- FleteApp Supabase hardening
+-- muvv Supabase hardening
 --
 -- Purpose:
 --   Keep Supabase/PostgREST client roles from reading or mutating backend-owned
@@ -47,7 +47,7 @@ BEGIN
             EXECUTE format(
                 'COMMENT ON TABLE public.%I IS %L',
                 table_item,
-                'Backend-owned FleteApp table. RLS enabled to deny direct Supabase client access by default.'
+                'Backend-owned muvv table. RLS enabled to deny direct Supabase client access by default.'
             );
         END IF;
     END LOOP;

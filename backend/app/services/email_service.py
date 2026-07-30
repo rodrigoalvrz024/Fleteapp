@@ -21,7 +21,7 @@ class EmailService:
             json={
                 "from": settings.EMAIL_FROM,
                 "to": [email],
-                "subject": "Recupera tu contraseña de FleteApp",
+                "subject": "Recupera tu contraseña de muvv",
                 "html": self._password_reset_html(reset_url),
             },
             timeout=10,
@@ -33,7 +33,7 @@ class EmailService:
         return f"""
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#0f172a">
           <h2>Recupera tu contraseña</h2>
-          <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta FleteApp.</p>
+          <p>Recibimos una solicitud para cambiar la contraseña de tu cuenta muvv.</p>
           <p>
             <a href="{reset_url}" style="display:inline-block;background:#2563eb;color:#fff;
             padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:600">

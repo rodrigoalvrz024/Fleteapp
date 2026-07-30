@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$testScript = Join-Path $repoRoot 'load-tests\k6\fleteapp-load.js'
+$testScript = Join-Path $repoRoot 'load-tests\k6\muvv-load.js'
 $summaryDir = Join-Path $repoRoot 'reports\load-tests'
 
 function Require-Command($Name, $InstallHint) {

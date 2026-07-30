@@ -107,7 +107,7 @@ class NotificationService {
     final notification = message.notification;
     final title = notification?.title?.trim().isNotEmpty == true
         ? notification!.title!.trim()
-        : 'Nuevo aviso de FleteApp';
+        : 'Nuevo aviso de muvv';
     final body = notification?.body?.trim().isNotEmpty == true
         ? notification!.body!.trim()
         : 'Tienes una actualizacion disponible.';

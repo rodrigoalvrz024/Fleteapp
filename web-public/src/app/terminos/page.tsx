@@ -6,18 +6,18 @@ import { SiteFooter } from '../site-shell';
 export const metadata = pageMetadata({
   title: 'Terminos de uso',
   description:
-    'Terminos de uso de FleteApp para clientes, conductores, pagos, documentos, seguridad y responsabilidades operacionales.',
+    'Terminos de uso de muvv para clientes, conductores, pagos, documentos, seguridad y responsabilidades operacionales.',
   path: '/terminos',
-  keywords: ['terminos fleteapp', 'condiciones fletes', 'legal fletes'],
+  keywords: ['terminos muvv', 'condiciones fletes', 'legal fletes'],
 });
 
 export default function TermsPage() {
   return (
     <main className="legalPage">
       <header className="legalHeader">
-        <Link className="legalBack" href="/">Volver a FleteApp</Link>
+        <Link className="legalBack" href="/">Volver a muvv</Link>
         <p className="eyebrow darkEyebrow">Legal</p>
-        <h1>Terminos de uso FleteApp</h1>
+        <h1>Terminos de uso muvv</h1>
         <p>
           Version 2026-05-26. Estos terminos regulan el uso de la plataforma
           publica y de la app operacional.

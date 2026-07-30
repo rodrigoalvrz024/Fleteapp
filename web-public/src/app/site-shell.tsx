@@ -6,9 +6,9 @@ export { appBaseUrl };
 export function SiteNav() {
   return (
     <nav className="siteNav" aria-label="Principal">
-      <Link className="brand" href="/" aria-label="FleteApp inicio">
-        <span className="brandIcon" aria-hidden="true">F</span>
-        <span>FleteApp</span>
+      <Link className="brand" href="/" aria-label="muvv inicio">
+        <span className="brandIcon" aria-hidden="true">m</span>
+        <span>muvv</span>
       </Link>
       <div className="navLinks">
         <Link href="/clientes">Clientes</Link>
@@ -38,7 +38,7 @@ export function SiteFooter() {
   return (
     <footer className="footer">
       <div>
-        <strong>FleteApp</strong>
+        <strong>muvv</strong>
         <span>Fletes urbanos con respaldo operativo para Chile.</span>
       </div>
       <nav aria-label="Legal">

@@ -1,6 +1,6 @@
 {
-    "name": "FleteApp",
-    "short_name": "FleteApp",
+    "name": "muvv",
+    "short_name": "muvv",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F8FAFC",

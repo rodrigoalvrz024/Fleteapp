@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $buildScript = Join-Path $PSScriptRoot 'web-public-build.ps1'
-$projectId = 'fleteapp-8d8f7'
+$projectId = if ([string]::IsNullOrWhiteSpace($env:PROJECT_ID)) { 'fleteapp-8d8f7' } else { $env:PROJECT_ID }
 
 function Get-FirebaseCli {
   $command = Get-Command firebase -ErrorAction SilentlyContinue

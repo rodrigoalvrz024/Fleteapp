@@ -1,0 +1,14 @@
+{
+  "name": "muvv-billing-cap-function",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Disables Google Cloud billing for the project when a budget notification reaches the configured cap.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/billing": "^4.0.0",
+    "@google-cloud/functions-framework": "^3.0.0"
+  }
+}

@@ -18,27 +18,27 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="App operacional de FleteApp para solicitar, aceptar, monitorear y cerrar fletes urbanos con respaldo.">
+  <meta name="description" content="App operacional de muvv para solicitar, aceptar, monitorear y cerrar fletes urbanos con respaldo.">
   <meta name="robots" content="noindex,nofollow">
   <meta name="theme-color" content="#2563EB">
-  <meta property="og:title" content="FleteApp | App operacional">
-  <meta property="og:description" content="Solicita fletes, acepta viajes, registra evidencia, confirma entregas y revisa historial desde FleteApp.">
+  <meta property="og:title" content="muvv | App operacional">
+  <meta property="og:description" content="Solicita fletes, acepta viajes, registra evidencia, confirma entregas y revisa historial desde muvv.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://fleteapp-8d8f7.web.app">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="FleteApp | App operacional">
-  <meta name="twitter:description" content="App privada para clientes, conductores y administracion operacional de FleteApp.">
+  <meta name="twitter:title" content="muvv | App operacional">
+  <meta name="twitter:description" content="App privada para clientes, conductores y administracion operacional de muvv.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="FleteApp">
+  <meta name="apple-mobile-web-app-title" content="muvv">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>FleteApp | App operacional</title>
+  <title>muvv | App operacional</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -52,10 +52,11 @@
   -->
   <script src="config.js"></script>
   <script>
-    window.FLETEAPP_GOOGLE_MAPS_API_KEY =
-      window.FLETEAPP_GOOGLE_MAPS_API_KEY || '{{GOOGLE_MAPS_API_KEY}}';
-    if (window.FLETEAPP_GOOGLE_MAPS_API_KEY.startsWith('{{')) {
-      window.FLETEAPP_GOOGLE_MAPS_API_KEY = '';
+    window.MUVV_GOOGLE_MAPS_API_KEY =
+      window.MUVV_GOOGLE_MAPS_API_KEY ||
+      '{{GOOGLE_MAPS_API_KEY}}';
+    if (window.MUVV_GOOGLE_MAPS_API_KEY.startsWith('{{')) {
+      window.MUVV_GOOGLE_MAPS_API_KEY = '';
     }
 
     function bootFlutter() {
@@ -65,7 +66,7 @@
       document.body.appendChild(flutterBootstrap);
     }
 
-    var googleMapsApiKey = window.FLETEAPP_GOOGLE_MAPS_API_KEY;
+    var googleMapsApiKey = window.MUVV_GOOGLE_MAPS_API_KEY;
 
     if (googleMapsApiKey) {
       var googleMapsScript = document.createElement('script');
@@ -81,7 +82,7 @@
       };
       document.head.appendChild(googleMapsScript);
     } else {
-      console.warn('Missing FLETEAPP_GOOGLE_MAPS_API_KEY in web/config.js.');
+      console.warn('Missing MUVV_GOOGLE_MAPS_API_KEY in web/config.js.');
       bootFlutter();
     }
   </script>

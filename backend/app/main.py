@@ -24,7 +24,7 @@ else:
     print("[startup] Skipping automatic DB migrations.")
 
 app = FastAPI(
-    title="FleteApp API",
+    title="muvv API",
     description="API para app de fletes en Chile",
     version="1.0.0",
 )
@@ -107,7 +107,7 @@ app.include_router(admin.router)
 
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "FleteApp API funcionando"}
+    return {"status": "ok", "message": "muvv API funcionando"}
 
 @app.get("/health")
 def health():

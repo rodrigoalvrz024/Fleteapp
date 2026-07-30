@@ -98,7 +98,7 @@ class _PublicHero extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'FleteApp',
+                                'muvv',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 56,
@@ -178,7 +178,7 @@ class _PublicNav extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         const Text(
-          'FleteApp',
+          'muvv',
           style: TextStyle(
             color: Colors.white,
             fontSize: 17,

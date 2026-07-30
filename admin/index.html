@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FleteApp Admin</title>
+<title>muvv Admin</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,sans-serif}
 body{background:#F8FAFC;color:#0F172A;min-height:100vh}
@@ -67,11 +67,11 @@ tr:hover td{background:#F8FAFC}
 <!-- Login -->
 <div id="login-page" class="login-bg">
   <div class="login-box">
-    <div class="login-title">FleteApp Admin</div>
+    <div class="login-title">muvv Admin</div>
     <div class="login-sub">Acceso solo para administradores</div>
     <div class="field">
       <label>CORREO</label>
-      <input id="email" type="email" placeholder="admin@fleteapp.cl" value="admin@fleteapp.cl">
+      <input id="email" type="email" placeholder="admin@muvv.cl" value="admin@muvv.cl">
     </div>
     <div class="field">
       <label>CONTRASEÑA</label>
@@ -85,7 +85,7 @@ tr:hover td{background:#F8FAFC}
 <!-- Dashboard -->
 <div id="dashboard" style="display:none">
   <div class="sidebar">
-    <div class="logo">🚛 FleteApp Admin</div>
+    <div class="logo">🚛 muvv Admin</div>
     <div class="nav-item active">Conductores</div>
     <div class="nav-item">Fletes</div>
     <div class="nav-item">Usuarios</div>
@@ -151,7 +151,7 @@ tr:hover td{background:#F8FAFC}
 </div>
 
 <script>
-const BASE = 'https://fleteapp-production.up.railway.app';
+const BASE = 'https://fleteapp-api-i3wy5watea-uc.a.run.app';
 let token = '';
 let drivers = [];
 let currentFilter = 'all';

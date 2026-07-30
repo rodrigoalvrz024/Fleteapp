@@ -1,5 +1,15 @@
 param(
-  [string]$GoogleMapsApiKey = $env:GOOGLE_MAPS_API_KEY
+  [string]$GoogleMapsApiKey = $env:GOOGLE_MAPS_API_KEY,
+  [string]$ProjectId = $(if ([string]::IsNullOrWhiteSpace($env:PROJECT_ID)) { 'fleteapp-8d8f7' } else { $env:PROJECT_ID }),
+  [string]$MapsWebKeyId = $env:GOOGLE_MAPS_WEB_KEY_ID,
+  [string]$FirebaseWebApiKey = $env:FIREBASE_WEB_API_KEY,
+  [string]$FirebaseWebAppId = $env:FIREBASE_WEB_APP_ID,
+  [string]$FirebaseMessagingSenderId = $env:FIREBASE_MESSAGING_SENDER_ID,
+  [string]$FirebaseProjectId = $(if ([string]::IsNullOrWhiteSpace($env:FIREBASE_PROJECT_ID)) { $ProjectId } else { $env:FIREBASE_PROJECT_ID }),
+  [string]$FirebaseAuthDomain = $env:FIREBASE_AUTH_DOMAIN,
+  [string]$FirebaseStorageBucket = $env:FIREBASE_STORAGE_BUCKET,
+  [string]$ApiBaseUrl = $env:API_BASE_URL,
+  [string]$PublicHomeUrl = $(if ([string]::IsNullOrWhiteSpace($env:PUBLIC_HOME_URL)) { $env:NEXT_PUBLIC_SITE_URL } else { $env:PUBLIC_HOME_URL })
 )
 
 $ErrorActionPreference = 'Stop'
@@ -8,8 +18,6 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $mobileDir = Join-Path $repoRoot 'mobile'
 $flutterDefault = 'C:\flutter\bin\flutter.bat'
 $gcloudDefault = Join-Path $env:LOCALAPPDATA 'Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd'
-$projectId = 'fleteapp-8d8f7'
-$mapsWebKeyId = '691cc45f-2b0c-4d57-bb40-4cd807de79d2'
 
 function Get-FlutterCli {
   $command = Get-Command flutter -ErrorAction SilentlyContinue
@@ -38,14 +46,18 @@ function Get-GcloudCli {
 }
 
 function Get-RestrictedMapsWebKey {
+  if ([string]::IsNullOrWhiteSpace($MapsWebKeyId)) {
+    return $null
+  }
+
   $gcloud = Get-GcloudCli
   if (-not $gcloud) {
     return $null
   }
 
-  $value = & $gcloud services api-keys get-key-string $mapsWebKeyId `
+  $value = & $gcloud services api-keys get-key-string $MapsWebKeyId `
     --location global `
-    --project $projectId `
+    --project $ProjectId `
     --format 'value(keyString)' 2>$null
 
   if ($LASTEXITCODE -ne 0) {
@@ -111,7 +123,31 @@ Push-Location $mobileDir
 try {
   $env:APPDATA = $toolAppData
   $env:LOCALAPPDATA = $toolLocalAppData
-  & $flutter build web --release "--web-define=GOOGLE_MAPS_API_KEY=$GoogleMapsApiKey"
+  $flutterArgs = @(
+    'build',
+    'web',
+    '--release',
+    "--web-define=GOOGLE_MAPS_API_KEY=$GoogleMapsApiKey"
+  )
+
+  $dartDefines = @{
+    FIREBASE_WEB_API_KEY = $FirebaseWebApiKey
+    FIREBASE_WEB_APP_ID = $FirebaseWebAppId
+    FIREBASE_MESSAGING_SENDER_ID = $FirebaseMessagingSenderId
+    FIREBASE_PROJECT_ID = $FirebaseProjectId
+    FIREBASE_AUTH_DOMAIN = $FirebaseAuthDomain
+    FIREBASE_STORAGE_BUCKET = $FirebaseStorageBucket
+    API_BASE_URL = $ApiBaseUrl
+    PUBLIC_HOME_URL = $PublicHomeUrl
+  }
+
+  foreach ($item in $dartDefines.GetEnumerator()) {
+    if (-not [string]::IsNullOrWhiteSpace($item.Value)) {
+      $flutterArgs += "--dart-define=$($item.Key)=$($item.Value)"
+    }
+  }
+
+  & $flutter @flutterArgs
   if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
   }
@@ -124,7 +160,7 @@ try {
 $buildConfig = Join-Path $mobileDir 'build\web\config.js'
 $encodedKey = $GoogleMapsApiKey | ConvertTo-Json -Compress
 Set-Content -LiteralPath $buildConfig `
-  -Value "window.FLETEAPP_GOOGLE_MAPS_API_KEY = $encodedKey;" `
+  -Value "window.MUVV_GOOGLE_MAPS_API_KEY = $encodedKey;" `
   -Encoding UTF8
 
 Write-Host 'Build web generado con GOOGLE_MAPS_API_KEY en mobile/build/web/config.js.'
