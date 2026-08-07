@@ -2,11 +2,12 @@ import io
 import mimetypes
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
+from urllib.parse import quote
 from uuid import uuid4
 
+import httpx
 from fastapi import HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from google.cloud import storage
 from jose import JWTError, jwt
 
 from app.core.config import settings
@@ -64,10 +65,14 @@ def _max_freight_evidence_bytes() -> int:
 
 
 def _ensure_storage_configured() -> None:
-    if not settings.DRIVER_DOCUMENTS_BUCKET:
+    if not (
+        settings.DRIVER_DOCUMENTS_BUCKET
+        and settings.SUPABASE_URL
+        and settings.SUPABASE_SERVICE_ROLE_KEY
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Almacenamiento privado de documentos no configurado",
+            detail="Almacenamiento privado de Supabase no configurado",
         )
 
 
@@ -234,9 +239,44 @@ def _strip_webp_metadata(content: bytes) -> bytes:
     return bytes(output)
 
 
-def _bucket():
+def _supabase_object_url(object_name: str) -> str:
     _ensure_storage_configured()
-    return storage.Client().bucket(settings.DRIVER_DOCUMENTS_BUCKET)
+    bucket = quote(settings.DRIVER_DOCUMENTS_BUCKET, safe="")
+    object_path = quote(object_name, safe="/")
+    return f"{settings.SUPABASE_URL.rstrip('/')}/storage/v1/object/{bucket}/{object_path}"
+
+
+def _supabase_headers(content_type: str | None = None) -> dict[str, str]:
+    key = settings.SUPABASE_SERVICE_ROLE_KEY
+    headers = {"apikey": key}
+    # Modern sb_secret keys are API keys, not JWT bearer tokens. Legacy
+    # service_role keys still use Authorization to bypass Storage RLS.
+    if not key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {key}"
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def _upload_private_object(object_name: str, content: bytes, content_type: str) -> None:
+    try:
+        response = httpx.post(
+            _supabase_object_url(object_name),
+            headers={**_supabase_headers(content_type), "x-upsert": "false"},
+            content=content,
+            timeout=20.0,
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No fue posible guardar el archivo. Intenta nuevamente.",
+        )
+    if response.status_code in {200, 201}:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="No fue posible guardar el archivo. Intenta nuevamente.",
+    )
 
 
 def _object_name(driver_id: int, field: str, extension: str) -> str:
@@ -264,12 +304,7 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
     _validate_file_signature(content_type, content)
 
     object_name = _object_name(driver_id, field, extension)
-    blob = _bucket().blob(object_name)
-    blob.upload_from_file(
-        io.BytesIO(content),
-        content_type=content_type,
-        rewind=True,
-    )
+    _upload_private_object(object_name, content, content_type)
     return object_name
 
 
@@ -296,12 +331,7 @@ async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) 
     object_name = (
         f"freights/{freight_id}/evidence/{kind}/{uuid4().hex}{extension}"
     )
-    blob = _bucket().blob(object_name)
-    blob.upload_from_file(
-        io.BytesIO(content),
-        content_type=content_type,
-        rewind=True,
-    )
+    _upload_private_object(object_name, content, content_type)
     return object_name
 
 
@@ -386,11 +416,24 @@ def delete_private_document(document_ref: str | None) -> dict:
         return {"deleted": False, "reason": "external"}
 
     object_name = _normalize_document_ref(document_ref)
-    blob = _bucket().blob(object_name)
-    if not blob.exists():
+    try:
+        response = httpx.delete(
+            _supabase_object_url(object_name),
+            headers=_supabase_headers(),
+            timeout=20.0,
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No fue posible eliminar el archivo. Intenta nuevamente.",
+        )
+    if response.status_code == status.HTTP_404_NOT_FOUND:
         return {"deleted": False, "reason": "not_found", "object": object_name}
-
-    blob.delete()
+    if response.status_code not in {status.HTTP_200_OK, status.HTTP_204_NO_CONTENT}:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No fue posible eliminar el archivo. Intenta nuevamente.",
+        )
     return {"deleted": True, "object": object_name}
 
 
@@ -402,18 +445,32 @@ def stream_private_document(document_ref: str) -> StreamingResponse:
             detail="Documento no disponible",
         )
     object_name = _normalize_document_ref(document_ref)
-    blob = _bucket().blob(object_name)
-    if not blob.exists():
+    try:
+        response = httpx.get(
+            _supabase_object_url(object_name),
+            headers=_supabase_headers(),
+            timeout=20.0,
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Documento no disponible",
+        )
+    if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Documento no encontrado",
         )
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Documento no disponible",
+        )
 
-    content = blob.download_as_bytes()
-    content_type = blob.content_type or mimetypes.guess_type(object_name)[0]
+    content_type = response.headers.get("content-type") or mimetypes.guess_type(object_name)[0]
     filename = PurePosixPath(object_name).name
     return StreamingResponse(
-        io.BytesIO(content),
+        io.BytesIO(response.content),
         media_type=content_type or "application/octet-stream",
         headers={
             "Cache-Control": "private, no-store",
@@ -431,13 +488,10 @@ def _normalize_document_ref(document_ref: str) -> str:
             detail="Documento no disponible",
         )
     if document_ref.startswith("gs://"):
-        prefix = f"gs://{settings.DRIVER_DOCUMENTS_BUCKET}/"
-        if not document_ref.startswith(prefix):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Documento no disponible",
-            )
-        return document_ref[len(prefix) :]
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documento no disponible",
+        )
     normalized = str(PurePosixPath(document_ref))
     if normalized.startswith("../") or normalized == ".." or "/../" in normalized:
         raise HTTPException(

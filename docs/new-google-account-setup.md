@@ -145,6 +145,23 @@ ENABLE_DRIVER_PUSH_NOTIFICATIONS=false
 NOTIFICATION_TASKS_ENABLED=false
 ```
 
+### Storage privado de Supabase
+
+Los documentos del conductor y las fotos de retiro/entrega no deben ir a Google Cloud Storage durante esta etapa.
+
+1. En Supabase, abre `Storage` y crea el bucket `muvv-private`.
+2. Deja la opcion `Public bucket` desactivada.
+3. En `Project Settings > API`, copia el `Project URL` y una clave secreta `sb_secret_...`.
+4. En Render agrega estas variables, sin subirlas a GitHub ni a Firebase:
+
+```text
+DRIVER_DOCUMENTS_BUCKET=muvv-private
+SUPABASE_URL=https://TU_PROJECT.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=tu-clave-sb-secret
+```
+
+La clave secreta puede acceder al bucket sin las reglas de usuario, por eso solo puede existir en el backend de Render. La app Flutter y la web publica nunca deben recibirla.
+
 No uses Secret Manager para esta etapa.
 
 ## 8. Si usas GCP con trial

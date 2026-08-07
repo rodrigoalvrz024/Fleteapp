@@ -8,6 +8,7 @@ Objetivo: mantener costo mensual en `0 USD` o lo mas cercano posible mientras no
 | --- | --- | --- | --- |
 | Base de datos | Supabase Free | 0 USD | Suficiente para desarrollo/piloto chico. |
 | Backend | Render Free | 0 USD | Se duerme con inactividad; aceptable en demo. |
+| Fotos y documentos privados | Supabase Storage | 0 USD | Bucket privado; el backend Render controla el acceso. |
 | Web publica | Vercel Hobby o Firebase Spark | 0 USD | Evita Cloud Build/Artifact Registry. |
 | App web Flutter | Firebase Hosting Spark | 0 USD | Solo hosting estatico. |
 | Push | Firebase Cloud Messaging | 0 USD | No requiere Cloud Run. |

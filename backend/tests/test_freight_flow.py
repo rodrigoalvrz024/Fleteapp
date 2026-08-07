@@ -1,6 +1,9 @@
 import os
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import Mock, patch
+
+from fastapi import HTTPException
 
 os.environ.setdefault(
     "DATABASE_URL",
@@ -12,8 +15,14 @@ from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.rating import Rating
 from app.schemas.freight import FreightCreateResponse, FreightResponse, FreightStatusUpdate
+from app.core.config import settings
 from app.services.freight_service import can_transition
-from app.services.storage_service import _detect_upload_type, _strip_image_metadata
+from app.services.storage_service import (
+    _detect_upload_type,
+    _normalize_document_ref,
+    _strip_image_metadata,
+    _upload_private_object,
+)
 
 
 class FreightCompletionFlowTests(unittest.TestCase):
@@ -122,6 +131,53 @@ class FreightCompletionFlowTests(unittest.TestCase):
         self.assertTrue(stripped.startswith(b"\xff\xd8"))
         self.assertIn(b"\xff\xda", stripped)
         self.assertNotIn(b"GPS LOCATION", stripped)
+
+    def test_storage_uploads_to_private_supabase_bucket(self):
+        response = Mock(status_code=201)
+        with (
+            patch.object(settings, "DRIVER_DOCUMENTS_BUCKET", "muvv-private"),
+            patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"),
+            patch.object(settings, "SUPABASE_SERVICE_ROLE_KEY", "service-key"),
+            patch("app.services.storage_service.httpx.post", return_value=response) as post,
+        ):
+            _upload_private_object(
+                "freights/7/evidence/pickup/photo.jpg",
+                b"image-bytes",
+                "image/jpeg",
+            )
+
+        post.assert_called_once()
+        url, = post.call_args.args
+        self.assertEqual(
+            url,
+            "https://example.supabase.co/storage/v1/object/muvv-private/"
+            "freights/7/evidence/pickup/photo.jpg",
+        )
+        self.assertEqual(post.call_args.kwargs["headers"]["Content-Type"], "image/jpeg")
+        self.assertEqual(
+            post.call_args.kwargs["headers"]["Authorization"],
+            "Bearer service-key",
+        )
+
+    def test_storage_uses_new_supabase_secret_key_as_api_key(self):
+        response = Mock(status_code=201)
+        with (
+            patch.object(settings, "DRIVER_DOCUMENTS_BUCKET", "muvv-private"),
+            patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"),
+            patch.object(settings, "SUPABASE_SERVICE_ROLE_KEY", "sb_secret_test"),
+            patch("app.services.storage_service.httpx.post", return_value=response) as post,
+        ):
+            _upload_private_object("drivers/7/license/photo.jpg", b"image-bytes", "image/jpeg")
+
+        headers = post.call_args.kwargs["headers"]
+        self.assertEqual(headers["apikey"], "sb_secret_test")
+        self.assertNotIn("Authorization", headers)
+
+    def test_storage_rejects_old_google_cloud_references(self):
+        with self.assertRaises(HTTPException) as context:
+            _normalize_document_ref("gs://old-project-private/drivers/7/license.jpg")
+
+        self.assertEqual(context.exception.status_code, 404)
 
 
 if __name__ == "__main__":
