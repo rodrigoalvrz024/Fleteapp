@@ -50,9 +50,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     });
 
     await Future.wait([
-      // The mobile storyboard takes 1.1 s, followed by a short hold on the
-      // completed state so it reads as one continuous launch animation.
-      Future<void>.delayed(const Duration(milliseconds: 1130)),
+      // The mobile story takes two seconds. The initial reveal work above
+      // consumes about 230 ms, so this keeps the full launch on screen.
+      Future<void>.delayed(const Duration(milliseconds: 1800)),
       authCheck.timeout(
         const Duration(milliseconds: 1800),
         onTimeout: () {},
@@ -140,12 +140,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                               width: 1,
                             ),
                           ),
-                           child: ClipOval(
-                             child: Image.asset(
-                               'assets/branding/muvv-app-icon.png',
-                               fit: BoxFit.cover,
-                             ),
-                           ),
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/branding/muvv-app-icon.png',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       ),
                     ),

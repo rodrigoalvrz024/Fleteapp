@@ -107,7 +107,8 @@ class _MuvvLaunchPainter extends CustomPainter {
       Paint()..color = accentColor,
     );
 
-    final packageSize = size.width * (0.1 + (0.015 * math.sin(progress * math.pi)));
+    final packageSize =
+        size.width * (0.1 + (0.015 * math.sin(progress * math.pi)));
     final package = Rect.fromCenter(
       center: end,
       width: packageSize,
@@ -198,7 +199,7 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: const Duration(milliseconds: 2000),
     )..forward();
   }
 
@@ -447,7 +448,8 @@ class _MuvvIntroScenePainter extends CustomPainter {
     final truckProgress = _introStage(progress, 0.54, 0.91);
     final truckVisibility = _introStage(progress, 0.54, 0.61);
     if (truckVisibility > 0) {
-      final tangent = metric.getTangentForOffset(metric.length * truckProgress)!;
+      final tangent =
+          metric.getTangentForOffset(metric.length * truckProgress)!;
       final tilt = math.sin(_introStage(progress, 0.77, 0.91) * math.pi) * 0.2;
       canvas.save();
       canvas.translate(tangent.position.dx, tangent.position.dy);
