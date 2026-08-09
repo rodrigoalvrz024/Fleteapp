@@ -329,7 +329,8 @@ class _SketchMobileRegister extends StatelessWidget {
         SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final short = constraints.maxHeight < 830;
+              final compact = constraints.maxHeight < 900;
+              final veryCompact = constraints.maxHeight < 700;
               final horizontalPadding =
                   constraints.maxWidth < 380 ? 24.0 : 30.0;
 
@@ -337,9 +338,9 @@ class _SketchMobileRegister extends StatelessWidget {
                 physics: const ClampingScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  short ? 18 : 28,
+                  veryCompact ? 12 : (compact ? 16 : 28),
                   horizontalPadding,
-                  34,
+                  veryCompact ? 16 : (compact ? 20 : 34),
                 ),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -348,37 +349,38 @@ class _SketchMobileRegister extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _SketchRegisterBrand(),
-                        SizedBox(height: short ? 26 : 36),
-                        const _SketchProgress(),
-                        SizedBox(height: short ? 28 : 36),
-                        const Text(
+                        _SketchRegisterBrand(compact: compact),
+                        SizedBox(height: compact ? 18 : 36),
+                        _SketchProgress(compact: compact),
+                        SizedBox(height: compact ? 20 : 36),
+                        Text(
                           'Crea tu cuenta',
                           style: TextStyle(
                             color: AppTheme.midnight,
-                            fontSize: 32,
+                            fontSize: compact ? 28 : 32,
                             fontWeight: FontWeight.w800,
                             height: 1.1,
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        const Text(
+                        SizedBox(height: compact ? 6 : 10),
+                        Text(
                           'Elige tu perfil y completa tus datos\npara comenzar.',
                           style: TextStyle(
-                            color: Color(0xFF667085),
-                            fontSize: 17,
+                            color: const Color(0xFF667085),
+                            fontSize: compact ? 15 : 17,
                             height: 1.35,
                             letterSpacing: 0,
                           ),
                         ),
-                        SizedBox(height: short ? 18 : 26),
+                        SizedBox(height: compact ? 16 : 26),
                         _SketchRoleSelector(
                           role: role,
                           enabled: !auth.isLoading,
                           onChanged: onRoleChanged,
+                          compact: compact,
                         ),
-                        SizedBox(height: short ? 18 : 24),
+                        SizedBox(height: compact ? 14 : 24),
                         if (auth.error != null) ...[
                           _ErrorBanner(message: auth.error!),
                           const SizedBox(height: 12),
@@ -388,34 +390,36 @@ class _SketchMobileRegister extends StatelessWidget {
                           hint: 'Nombre completo',
                           icon: Icons.person_outline_rounded,
                           textInputAction: TextInputAction.next,
+                          compact: compact,
                           validator: (value) => (value?.trim().length ?? 0) > 2
                               ? null
                               : 'Ingresa tu nombre',
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: compact ? 8 : 10),
                         _SketchRegisterField(
                           controller: emailCtrl,
                           hint: 'Correo electrónico',
                           icon: Icons.mail_outline_rounded,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
+                          compact: compact,
                           validator: (value) => (value?.contains('@') ?? false)
                               ? null
                               : 'Correo inválido',
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: compact ? 8 : 10),
                         _SketchRegisterField(
                           controller: phoneCtrl,
                           hint: 'Teléfono (+56...)',
                           icon: Icons.phone_outlined,
                           keyboardType: TextInputType.phone,
                           textInputAction: TextInputAction.next,
-                          validator: (value) =>
-                              (value?.trim().length ?? 0) >= 9
-                                  ? null
-                                  : 'Teléfono inválido',
+                          compact: compact,
+                          validator: (value) => (value?.trim().length ?? 0) >= 9
+                              ? null
+                              : 'Teléfono inválido',
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: compact ? 8 : 10),
                         _SketchRegisterField(
                           controller: passCtrl,
                           hint: 'Contraseña',
@@ -424,6 +428,7 @@ class _SketchMobileRegister extends StatelessWidget {
                           textInputAction: TextInputAction.done,
                           obscureText: obscure,
                           onFieldSubmitted: (_) => onRegister(),
+                          compact: compact,
                           validator: (value) => (value?.length ?? 0) >= 8
                               ? null
                               : 'Mínimo 8 caracteres',
@@ -437,29 +442,33 @@ class _SketchMobileRegister extends StatelessWidget {
                                   ? Icons.visibility_off_outlined
                                   : Icons.visibility_outlined,
                               color: const Color(0xFF667085),
-                              size: 24,
+                              size: compact ? 22 : 24,
                             ),
                           ),
                         ),
-                        SizedBox(height: short ? 14 : 18),
+                        SizedBox(height: compact ? 10 : 18),
                         _SketchConsentRow(
                           value: acceptTerms,
                           onChanged: auth.isLoading ? null : onAcceptTerms,
                           text: 'Acepto los términos y condiciones',
                           onLink: () => context.push('/legal/terms'),
+                          compact: compact,
                         ),
                         _SketchConsentRow(
                           value: acceptPrivacy,
                           onChanged: auth.isLoading ? null : onAcceptPrivacy,
                           text: 'Acepto la política de privacidad',
                           onLink: () => context.push('/legal/privacy'),
+                          compact: compact,
                         ),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 180),
                           child: role == 'driver'
                               ? Padding(
                                   key: const ValueKey('driver-consent'),
-                                  padding: const EdgeInsets.only(top: 2),
+                                  padding: EdgeInsets.only(
+                                    top: compact ? 0 : 2,
+                                  ),
                                   child: _SketchConsentRow(
                                     value: acceptDriverDocuments,
                                     onChanged: auth.isLoading
@@ -467,27 +476,29 @@ class _SketchMobileRegister extends StatelessWidget {
                                         : onAcceptDriverDocuments,
                                     text:
                                         'Autorizo revisar mi licencia y documentos del vehículo',
+                                    compact: compact,
                                   ),
                                 )
                               : const SizedBox.shrink(
                                   key: ValueKey('no-driver-consent'),
                                 ),
                         ),
-                        SizedBox(height: short ? 14 : 20),
+                        SizedBox(height: compact ? 12 : 20),
                         _SketchRegisterButton(
                           isLoading: auth.isLoading,
                           onRegister: onRegister,
+                          compact: compact,
                         ),
-                        const SizedBox(height: 20),
+                        SizedBox(height: compact ? 14 : 20),
                         Wrap(
                           alignment: WrapAlignment.center,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               '¿Ya tienes cuenta? ',
                               style: TextStyle(
-                                color: Color(0xFF667085),
-                                fontSize: 15,
+                                color: const Color(0xFF667085),
+                                fontSize: compact ? 14 : 15,
                                 letterSpacing: 0,
                               ),
                             ),
@@ -498,8 +509,8 @@ class _SketchMobileRegister extends StatelessWidget {
                                 padding: EdgeInsets.zero,
                                 minimumSize: const Size(0, 28),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                textStyle: const TextStyle(
-                                  fontSize: 15,
+                                textStyle: TextStyle(
+                                  fontSize: compact ? 14 : 15,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0,
                                 ),
@@ -522,27 +533,29 @@ class _SketchMobileRegister extends StatelessWidget {
 }
 
 class _SketchRegisterBrand extends StatelessWidget {
-  const _SketchRegisterBrand();
+  final bool compact;
+
+  const _SketchRegisterBrand({required this.compact});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(compact ? 13 : 16),
           child: Image.asset(
             'assets/branding/muvv-app-icon.png',
-            width: 64,
-            height: 64,
+            width: compact ? 52 : 64,
+            height: compact ? 52 : 64,
             fit: BoxFit.cover,
           ),
         ),
-        const SizedBox(width: 16),
-        const Text(
+        SizedBox(width: compact ? 13 : 16),
+        Text(
           'Muvv',
           style: TextStyle(
             color: AppTheme.midnight,
-            fontSize: 30,
+            fontSize: compact ? 25 : 30,
             fontWeight: FontWeight.w800,
             letterSpacing: 0,
           ),
@@ -553,17 +566,19 @@ class _SketchRegisterBrand extends StatelessWidget {
 }
 
 class _SketchProgress extends StatelessWidget {
-  const _SketchProgress();
+  final bool compact;
+
+  const _SketchProgress({required this.compact});
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        _ProgressSegment(active: true),
-        SizedBox(width: 9),
-        _ProgressSegment(),
-        SizedBox(width: 9),
-        _ProgressSegment(),
+        _ProgressSegment(active: true, compact: compact),
+        SizedBox(width: compact ? 7 : 9),
+        _ProgressSegment(compact: compact),
+        SizedBox(width: compact ? 7 : 9),
+        _ProgressSegment(compact: compact),
       ],
     );
   }
@@ -571,13 +586,14 @@ class _SketchProgress extends StatelessWidget {
 
 class _ProgressSegment extends StatelessWidget {
   final bool active;
+  final bool compact;
 
-  const _ProgressSegment({this.active = false});
+  const _ProgressSegment({this.active = false, required this.compact});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40,
+      width: compact ? 32 : 40,
       height: 4,
       decoration: BoxDecoration(
         color: active ? const Color(0xFF1269F3) : const Color(0xFFE6EBF4),
@@ -591,11 +607,13 @@ class _SketchRoleSelector extends StatelessWidget {
   final String role;
   final bool enabled;
   final ValueChanged<String> onChanged;
+  final bool compact;
 
   const _SketchRoleSelector({
     required this.role,
     required this.enabled,
     required this.onChanged,
+    required this.compact,
   });
 
   @override
@@ -610,9 +628,10 @@ class _SketchRoleSelector extends StatelessWidget {
             selected: role == 'client',
             enabled: enabled,
             onTap: () => onChanged('client'),
+            compact: compact,
           ),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: compact ? 8 : 12),
         Expanded(
           child: _SketchRoleCard(
             label: 'Conductor',
@@ -621,6 +640,7 @@ class _SketchRoleSelector extends StatelessWidget {
             selected: role == 'driver',
             enabled: enabled,
             onTap: () => onChanged('driver'),
+            compact: compact,
           ),
         ),
       ],
@@ -635,6 +655,7 @@ class _SketchRoleCard extends StatelessWidget {
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
+  final bool compact;
 
   const _SketchRoleCard({
     required this.label,
@@ -643,13 +664,13 @@ class _SketchRoleCard extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.onTap,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
-    final iconBackground = selected
-        ? const Color(0xFF1269F3)
-        : const Color(0xFFF4F6FA);
+    final iconBackground =
+        selected ? const Color(0xFF1269F3) : const Color(0xFFF4F6FA);
     final iconColor = selected ? Colors.white : const Color(0xFF525C70);
 
     return Semantics(
@@ -659,13 +680,13 @@ class _SketchRoleCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(compact ? 14 : 18),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            height: 146,
+            height: compact ? 106 : 146,
             decoration: BoxDecoration(
               color: selected ? const Color(0xFFF4F8FF) : Colors.white,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(compact ? 14 : 18),
               border: Border.all(
                 color: selected
                     ? const Color(0xFF1269F3)
@@ -686,35 +707,34 @@ class _SketchRoleCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 58,
-                  height: 58,
+                  width: compact ? 44 : 58,
+                  height: compact ? 44 : 58,
                   decoration: BoxDecoration(
                     color: iconBackground,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(compact ? 12 : 16),
                     border: selected
                         ? null
                         : Border.all(color: const Color(0xFFDCE1EA)),
                   ),
-                  child: Icon(icon, color: iconColor, size: 30),
+                  child: Icon(icon, color: iconColor, size: compact ? 24 : 30),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: compact ? 7 : 12),
                 Text(
                   label,
                   style: TextStyle(
-                    color: selected
-                        ? const Color(0xFF1269F3)
-                        : AppTheme.midnight,
-                    fontSize: 18,
+                    color:
+                        selected ? const Color(0xFF1269F3) : AppTheme.midnight,
+                    fontSize: compact ? 16 : 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: compact ? 2 : 4),
                 Text(
                   description,
-                  style: const TextStyle(
-                    color: Color(0xFF667085),
-                    fontSize: 14,
+                  style: TextStyle(
+                    color: const Color(0xFF667085),
+                    fontSize: compact ? 12 : 14,
                     letterSpacing: 0,
                   ),
                 ),
@@ -737,6 +757,7 @@ class _SketchRegisterField extends StatelessWidget {
   final Widget? suffix;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onFieldSubmitted;
+  final bool compact;
 
   const _SketchRegisterField({
     required this.controller,
@@ -748,12 +769,13 @@ class _SketchRegisterField extends StatelessWidget {
     this.suffix,
     this.validator,
     this.onFieldSubmitted,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 64,
+      height: compact ? 58 : 64,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(15),
@@ -766,23 +788,27 @@ class _SketchRegisterField extends StatelessWidget {
         obscureText: obscureText,
         validator: validator,
         onFieldSubmitted: onFieldSubmitted,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppTheme.midnight,
-          fontSize: 16,
+          fontSize: compact ? 15 : 16,
           fontWeight: FontWeight.w500,
           letterSpacing: 0,
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(
-            color: Color(0xFF667085),
-            fontSize: 16,
+          hintStyle: TextStyle(
+            color: const Color(0xFF667085),
+            fontSize: compact ? 15 : 16,
             letterSpacing: 0,
           ),
-          prefixIcon: Icon(icon, color: const Color(0xFF58637A), size: 25),
+          prefixIcon: Icon(
+            icon,
+            color: const Color(0xFF58637A),
+            size: compact ? 22 : 25,
+          ),
           suffixIcon: suffix,
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 18),
+          contentPadding: EdgeInsets.symmetric(vertical: compact ? 15 : 18),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
@@ -800,12 +826,14 @@ class _SketchConsentRow extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
   final String text;
   final VoidCallback? onLink;
+  final bool compact;
 
   const _SketchConsentRow({
     required this.value,
     required this.onChanged,
     required this.text,
     this.onLink,
+    required this.compact,
   });
 
   @override
@@ -814,8 +842,8 @@ class _SketchConsentRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 36,
-          height: 36,
+          width: compact ? 30 : 36,
+          height: compact ? 30 : 36,
           child: Checkbox(
             value: value,
             onChanged: onChanged == null
@@ -824,18 +852,18 @@ class _SketchConsentRow extends StatelessWidget {
             activeColor: const Color(0xFF1269F3),
             side: const BorderSide(color: Color(0xFF667085), width: 1.6),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.circular(compact ? 4 : 5),
             ),
             visualDensity: VisualDensity.compact,
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: compact ? 6 : 8),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
-              color: Color(0xFF59647A),
-              fontSize: 14,
+            style: TextStyle(
+              color: const Color(0xFF59647A),
+              fontSize: compact ? 13 : 14,
               height: 1.25,
               letterSpacing: 0,
             ),
@@ -846,10 +874,10 @@ class _SketchConsentRow extends StatelessWidget {
             onPressed: onLink,
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFF1269F3),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              minimumSize: const Size(38, 36),
-              textStyle: const TextStyle(
-                fontSize: 14,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
+              minimumSize: Size(compact ? 32 : 38, compact ? 30 : 36),
+              textStyle: TextStyle(
+                fontSize: compact ? 13 : 14,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0,
               ),
@@ -864,16 +892,18 @@ class _SketchConsentRow extends StatelessWidget {
 class _SketchRegisterButton extends StatelessWidget {
   final bool isLoading;
   final VoidCallback onRegister;
+  final bool compact;
 
   const _SketchRegisterButton({
     required this.isLoading,
     required this.onRegister,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 56,
+      height: compact ? 52 : 56,
       child: ElevatedButton.icon(
         onPressed: isLoading ? null : onRegister,
         icon: isLoading
@@ -895,10 +925,10 @@ class _SketchRegisterButton extends StatelessWidget {
           disabledForegroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(compact ? 13 : 15),
           ),
-          textStyle: const TextStyle(
-            fontSize: 17,
+          textStyle: TextStyle(
+            fontSize: compact ? 16 : 17,
             fontWeight: FontWeight.w700,
             letterSpacing: 0,
           ),
@@ -1029,9 +1059,9 @@ class _BrandMark extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text(
+        const Text(
           'Muvv',
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w900,
