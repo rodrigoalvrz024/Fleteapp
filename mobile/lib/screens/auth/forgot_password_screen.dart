@@ -64,7 +64,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             'Te enviaremos un enlace temporal para crear una contraseña nueva '
             'y mantener tu cuenta protegida.',
         panelTitle: 'Recuperar acceso',
-        panelSubtitle: 'Ingresa el correo asociado a tu cuenta muvv.',
+        panelSubtitle: 'Ingresa el correo asociado a tu cuenta Muvv.',
         panelIcon: Icons.mark_email_read_outlined,
         child: Form(
           key: _formKey,

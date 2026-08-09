@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../models/place_suggestion.dart';
+import '../../services/places_service.dart';
+import 'package:uuid/uuid.dart';
 
 const String _mapStyle = '''
 [
@@ -66,7 +70,13 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
 
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
+  final _placesService = PlacesService();
   bool _isSearching = false;
+  Timer? _suggestionDebounce;
+  List<PlaceSuggestion> _placeSuggestions = const [];
+  bool _loadingSuggestions = false;
+  int _suggestionRequest = 0;
+  String _placesSessionToken = const Uuid().v4();
 
   late DraggableScrollableController _sheetCtrl;
   double _sheetSize = 0.28;
@@ -148,6 +158,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     _sheetEntryCtrl.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
+    _suggestionDebounce?.cancel();
     _mapCtrl?.dispose();
     super.dispose();
   }
@@ -193,20 +204,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
           desiredAccuracy: LocationAccuracy.high);
       final ll = LatLng(pos.latitude, pos.longitude);
 
-      String address = 'Mi ubicación';
-      try {
-        final marks =
-            await placemarkFromCoordinates(pos.latitude, pos.longitude);
-        if (marks.isNotEmpty) {
-          final p = marks.first;
-          final parts = [
-            if (p.street?.isNotEmpty ?? false) p.street,
-            if (p.subLocality?.isNotEmpty ?? false) p.subLocality,
-            if (p.locality?.isNotEmpty ?? false) p.locality,
-          ].whereType<String>().toList();
-          if (parts.isNotEmpty) address = parts.join(', ');
-        }
-      } catch (_) {}
+      const address = 'Mi ubicacion actual';
 
       setState(() {
         _currentPos = ll;
@@ -284,6 +282,98 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
       originLat: _currentPos.latitude,
       originLng: _currentPos.longitude,
     );
+  }
+
+  void _onSearchChanged(String value) {
+    final query = value.trim();
+    _suggestionDebounce?.cancel();
+    final request = ++_suggestionRequest;
+    if (query.length < 3) {
+      setState(() {
+        _placeSuggestions = const [];
+        _loadingSuggestions = false;
+      });
+      return;
+    }
+
+    setState(() => _loadingSuggestions = true);
+    _suggestionDebounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final suggestions = await _placesService.autocomplete(
+          query,
+          sessionToken: _placesSessionToken,
+          latitude: _currentPos.latitude,
+          longitude: _currentPos.longitude,
+        );
+        if (!mounted || request != _suggestionRequest) return;
+        setState(() => _placeSuggestions = suggestions);
+      } catch (_) {
+        if (!mounted || request != _suggestionRequest) return;
+        setState(() => _placeSuggestions = const []);
+      } finally {
+        if (mounted && request == _suggestionRequest) {
+          setState(() => _loadingSuggestions = false);
+        }
+      }
+    });
+  }
+
+  Future<void> _selectPlaceSuggestion(PlaceSuggestion suggestion) async {
+    HapticFeedback.lightImpact();
+    setState(() => _loadingSuggestions = true);
+    try {
+      final place = await _placesService.getAddress(
+        suggestion.placeId,
+        sessionToken: _placesSessionToken,
+      );
+      if (!mounted) return;
+      final saved = _SavedPlace(
+        label: suggestion.label,
+        address: place.address,
+        latLng: LatLng(place.latitude, place.longitude),
+        icon: Icons.history_rounded,
+      );
+      _searchCtrl.text = place.address;
+      _searchFocus.unfocus();
+      _suggestionDebounce?.cancel();
+      _placesSessionToken = const Uuid().v4();
+      _saveRecent(saved);
+      _mapCtrl?.animateCamera(CameraUpdate.newLatLngZoom(saved.latLng, 15));
+      setState(() {
+        _placeSuggestions = const [];
+        _markers = {
+          Marker(
+            markerId: const MarkerId('dest'),
+            position: saved.latLng,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
+            infoWindow: InfoWindow(title: saved.label),
+          ),
+          if (_markers.any((marker) => marker.markerId.value == 'me'))
+            _markers.firstWhere((marker) => marker.markerId.value == 'me'),
+        };
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      _navigateToCreate(
+        destAddress: saved.address,
+        destLat: saved.latLng.latitude,
+        destLng: saved.latLng.longitude,
+        originAddress: _currentAddress,
+        originLat: _currentPos.latitude,
+        originLng: _currentPos.longitude,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No pudimos cargar esa direccion. Intenta otra vez.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingSuggestions = false);
+    }
   }
 
   void _selectPlace(_SavedPlace place) {
@@ -433,41 +523,79 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                 ),
                               ],
                             ),
-                            child: Row(children: [
-                              Container(
-                                width: 26,
-                                height: 26,
-                                decoration: BoxDecoration(
-                                  color:
-                                      AppTheme.primary.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.local_shipping_rounded,
-                                    size: 14, color: AppTheme.primary),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text('Hola, $name',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.midnight,
+                            child: desktop
+                                ? Row(children: [
+                                    Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primary
+                                            .withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(
+                                        Icons.local_shipping_rounded,
+                                        size: 14,
+                                        color: AppTheme.primary,
+                                      ),
                                     ),
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  '· $_currentAddress',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppTheme.slate400,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ]),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Hola, $name',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.midnight,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        '· $_currentAddress',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.slate400,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ])
+                                : Row(children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(9),
+                                      child: Image.asset(
+                                        'assets/branding/muvv-app-icon.png',
+                                        width: 28,
+                                        height: 28,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 9),
+                                    const Text(
+                                      'Muvv',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppTheme.midnight,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _currentAddress,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: AppTheme.slate400,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -599,24 +727,41 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _ClientPanelHeader(
-                                  name: name,
-                                  address: _currentAddress,
-                                  onFreights: () =>
-                                      context.push('/app/client/freights'),
-                                ),
+                                if (desktop)
+                                  _ClientPanelHeader(
+                                    name: name,
+                                    address: _currentAddress,
+                                    onFreights: () =>
+                                        context.push('/app/client/freights'),
+                                  )
+                                else
+                                  _MobileClientPanelHeader(
+                                    name: name,
+                                    address: _currentAddress,
+                                    onFreights: () =>
+                                        context.push('/app/client/freights'),
+                                  ),
                                 const SizedBox(height: 16),
 
                                 // Input búsqueda
                                 _SearchInput(
                                   controller: _searchCtrl,
                                   focusNode: _searchFocus,
-                                  onChanged: (v) => setState(() {}),
+                                  onChanged: _onSearchChanged,
                                   onClear: () {
                                     _searchCtrl.clear();
-                                    setState(() {});
+                                    _onSearchChanged('');
                                   },
                                 ),
+                                if (_isSearching &&
+                                    _searchCtrl.text.trim().length >= 3) ...[
+                                  const SizedBox(height: 8),
+                                  _PlaceSuggestions(
+                                    suggestions: _placeSuggestions,
+                                    isLoading: _loadingSuggestions,
+                                    onSelected: _selectPlaceSuggestion,
+                                  ),
+                                ],
                                 const SizedBox(height: 14),
 
                                 // CTA solicitar flete
@@ -657,7 +802,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                           Icon(Icons.local_shipping_rounded,
                                               color: Colors.white, size: 20),
                                           SizedBox(width: 10),
-                                          Text('Solicitar flete',
+                                          Text('Cotizar un flete',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 15,
@@ -1034,6 +1179,79 @@ class _ClientPanelHeader extends StatelessWidget {
       );
 }
 
+class _MobileClientPanelHeader extends StatelessWidget {
+  final String name;
+  final String address;
+  final VoidCallback onFreights;
+
+  const _MobileClientPanelHeader({
+    required this.name,
+    required this.address,
+    required this.onFreights,
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: Text(
+                'Hola, $name',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.midnight,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Tooltip(
+              message: 'Mis fletes',
+              child: IconButton(
+                onPressed: onFreights,
+                icon: const Icon(Icons.receipt_long_outlined),
+                color: AppTheme.midnight,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          const Text(
+            'Que necesitas mover hoy?',
+            style: TextStyle(
+              color: AppTheme.midnight,
+              fontSize: 24,
+              height: 1.1,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            const Icon(
+              Icons.my_location_rounded,
+              color: AppTheme.success,
+              size: 15,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                address,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.slate600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ]),
+        ],
+      );
+}
+
 class _SearchInput extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -1060,7 +1278,7 @@ class _SearchInput extends StatelessWidget {
           textInputAction: TextInputAction.search,
           style: const TextStyle(fontSize: 15, color: AppTheme.midnight),
           decoration: InputDecoration(
-            hintText: '¿A dónde va el flete?',
+            hintText: 'A donde llevamos tu carga?',
             hintStyle: const TextStyle(fontSize: 15, color: AppTheme.slate400),
             prefixIcon: Container(
               margin: const EdgeInsets.all(10),
@@ -1086,6 +1304,85 @@ class _SearchInput extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _PlaceSuggestions extends StatelessWidget {
+  final List<PlaceSuggestion> suggestions;
+  final bool isLoading;
+  final ValueChanged<PlaceSuggestion> onSelected;
+
+  const _PlaceSuggestions({
+    required this.suggestions,
+    required this.isLoading,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading && suggestions.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppTheme.slate200, width: 0.8),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          for (var index = 0; index < suggestions.length; index++) ...[
+            ListTile(
+              dense: true,
+              leading: const Icon(
+                Icons.location_on_outlined,
+                color: AppTheme.primary,
+              ),
+              title: Text(
+                suggestions[index].label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.midnight,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                suggestions[index].address,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
+              ),
+              onTap: () => onSelected(suggestions[index]),
+            ),
+            if (index < suggestions.length - 1)
+              const Divider(height: 1, indent: 56),
+          ],
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'Resultados de Google',
+                style: TextStyle(color: AppTheme.slate400, fontSize: 10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LocationCurrentTile extends StatelessWidget {

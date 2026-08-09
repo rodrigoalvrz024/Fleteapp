@@ -3954,7 +3954,7 @@ class _AuditJsonSection extends StatelessWidget {
               value,
               style: const TextStyle(
                 color: Colors.white,
-                fontFamily: 'monospace',
+                fontFamily: AppTheme.fontFamily,
                 fontSize: 11,
                 height: 1.35,
               ),

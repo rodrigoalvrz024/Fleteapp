@@ -6,12 +6,12 @@ import { publicSiteUrl } from './seo';
 export const metadata: Metadata = {
   metadataBase: new URL(publicSiteUrl),
   title: {
-    default: 'muvv | Fletes urbanos verificados',
+    default: 'Muvv | Fletes urbanos verificados',
     template: '%s',
   },
   description:
-    'muvv conecta clientes con conductores verificados para fletes urbanos seguros, trazables y con respaldo operacional.',
-  applicationName: 'muvv',
+    'Muvv conecta clientes con conductores verificados para fletes urbanos seguros, trazables y con respaldo operacional.',
+  applicationName: 'Muvv',
   category: 'transportation',
   robots: {
     index: true,

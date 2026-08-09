@@ -2,7 +2,7 @@ class ApiConstants {
   // URL de producción Cloud Run. Puedes sobrescribirla con --dart-define=API_BASE_URL=...
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://fleteapp-api-i3wy5watea-uc.a.run.app',
+    defaultValue: 'https://muvv-api.onrender.com',
   );
 
   // Locales comentadas

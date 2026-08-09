@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -119,16 +118,44 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final phone = MediaQuery.sizeOf(context).shortestSide < 600;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+      value: phone ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: AppTheme.midnight,
+        backgroundColor: phone ? AppTheme.background : AppTheme.midnight,
         body: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 920;
             final horizontalPadding = compact ? 20.0 : 36.0;
             final topBottomPadding = compact ? 18.0 : 26.0;
+
+            if (phone) {
+              return _SketchMobileRegister(
+                auth: auth,
+                formKey: _formKey,
+                nameCtrl: _nameCtrl,
+                emailCtrl: _emailCtrl,
+                phoneCtrl: _phoneCtrl,
+                passCtrl: _passCtrl,
+                role: _role,
+                obscure: _obscure,
+                acceptTerms: _acceptTerms,
+                acceptPrivacy: _acceptPrivacy,
+                acceptDriverDocuments: _acceptDriverDocuments,
+                loginPath: _loginPath,
+                onRoleChanged: _setRole,
+                onToggleObscure: () => setState(() => _obscure = !_obscure),
+                onAcceptTerms: (value) => setState(() => _acceptTerms = value),
+                onAcceptPrivacy: (value) => setState(
+                  () => _acceptPrivacy = value,
+                ),
+                onAcceptDriverDocuments: (value) => setState(
+                  () => _acceptDriverDocuments = value,
+                ),
+                onRegister: _register,
+              );
+            }
 
             return AuthBackdrop(
               overlayStrength: 0.64,
@@ -251,6 +278,687 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 }
 
+class _SketchMobileRegister extends StatelessWidget {
+  final AuthState auth;
+  final GlobalKey<FormState> formKey;
+  final TextEditingController nameCtrl;
+  final TextEditingController emailCtrl;
+  final TextEditingController phoneCtrl;
+  final TextEditingController passCtrl;
+  final String role;
+  final bool obscure;
+  final bool acceptTerms;
+  final bool acceptPrivacy;
+  final bool acceptDriverDocuments;
+  final String loginPath;
+  final ValueChanged<String> onRoleChanged;
+  final VoidCallback onToggleObscure;
+  final ValueChanged<bool> onAcceptTerms;
+  final ValueChanged<bool> onAcceptPrivacy;
+  final ValueChanged<bool> onAcceptDriverDocuments;
+  final VoidCallback onRegister;
+
+  const _SketchMobileRegister({
+    required this.auth,
+    required this.formKey,
+    required this.nameCtrl,
+    required this.emailCtrl,
+    required this.phoneCtrl,
+    required this.passCtrl,
+    required this.role,
+    required this.obscure,
+    required this.acceptTerms,
+    required this.acceptPrivacy,
+    required this.acceptDriverDocuments,
+    required this.loginPath,
+    required this.onRoleChanged,
+    required this.onToggleObscure,
+    required this.onAcceptTerms,
+    required this.onAcceptPrivacy,
+    required this.onAcceptDriverDocuments,
+    required this.onRegister,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const Positioned.fill(
+          child: IgnorePointer(child: CustomPaint(painter: _RegisterWave())),
+        ),
+        SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final short = constraints.maxHeight < 830;
+              final horizontalPadding =
+                  constraints.maxWidth < 380 ? 24.0 : 30.0;
+
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  short ? 18 : 28,
+                  horizontalPadding,
+                  34,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const _SketchRegisterBrand(),
+                        SizedBox(height: short ? 26 : 36),
+                        const _SketchProgress(),
+                        SizedBox(height: short ? 28 : 36),
+                        const Text(
+                          'Crea tu cuenta',
+                          style: TextStyle(
+                            color: AppTheme.midnight,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Elige tu perfil y completa tus datos\npara comenzar.',
+                          style: TextStyle(
+                            color: Color(0xFF667085),
+                            fontSize: 17,
+                            height: 1.35,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        SizedBox(height: short ? 18 : 26),
+                        _SketchRoleSelector(
+                          role: role,
+                          enabled: !auth.isLoading,
+                          onChanged: onRoleChanged,
+                        ),
+                        SizedBox(height: short ? 18 : 24),
+                        if (auth.error != null) ...[
+                          _ErrorBanner(message: auth.error!),
+                          const SizedBox(height: 12),
+                        ],
+                        _SketchRegisterField(
+                          controller: nameCtrl,
+                          hint: 'Nombre completo',
+                          icon: Icons.person_outline_rounded,
+                          textInputAction: TextInputAction.next,
+                          validator: (value) => (value?.trim().length ?? 0) > 2
+                              ? null
+                              : 'Ingresa tu nombre',
+                        ),
+                        const SizedBox(height: 10),
+                        _SketchRegisterField(
+                          controller: emailCtrl,
+                          hint: 'Correo electrónico',
+                          icon: Icons.mail_outline_rounded,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          validator: (value) => (value?.contains('@') ?? false)
+                              ? null
+                              : 'Correo inválido',
+                        ),
+                        const SizedBox(height: 10),
+                        _SketchRegisterField(
+                          controller: phoneCtrl,
+                          hint: 'Teléfono (+56...)',
+                          icon: Icons.phone_outlined,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          validator: (value) =>
+                              (value?.trim().length ?? 0) >= 9
+                                  ? null
+                                  : 'Teléfono inválido',
+                        ),
+                        const SizedBox(height: 10),
+                        _SketchRegisterField(
+                          controller: passCtrl,
+                          hint: 'Contraseña',
+                          icon: Icons.lock_outline_rounded,
+                          keyboardType: TextInputType.visiblePassword,
+                          textInputAction: TextInputAction.done,
+                          obscureText: obscure,
+                          onFieldSubmitted: (_) => onRegister(),
+                          validator: (value) => (value?.length ?? 0) >= 8
+                              ? null
+                              : 'Mínimo 8 caracteres',
+                          suffix: IconButton(
+                            tooltip: obscure
+                                ? 'Mostrar contraseña'
+                                : 'Ocultar contraseña',
+                            onPressed: onToggleObscure,
+                            icon: Icon(
+                              obscure
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: const Color(0xFF667085),
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: short ? 14 : 18),
+                        _SketchConsentRow(
+                          value: acceptTerms,
+                          onChanged: auth.isLoading ? null : onAcceptTerms,
+                          text: 'Acepto los términos y condiciones',
+                          onLink: () => context.push('/legal/terms'),
+                        ),
+                        _SketchConsentRow(
+                          value: acceptPrivacy,
+                          onChanged: auth.isLoading ? null : onAcceptPrivacy,
+                          text: 'Acepto la política de privacidad',
+                          onLink: () => context.push('/legal/privacy'),
+                        ),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          child: role == 'driver'
+                              ? Padding(
+                                  key: const ValueKey('driver-consent'),
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: _SketchConsentRow(
+                                    value: acceptDriverDocuments,
+                                    onChanged: auth.isLoading
+                                        ? null
+                                        : onAcceptDriverDocuments,
+                                    text:
+                                        'Autorizo revisar mi licencia y documentos del vehículo',
+                                  ),
+                                )
+                              : const SizedBox.shrink(
+                                  key: ValueKey('no-driver-consent'),
+                                ),
+                        ),
+                        SizedBox(height: short ? 14 : 20),
+                        _SketchRegisterButton(
+                          isLoading: auth.isLoading,
+                          onRegister: onRegister,
+                        ),
+                        const SizedBox(height: 20),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            const Text(
+                              '¿Ya tienes cuenta? ',
+                              style: TextStyle(
+                                color: Color(0xFF667085),
+                                fontSize: 15,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => context.go(loginPath),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF1269F3),
+                                padding: EdgeInsets.zero,
+                                minimumSize: const Size(0, 28),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                textStyle: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0,
+                                ),
+                              ),
+                              child: const Text('Ingresa'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SketchRegisterBrand extends StatelessWidget {
+  const _SketchRegisterBrand();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.asset(
+            'assets/branding/muvv-app-icon.png',
+            width: 64,
+            height: 64,
+            fit: BoxFit.cover,
+          ),
+        ),
+        const SizedBox(width: 16),
+        const Text(
+          'Muvv',
+          style: TextStyle(
+            color: AppTheme.midnight,
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SketchProgress extends StatelessWidget {
+  const _SketchProgress();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        _ProgressSegment(active: true),
+        SizedBox(width: 9),
+        _ProgressSegment(),
+        SizedBox(width: 9),
+        _ProgressSegment(),
+      ],
+    );
+  }
+}
+
+class _ProgressSegment extends StatelessWidget {
+  final bool active;
+
+  const _ProgressSegment({this.active = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 4,
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF1269F3) : const Color(0xFFE6EBF4),
+        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+  }
+}
+
+class _SketchRoleSelector extends StatelessWidget {
+  final String role;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  const _SketchRoleSelector({
+    required this.role,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _SketchRoleCard(
+            label: 'Cliente',
+            description: 'Pedir fletes',
+            icon: Icons.person_rounded,
+            selected: role == 'client',
+            enabled: enabled,
+            onTap: () => onChanged('client'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SketchRoleCard(
+            label: 'Conductor',
+            description: 'Aceptar viajes',
+            icon: Icons.directions_car_filled_rounded,
+            selected: role == 'driver',
+            enabled: enabled,
+            onTap: () => onChanged('driver'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SketchRoleCard extends StatelessWidget {
+  final String label;
+  final String description;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _SketchRoleCard({
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconBackground = selected
+        ? const Color(0xFF1269F3)
+        : const Color(0xFFF4F6FA);
+    final iconColor = selected ? Colors.white : const Color(0xFF525C70);
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(18),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            height: 146,
+            decoration: BoxDecoration(
+              color: selected ? const Color(0xFFF4F8FF) : Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF1269F3)
+                    : const Color(0xFFDCE1EA),
+                width: selected ? 1.8 : 1,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF1269F3).withValues(alpha: 0.12),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: iconBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    border: selected
+                        ? null
+                        : Border.all(color: const Color(0xFFDCE1EA)),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 30),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected
+                        ? const Color(0xFF1269F3)
+                        : AppTheme.midnight,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: Color(0xFF667085),
+                    fontSize: 14,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SketchRegisterField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final TextInputType? keyboardType;
+  final TextInputAction textInputAction;
+  final bool obscureText;
+  final Widget? suffix;
+  final String? Function(String?)? validator;
+  final ValueChanged<String>? onFieldSubmitted;
+
+  const _SketchRegisterField({
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    required this.textInputAction,
+    this.keyboardType,
+    this.obscureText = false,
+    this.suffix,
+    this.validator,
+    this.onFieldSubmitted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: const Color(0xFFD8DDE6)),
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        obscureText: obscureText,
+        validator: validator,
+        onFieldSubmitted: onFieldSubmitted,
+        style: const TextStyle(
+          color: AppTheme.midnight,
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Color(0xFF667085),
+            fontSize: 16,
+            letterSpacing: 0,
+          ),
+          prefixIcon: Icon(icon, color: const Color(0xFF58637A), size: 25),
+          suffixIcon: suffix,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 18),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          errorStyle: const TextStyle(fontSize: 0, height: 0),
+        ),
+      ),
+    );
+  }
+}
+
+class _SketchConsentRow extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final String text;
+  final VoidCallback? onLink;
+
+  const _SketchConsentRow({
+    required this.value,
+    required this.onChanged,
+    required this.text,
+    this.onLink,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 36,
+          height: 36,
+          child: Checkbox(
+            value: value,
+            onChanged: onChanged == null
+                ? null
+                : (checked) => onChanged!(checked ?? false),
+            activeColor: const Color(0xFF1269F3),
+            side: const BorderSide(color: Color(0xFF667085), width: 1.6),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF59647A),
+              fontSize: 14,
+              height: 1.25,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+        if (onLink != null)
+          TextButton(
+            onPressed: onLink,
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF1269F3),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: const Size(38, 36),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0,
+              ),
+            ),
+            child: const Text('Ver'),
+          ),
+      ],
+    );
+  }
+}
+
+class _SketchRegisterButton extends StatelessWidget {
+  final bool isLoading;
+  final VoidCallback onRegister;
+
+  const _SketchRegisterButton({
+    required this.isLoading,
+    required this.onRegister,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: isLoading ? null : onRegister,
+        icon: isLoading
+            ? const SizedBox(
+                width: 21,
+                height: 21,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.4,
+                ),
+              )
+            : const Icon(Icons.person_add_alt_1_rounded, size: 23),
+        label: Text(isLoading ? 'Creando cuenta' : 'Crear cuenta'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1269F3),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor:
+              const Color(0xFF1269F3).withValues(alpha: 0.62),
+          disabledForegroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RegisterWave extends CustomPainter {
+  const _RegisterWave();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final base = Path()
+      ..moveTo(0, size.height - 34)
+      ..quadraticBezierTo(
+        size.width * 0.2,
+        size.height - 52,
+        size.width * 0.48,
+        size.height - 30,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.74,
+        size.height - 12,
+        size.width,
+        size.height - 48,
+      )
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(base, Paint()..color = const Color(0xFFDBEAFE));
+
+    final front = Path()
+      ..moveTo(0, size.height - 18)
+      ..quadraticBezierTo(
+        size.width * 0.24,
+        size.height - 4,
+        size.width * 0.5,
+        size.height - 24,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.8,
+        size.height - 48,
+        size.width,
+        size.height - 28,
+      )
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      front,
+      Paint()..color = const Color(0xFF93C5FD).withValues(alpha: 0.62),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RegisterWave oldDelegate) => false;
+}
+
 class _RegisterNav extends StatelessWidget {
   final bool compact;
   final String loginPath;
@@ -287,7 +995,7 @@ class _RegisterNav extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            textStyle: GoogleFonts.inter(
+            textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
             ),
@@ -322,8 +1030,8 @@ class _BrandMark extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Text(
-          'muvv',
-          style: GoogleFonts.manrope(
+          'Muvv',
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w900,
@@ -500,7 +1208,7 @@ class _RegisterHeroCopy extends StatelessWidget {
         children: [
           Text(
             'Cuenta verificada'.toUpperCase(),
-            style: GoogleFonts.inter(
+            style: TextStyle(
               color: AppTheme.accent,
               fontSize: compact ? 12 : 13,
               fontWeight: FontWeight.w900,
@@ -510,7 +1218,7 @@ class _RegisterHeroCopy extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'Empieza a mover fletes con control',
-            style: GoogleFonts.manrope(
+            style: TextStyle(
               color: Colors.white,
               fontSize: compact ? 40 : 62,
               fontWeight: FontWeight.w900,
@@ -638,6 +1346,7 @@ class _RegisterPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FloatingAuthPanel(
+      flat: false,
       child: Padding(
         padding: const EdgeInsets.all(28),
         child: Form(
@@ -648,9 +1357,9 @@ class _RegisterPanel extends StatelessWidget {
             children: [
               const AuthPanelAccent(),
               const SizedBox(height: 20),
-              Text(
+              const Text(
                 'Crear cuenta',
-                style: GoogleFonts.manrope(
+                style: TextStyle(
                   color: AppTheme.midnight,
                   fontSize: 32,
                   fontWeight: FontWeight.w900,

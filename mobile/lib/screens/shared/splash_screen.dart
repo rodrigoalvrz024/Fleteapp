@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/driver_onboarding_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -22,16 +21,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   double _cardOffset = 12;
   double _loaderOpacity = 0;
 
-  bool _isFirstTime = false;
-  String _loadingText = 'Iniciando…';
-  int _msgIndex = 0;
-
-  final List<String> _loadingMsgs = [
-    'Detectando tu ubicación…',
-    'Preparando tu experiencia…',
-    'Conectando con conductores…',
-    'Casi listo…',
-  ];
+  String _loadingText = 'Preparando tu flete…';
 
   @override
   void initState() {
@@ -40,35 +30,33 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _start() async {
-    final prefs = await SharedPreferences.getInstance();
-    final firstTime = prefs.getBool('first_time') ?? true;
-    if (firstTime) {
-      await prefs.setBool('first_time', false);
-      if (mounted) setState(() => _isFirstTime = true);
-    }
+    final authCheck = ref.read(authProvider.notifier).checkAuth();
 
-    await _delay(100);
+    await _delay(50);
     _set(() {
       _logoOpacity = 1;
       _logoScale = 1.0;
     });
-    await _delay(280);
-    _set(() => _titleOpacity = 1);
-    await _delay(160);
-    _set(() => _subtitleOpacity = 1);
-    await _delay(160);
+    await _delay(100);
+    _set(() {
+      _titleOpacity = 1;
+      _subtitleOpacity = 1;
+      _loaderOpacity = 1;
+    });
+    await _delay(80);
     _set(() {
       _cardOpacity = 1;
       _cardOffset = 0;
     });
-    await _delay(200);
-    _set(() => _loaderOpacity = 1);
-
-    _rotateMsgs();
 
     await Future.wait([
-      Future.delayed(Duration(milliseconds: _isFirstTime ? 2600 : 1600)),
-      ref.read(authProvider.notifier).checkAuth(),
+      // The mobile storyboard takes 1.1 s, followed by a short hold on the
+      // completed state so it reads as one continuous launch animation.
+      Future<void>.delayed(const Duration(milliseconds: 1130)),
+      authCheck.timeout(
+        const Duration(milliseconds: 1800),
+        onTimeout: () {},
+      ),
     ]);
 
     if (!mounted) return;
@@ -112,21 +100,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     setState(fn);
   }
 
-  Future<void> _rotateMsgs() async {
-    await _delay(500);
-    for (final msg in _loadingMsgs) {
-      if (!mounted) return;
-      setState(() {
-        _loadingText = msg;
-        _msgIndex++;
-      });
-      await _delay(550);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final phone = size.shortestSide < 600;
+
+    if (phone) {
+      return const _MobileSplash();
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.primary,
@@ -159,11 +140,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                               width: 1,
                             ),
                           ),
-                          child: const Icon(
-                            Icons.local_shipping_rounded,
-                            size: 44,
-                            color: Colors.white,
-                          ),
+                           child: ClipOval(
+                             child: Image.asset(
+                               'assets/branding/muvv-app-icon.png',
+                               fit: BoxFit.cover,
+                             ),
+                           ),
                         ),
                       ),
                     ),
@@ -172,7 +154,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                       opacity: _titleOpacity,
                       duration: const Duration(milliseconds: 280),
                       curve: Curves.easeOut,
-                      child: const Text('muvv',
+                      child: const Text('Muvv',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 32,
@@ -268,7 +250,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                             FadeTransition(opacity: anim, child: child),
                         child: Text(
                           _loadingText,
-                          key: ValueKey('$_msgIndex-$_loadingText'),
+                          key: ValueKey(_loadingText),
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.45),
                             fontSize: 11,
@@ -283,6 +265,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MobileSplash extends StatelessWidget {
+  const _MobileSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF020914),
+      body: SafeArea(child: MuvvIntroSequence()),
     );
   }
 }

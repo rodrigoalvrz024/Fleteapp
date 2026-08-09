@@ -22,7 +22,7 @@ export function pageMetadata({
   keywords = [],
 }: SeoConfig): Metadata {
   const canonical = `${publicSiteUrl}${path === '/' ? '' : path}`;
-  const fullTitle = `${title} | muvv`;
+  const fullTitle = `${title} | Muvv`;
 
   return {
     title: fullTitle,
@@ -42,7 +42,7 @@ export function pageMetadata({
       title: fullTitle,
       description,
       url: canonical,
-      siteName: 'muvv',
+      siteName: 'Muvv',
       locale: 'es_CL',
       type: 'website',
     },

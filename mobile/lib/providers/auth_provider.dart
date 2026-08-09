@@ -101,6 +101,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final status = e.response?.statusCode;
       final data = e.response?.data;
       final detail = data is Map ? data['detail']?.toString() : null;
+
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        return 'El servicio se esta iniciando. Espera un minuto e intenta de nuevo.';
+      }
       if (status == 400) {
         return detail?.isNotEmpty == true
             ? detail!

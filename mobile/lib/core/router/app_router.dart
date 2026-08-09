@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,12 +43,15 @@ String? _trackRouteView(BuildContext _, GoRouterState state) {
 final _router = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/',
+  // Android can restore its last native route. Start the mobile app through
+  // the splash, while preserving direct URLs for the Flutter web app.
+  overridePlatformDefaultLocation: !kIsWeb,
   redirect: _trackRouteView,
   routes: [
     // Public marketing lives in the Next.js site. The Flutter app starts here.
     GoRoute(
       path: '/',
-      redirect: (_, state) => _withQuery('/auth/login', state),
+      builder: (_, __) => const SplashScreen(),
     ),
     GoRoute(
       path: '/legal/terms',

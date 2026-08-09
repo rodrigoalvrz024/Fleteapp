@@ -1310,7 +1310,7 @@ class _SupportSheet extends StatelessWidget {
   Future<void> _whatsapp() async {
     final uri = Uri.parse(
       'https://wa.me/56912345678?text='
-      '${Uri.encodeComponent("Hola, soy conductor de muvv y necesito ayuda.")}',
+      '${Uri.encodeComponent("Hola, soy conductor de Muvv y necesito ayuda.")}',
     );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);

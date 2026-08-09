@@ -15,8 +15,10 @@ class ApiService {
   void _init() {
     _dio = Dio(BaseOptions(
       baseUrl: ApiConstants.baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
+      // Render Free can take about a minute to wake after inactivity.
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 75),
+      sendTimeout: const Duration(seconds: 30),
       headers: {'Content-Type': 'application/json'},
     ));
 

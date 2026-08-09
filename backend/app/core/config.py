@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_KEY: str = ""
     FRONTEND_URL: str = "https://fleteapp-8d8f7.web.app"
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "muvv <onboarding@resend.dev>"
+    EMAIL_FROM: str = "Muvv <onboarding@resend.dev>"
     ALLOW_PASSWORD_RESET_LINK_LOGS: bool = False
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     TERMS_VERSION: str = "2026-05-26"

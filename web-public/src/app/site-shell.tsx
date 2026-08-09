@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { appBaseUrl } from './seo';
 
 export { appBaseUrl };
@@ -6,9 +7,16 @@ export { appBaseUrl };
 export function SiteNav() {
   return (
     <nav className="siteNav" aria-label="Principal">
-      <Link className="brand" href="/" aria-label="muvv inicio">
-        <span className="brandIcon" aria-hidden="true">m</span>
-        <span>muvv</span>
+      <Link className="brand" href="/" aria-label="Muvv inicio">
+        <Image
+          className="brandIcon"
+          src="/muvv-mark.png"
+          alt=""
+          width={38}
+          height={38}
+          priority
+        />
+        <span>Muvv</span>
       </Link>
       <div className="navLinks">
         <Link href="/clientes">Clientes</Link>
@@ -38,7 +46,7 @@ export function SiteFooter() {
   return (
     <footer className="footer">
       <div>
-        <strong>muvv</strong>
+        <strong>Muvv</strong>
         <span>Fletes urbanos con respaldo operativo para Chile.</span>
       </div>
       <nav aria-label="Legal">

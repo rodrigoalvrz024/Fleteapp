@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -17,14 +19,18 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } catch (_) {}
 }
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('es', null);
-  await _initializeFirebaseServices();
   runApp(const ProviderScope(child: MuvvApp()));
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeAppServices());
+  });
 }
 
-Future<void> _initializeFirebaseServices() async {
+Future<void> _initializeAppServices() async {
+  await initializeDateFormatting('es', null);
+
   try {
     if (kIsWeb) {
       if (!DefaultFirebaseOptions.isWebConfigured) {
@@ -51,7 +57,7 @@ class MuvvApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'muvv',
+      title: 'Muvv',
       theme: AppTheme.light,
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       routerConfig: router,

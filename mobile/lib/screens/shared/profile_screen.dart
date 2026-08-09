@@ -111,14 +111,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       scheme: 'mailto',
       path: email,
       query: 'subject=${Uri.encodeComponent(subject)}'
-          '&body=${Uri.encodeComponent("Hola equipo muvv,\n\n")}',
+          '&body=${Uri.encodeComponent("Hola equipo Muvv,\n\n")}',
     );
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
   Future<void> _launchWhatsApp() async {
     const phone = '56912345678';
-    const message = 'Hola, necesito ayuda con mi cuenta de muvv.';
+    const message = 'Hola, necesito ayuda con mi cuenta de Muvv.';
     final uri =
         Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
     if (await canLaunchUrl(uri)) {
@@ -488,7 +488,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               value: 'soporte@muvv.cl',
               onTap: () => _launchEmail(
                 'soporte@muvv.cl',
-                'Ayuda con mi cuenta muvv',
+                'Ayuda con mi cuenta Muvv',
               ),
             ),
             _Div(),
@@ -524,7 +524,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           const SizedBox(height: 32),
           const Center(
-            child: Text('muvv v1.0.0',
+            child: Text('Muvv v1.0.0',
                 style: TextStyle(fontSize: 11, color: AppTheme.slate400)),
           ),
         ],
@@ -2222,7 +2222,7 @@ class _HelpSheet extends StatelessWidget {
                 scheme: 'mailto',
                 path: 'soporte@muvv.cl',
                 query: 'subject=${Uri.encodeComponent("Ayuda con mi cuenta")}'
-                    '&body=${Uri.encodeComponent("Hola equipo muvv,\n\n")}',
+                    '&body=${Uri.encodeComponent("Hola equipo Muvv,\n\n")}',
               );
               if (await canLaunchUrl(uri)) await launchUrl(uri);
             },

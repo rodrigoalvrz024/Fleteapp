@@ -167,6 +167,6 @@ const _privacySections = [
   ),
   _LegalSection(
     'Derechos de las personas',
-    'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de muvv desde los canales oficiales.',
+    'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de Muvv desde los canales oficiales.',
   ),
 ];

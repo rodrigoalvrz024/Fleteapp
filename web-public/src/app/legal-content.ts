@@ -1,11 +1,11 @@
 export const termsSections = [
   {
     title: 'Uso de la plataforma',
-    body: 'muvv conecta clientes que solicitan fletes con conductores independientes. La plataforma permite crear solicitudes, aceptar servicios, coordinar traslados y revisar el estado de cada flete.',
+    body: 'Muvv conecta clientes que solicitan fletes con conductores independientes. La plataforma permite crear solicitudes, aceptar servicios, coordinar traslados y revisar el estado de cada flete.',
   },
   {
     title: 'Cuentas de usuario',
-    body: 'Cada persona debe entregar informacion verdadera, mantener segura su contrasena y usar una cuenta propia. muvv puede suspender cuentas cuando exista fraude, uso indebido o riesgo para otros usuarios.',
+    body: 'Cada persona debe entregar informacion verdadera, mantener segura su contrasena y usar una cuenta propia. Muvv puede suspender cuentas cuando exista fraude, uso indebido o riesgo para otros usuarios.',
   },
   {
     title: 'Conductores y documentos',
@@ -17,7 +17,7 @@ export const termsSections = [
   },
   {
     title: 'Seguridad y responsabilidad',
-    body: 'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. muvv puede investigar incidentes y limitar el acceso para proteger la operacion.',
+    body: 'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. Muvv puede investigar incidentes y limitar el acceso para proteger la operacion.',
   },
 ];
 
@@ -40,6 +40,6 @@ export const privacySections = [
   },
   {
     title: 'Derechos de las personas',
-    body: 'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de muvv desde los canales oficiales.',
+    body: 'Puedes solicitar acceso, rectificacion, eliminacion, bloqueo u oposicion cuando corresponda. Para ejercer derechos o pedir soporte, contacta al equipo de Muvv desde los canales oficiales.',
   },
 ];

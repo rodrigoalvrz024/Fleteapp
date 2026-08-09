@@ -71,7 +71,7 @@ export default function Home() {
           <p className="eyebrow">Fletes urbanos en Chile</p>
           <h1>Fletes para mover lo importante, sin improvisar.</h1>
           <p className="heroLead">
-            muvv conecta clientes con conductores verificados para mover
+            Muvv conecta clientes con conductores verificados para mover
             muebles, compras y carga urbana con trazabilidad desde la solicitud
             hasta la entrega.
           </p>
@@ -160,7 +160,7 @@ export default function Home() {
           <p className="eyebrow darkEyebrow">Confianza operacional</p>
           <h2>Mas que pedir un camion.</h2>
           <p>
-            muvv esta pensada para registrar lo que pasa en cada traslado y
+            Muvv esta pensada para registrar lo que pasa en cada traslado y
             dejar evidencia util para clientes, conductores y soporte.
           </p>
         </div>
@@ -174,7 +174,7 @@ export default function Home() {
       <section className="ctaBand">
         <div>
           <p className="eyebrow darkEyebrow">Empieza en la app</p>
-          <h2>Usa la web para conocer muvv. Usa la app para operar.</h2>
+          <h2>Usa la web para conocer Muvv. Usa la app para operar.</h2>
           <p>
             Esta separacion mantiene la experiencia publica simple y la
             operacion privada, segura y trazable.

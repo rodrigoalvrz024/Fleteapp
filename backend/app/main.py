@@ -13,6 +13,7 @@ from app.routers import (
     internal_tasks,
     payments,
     payouts,
+    places,
     ratings,
     users,
 )
@@ -24,7 +25,7 @@ else:
     print("[startup] Skipping automatic DB migrations.")
 
 app = FastAPI(
-    title="muvv API",
+    title="Muvv API",
     description="API para app de fletes en Chile",
     version="1.0.0",
 )
@@ -101,13 +102,14 @@ app.include_router(freights.router)
 app.include_router(internal_tasks.router)
 app.include_router(payments.router)
 app.include_router(payouts.router)
+app.include_router(places.router)
 app.include_router(ratings.router)
 app.include_router(analytics.router)
 app.include_router(admin.router)
 
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "muvv API funcionando"}
+    return {"status": "ok", "message": "Muvv API funcionando"}
 
 @app.get("/health")
 def health():

@@ -59,7 +59,7 @@ export function ProfilePage({
           <h2>Una experiencia clara antes, durante y despues del flete.</h2>
         </div>
         <p>
-          muvv separa la informacion publica del espacio privado. La web
+          Muvv separa la informacion publica del espacio privado. La web
           explica; la app registra solicitudes, documentos, evidencia, pagos y
           seguimiento operativo.
         </p>
@@ -87,7 +87,7 @@ export function ProfilePage({
       <section className="ctaBand">
         <div>
           <p className="eyebrow darkEyebrow">Siguiente paso</p>
-          <h2>Continua en la app privada de muvv.</h2>
+          <h2>Continua en la app privada de Muvv.</h2>
           <p>
             Crea tu cuenta para guardar solicitudes, documentos e historial en
             un espacio privado.

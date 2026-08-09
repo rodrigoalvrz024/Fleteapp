@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
+  static const String fontFamily = 'Inter';
   // ── Paleta principal ────────────────────────────────────
   static const Color primary = Color(0xFF3B82F6); // azul moderno
   static const Color primaryDark = Color(0xFF1D4ED8);
@@ -58,6 +58,7 @@ class AppTheme {
   static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
+      fontFamily: fontFamily,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primary,
         brightness: Brightness.light,
@@ -66,21 +67,22 @@ class AppTheme {
     );
 
     return base.copyWith(
-      textTheme: GoogleFonts.interTextTheme(base.textTheme),
-      appBarTheme: AppBarTheme(
+      textTheme: base.textTheme.apply(fontFamily: fontFamily),
+      primaryTextTheme: base.primaryTextTheme.apply(fontFamily: fontFamily),
+      appBarTheme: const AppBarTheme(
         backgroundColor: surface,
         foregroundColor: midnight,
         elevation: 0,
         centerTitle: false,
         scrolledUnderElevation: 0,
         systemOverlayStyle: SystemUiOverlayStyle.dark,
-        titleTextStyle: GoogleFonts.inter(
+        titleTextStyle: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
           color: midnight,
         ),
-        iconTheme: const IconThemeData(color: midnight),
-        shape: const Border(
+        iconTheme: IconThemeData(color: midnight),
+        shape: Border(
           bottom: BorderSide(color: slate200, width: 0.5),
         ),
       ),
@@ -92,8 +94,7 @@ class AppTheme {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 0,
-          textStyle:
-              GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -103,8 +104,7 @@ class AppTheme {
           side: const BorderSide(color: slate200),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle:
-              GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -128,8 +128,8 @@ class AppTheme {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle: GoogleFonts.inter(fontSize: 14, color: slate400),
-        hintStyle: GoogleFonts.inter(fontSize: 14, color: slate400),
+        labelStyle: const TextStyle(fontSize: 14, color: slate400),
+        hintStyle: const TextStyle(fontSize: 14, color: slate400),
       ),
       cardTheme: CardThemeData(
         color: surface,

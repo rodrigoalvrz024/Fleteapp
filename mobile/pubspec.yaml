@@ -24,7 +24,6 @@ dependencies:
   # Mapas y geolocalización
   google_maps_flutter: ^2.6.1
   geolocator: ^11.0.0
-  geocoding: ^3.0.0
 
   # Firebase — versiones compatibles con Xcode 26
   firebase_core: ^3.6.0
@@ -37,8 +36,6 @@ dependencies:
   image_picker: ^1.1.2
   intl: ^0.19.0
 
-  google_fonts: ^6.2.1   
-
   url_launcher: ^6.3.0
 
 dev_dependencies:
@@ -49,5 +46,10 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/branding/
     - assets/images/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Variable.ttf
 
