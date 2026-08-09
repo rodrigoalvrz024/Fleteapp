@@ -452,7 +452,11 @@ class _SketchMobileLogin extends StatelessWidget {
         SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final short = constraints.maxHeight < 820;
+              // Phones need the complete sign-in path without a vertical scroll.
+              // Keep scrolling only for unusually short screens or when the keyboard
+              // consumes the available height.
+              final compact = constraints.maxHeight < 900;
+              final veryCompact = constraints.maxHeight < 700;
               final horizontalPadding =
                   constraints.maxWidth < 380 ? 24.0 : 32.0;
 
@@ -460,9 +464,9 @@ class _SketchMobileLogin extends StatelessWidget {
                 physics: const ClampingScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  short ? 24 : 46,
+                  veryCompact ? 12 : (compact ? 18 : 46),
                   horizontalPadding,
-                  30,
+                  veryCompact ? 14 : (compact ? 20 : 30),
                 ),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -471,30 +475,30 @@ class _SketchMobileLogin extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _SketchMuvvBrand(),
-                        SizedBox(height: short ? 42 : 64),
-                        const Text(
+                        _SketchMuvvBrand(compact: compact),
+                        SizedBox(height: compact ? 28 : 64),
+                        Text(
                           'Bienvenido de nuevo',
                           style: TextStyle(
                             color: AppTheme.midnight,
-                            fontSize: 32,
+                            fontSize: compact ? 28 : 32,
                             fontWeight: FontWeight.w800,
                             height: 1.12,
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        const Text(
+                        SizedBox(height: compact ? 6 : 10),
+                        Text(
                           'Ingresa para gestionar tus fletes\nde forma simple y segura.',
                           style: TextStyle(
-                            color: Color(0xFF6B7280),
-                            fontSize: 17,
+                            color: const Color(0xFF6B7280),
+                            fontSize: compact ? 15 : 17,
                             fontWeight: FontWeight.w400,
                             height: 1.42,
                             letterSpacing: 0,
                           ),
                         ),
-                        SizedBox(height: short ? 20 : 30),
+                        SizedBox(height: compact ? 18 : 30),
                         if (auth.error != null) ...[
                           _ErrorBanner(message: auth.error!),
                           const SizedBox(height: 14),
@@ -506,11 +510,12 @@ class _SketchMobileLogin extends StatelessWidget {
                           icon: Icons.mail_outline_rounded,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
+                          compact: compact,
                           validator: (value) => (value?.contains('@') ?? false)
                               ? null
                               : 'Correo inválido',
                         ),
-                        const SizedBox(height: 14),
+                        SizedBox(height: compact ? 10 : 14),
                         _SketchAuthField(
                           label: 'Contraseña',
                           controller: passCtrl,
@@ -520,6 +525,7 @@ class _SketchMobileLogin extends StatelessWidget {
                           obscureText: obscure,
                           textInputAction: TextInputAction.done,
                           onFieldSubmitted: (_) => onLogin(),
+                          compact: compact,
                           validator: (value) => (value?.length ?? 0) >= 8
                               ? null
                               : 'Mínimo 8 caracteres',
@@ -545,9 +551,12 @@ class _SketchMobileLogin extends StatelessWidget {
                                 : () => context.push('/auth/forgot-password'),
                             style: TextButton.styleFrom(
                               foregroundColor: const Color(0xFF1269F3),
-                              padding: const EdgeInsets.only(top: 8, bottom: 4),
-                              textStyle: const TextStyle(
-                                fontSize: 14,
+                              padding: EdgeInsets.only(
+                                top: compact ? 6 : 8,
+                                bottom: compact ? 2 : 4,
+                              ),
+                              textStyle: TextStyle(
+                                fontSize: compact ? 13 : 14,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0,
                               ),
@@ -555,41 +564,44 @@ class _SketchMobileLogin extends StatelessWidget {
                             child: const Text('¿Olvidaste tu contraseña?'),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: compact ? 8 : 12),
                         _SketchLoginButton(
                           isLoading: auth.isLoading,
                           onLogin: onLogin,
                           btnScale: btnScale,
                           btnCtrl: btnCtrl,
+                          compact: compact,
                         ),
-                        const SizedBox(height: 24),
-                        const _SocialDivider(),
-                        const SizedBox(height: 16),
+                        SizedBox(height: compact ? 16 : 24),
+                        _SocialDivider(compact: compact),
+                        SizedBox(height: compact ? 10 : 16),
                         _SocialSignInButton(
                           label: 'Continuar con Google',
                           icon: const _GoogleGlyph(),
                           onPressed: onGoogle,
+                          compact: compact,
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: compact ? 8 : 10),
                         _SocialSignInButton(
                           label: 'Continuar con Apple',
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.apple,
                             color: Colors.black,
-                            size: 27,
+                            size: compact ? 24 : 27,
                           ),
                           onPressed: onApple,
+                          compact: compact,
                         ),
-                        SizedBox(height: short ? 22 : 34),
+                        SizedBox(height: compact ? 18 : 34),
                         Wrap(
                           alignment: WrapAlignment.center,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               '¿No tienes cuenta? ',
                               style: TextStyle(
-                                color: Color(0xFF6B7280),
-                                fontSize: 15,
+                                color: const Color(0xFF6B7280),
+                                fontSize: compact ? 14 : 15,
                                 letterSpacing: 0,
                               ),
                             ),
@@ -600,8 +612,8 @@ class _SketchMobileLogin extends StatelessWidget {
                                 padding: EdgeInsets.zero,
                                 minimumSize: const Size(0, 30),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                textStyle: const TextStyle(
-                                  fontSize: 15,
+                                textStyle: TextStyle(
+                                  fontSize: compact ? 14 : 15,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0,
                                 ),
@@ -610,10 +622,11 @@ class _SketchMobileLogin extends StatelessWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: compact ? 10 : 16),
                         _LegalFooter(
                           onTerms: () => context.push('/legal/terms'),
                           onPrivacy: () => context.push('/legal/privacy'),
+                          compact: compact,
                         ),
                       ],
                     ),
@@ -629,27 +642,29 @@ class _SketchMobileLogin extends StatelessWidget {
 }
 
 class _SketchMuvvBrand extends StatelessWidget {
-  const _SketchMuvvBrand();
+  final bool compact;
+
+  const _SketchMuvvBrand({required this.compact});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(compact ? 14 : 18),
           child: Image.asset(
             'assets/branding/muvv-app-icon.png',
-            width: 72,
-            height: 72,
+            width: compact ? 56 : 72,
+            height: compact ? 56 : 72,
             fit: BoxFit.cover,
           ),
         ),
-        const SizedBox(width: 18),
-        const Text(
+        SizedBox(width: compact ? 14 : 18),
+        Text(
           'Muvv',
           style: TextStyle(
             color: AppTheme.midnight,
-            fontSize: 32,
+            fontSize: compact ? 26 : 32,
             fontWeight: FontWeight.w800,
             letterSpacing: 0,
           ),
@@ -670,6 +685,7 @@ class _SketchAuthField extends StatelessWidget {
   final Widget? suffix;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onFieldSubmitted;
+  final bool compact;
 
   const _SketchAuthField({
     required this.label,
@@ -682,13 +698,19 @@ class _SketchAuthField extends StatelessWidget {
     this.suffix,
     this.validator,
     this.onFieldSubmitted,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 78,
-      padding: const EdgeInsets.fromLTRB(16, 10, 8, 7),
+      height: compact ? 64 : 78,
+      padding: EdgeInsets.fromLTRB(
+        compact ? 14 : 16,
+        compact ? 7 : 10,
+        8,
+        compact ? 5 : 7,
+      ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(16),
@@ -701,17 +723,21 @@ class _SketchAuthField extends StatelessWidget {
             label,
             style: const TextStyle(
               color: Color(0xFF475569),
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               letterSpacing: 0,
             ),
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: compact ? 0 : 2),
           Expanded(
             child: Row(
               children: [
-                Icon(icon, color: const Color(0xFF6B7280), size: 24),
-                const SizedBox(width: 14),
+                Icon(
+                  icon,
+                  color: const Color(0xFF6B7280),
+                  size: compact ? 21 : 24,
+                ),
+                SizedBox(width: compact ? 10 : 14),
                 Expanded(
                   child: TextFormField(
                     controller: controller,
@@ -720,17 +746,17 @@ class _SketchAuthField extends StatelessWidget {
                     obscureText: obscureText,
                     validator: validator,
                     onFieldSubmitted: onFieldSubmitted,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.midnight,
-                      fontSize: 16,
+                      fontSize: compact ? 15 : 16,
                       fontWeight: FontWeight.w400,
                       letterSpacing: 0,
                     ),
                     decoration: InputDecoration(
                       hintText: hint,
-                      hintStyle: const TextStyle(
-                        color: Color(0xFFA0A6B0),
-                        fontSize: 16,
+                      hintStyle: TextStyle(
+                        color: const Color(0xFFA0A6B0),
+                        fontSize: compact ? 15 : 16,
                         letterSpacing: 0,
                       ),
                       border: InputBorder.none,
@@ -759,12 +785,14 @@ class _SketchLoginButton extends StatelessWidget {
   final VoidCallback onLogin;
   final Animation<double> btnScale;
   final AnimationController btnCtrl;
+  final bool compact;
 
   const _SketchLoginButton({
     required this.isLoading,
     required this.onLogin,
     required this.btnScale,
     required this.btnCtrl,
+    required this.compact,
   });
 
   @override
@@ -776,7 +804,7 @@ class _SketchLoginButton extends StatelessWidget {
         onTapUp: (_) => btnCtrl.reverse(),
         onTapCancel: () => btnCtrl.reverse(),
         child: SizedBox(
-          height: 56,
+          height: compact ? 52 : 56,
           child: ElevatedButton(
             onPressed: isLoading ? null : onLogin,
             style: ElevatedButton.styleFrom(
@@ -784,10 +812,10 @@ class _SketchLoginButton extends StatelessWidget {
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(compact ? 13 : 14),
               ),
-              textStyle: const TextStyle(
-                fontSize: 18,
+              textStyle: TextStyle(
+                fontSize: compact ? 16 : 18,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0,
               ),
@@ -810,25 +838,27 @@ class _SketchLoginButton extends StatelessWidget {
 }
 
 class _SocialDivider extends StatelessWidget {
-  const _SocialDivider();
+  final bool compact;
+
+  const _SocialDivider({required this.compact});
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(child: Divider(color: Color(0xFFD1D5DB))),
+        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 20),
           child: Text(
             'o continúa con',
             style: TextStyle(
-              color: Color(0xFF6B7280),
-              fontSize: 14,
+              color: const Color(0xFF6B7280),
+              fontSize: compact ? 13 : 14,
               letterSpacing: 0,
             ),
           ),
         ),
-        Expanded(child: Divider(color: Color(0xFFD1D5DB))),
+        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
       ],
     );
   }
@@ -838,17 +868,19 @@ class _SocialSignInButton extends StatelessWidget {
   final String label;
   final Widget icon;
   final VoidCallback onPressed;
+  final bool compact;
 
   const _SocialSignInButton({
     required this.label,
     required this.icon,
     required this.onPressed,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 52,
+      height: compact ? 48 : 52,
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
@@ -856,11 +888,11 @@ class _SocialSignInButton extends StatelessWidget {
           backgroundColor: Colors.white.withValues(alpha: 0.8),
           side: const BorderSide(color: Color(0xFFD8DDE6)),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(compact ? 13 : 14),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          textStyle: const TextStyle(
-            fontSize: 16,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20),
+          textStyle: TextStyle(
+            fontSize: compact ? 15 : 16,
             fontWeight: FontWeight.w600,
             letterSpacing: 0,
           ),
@@ -897,8 +929,13 @@ class _GoogleGlyph extends StatelessWidget {
 class _LegalFooter extends StatelessWidget {
   final VoidCallback onTerms;
   final VoidCallback onPrivacy;
+  final bool compact;
 
-  const _LegalFooter({required this.onTerms, required this.onPrivacy});
+  const _LegalFooter({
+    required this.onTerms,
+    required this.onPrivacy,
+    required this.compact,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -906,30 +943,30 @@ class _LegalFooter extends StatelessWidget {
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const Text(
+        Text(
           'Al continuar, aceptas los ',
           style: TextStyle(
-            color: Color(0xFF7C8494),
-            fontSize: 13,
+            color: const Color(0xFF7C8494),
+            fontSize: compact ? 12 : 13,
             letterSpacing: 0,
           ),
         ),
         TextButton(
           onPressed: onTerms,
-          style: _legalLinkStyle,
+          style: _legalLinkStyle(compact),
           child: const Text('Términos de uso'),
         ),
-        const Text(
+        Text(
           ' y la ',
           style: TextStyle(
-            color: Color(0xFF7C8494),
-            fontSize: 13,
+            color: const Color(0xFF7C8494),
+            fontSize: compact ? 12 : 13,
             letterSpacing: 0,
           ),
         ),
         TextButton(
           onPressed: onPrivacy,
-          style: _legalLinkStyle,
+          style: _legalLinkStyle(compact),
           child: const Text('Política de privacidad.'),
         ),
       ],
@@ -937,17 +974,17 @@ class _LegalFooter extends StatelessWidget {
   }
 }
 
-final _legalLinkStyle = TextButton.styleFrom(
-  foregroundColor: const Color(0xFF1269F3),
-  padding: EdgeInsets.zero,
-  minimumSize: const Size(0, 24),
-  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-  textStyle: const TextStyle(
-    fontSize: 13,
-    fontWeight: FontWeight.w500,
-    letterSpacing: 0,
-  ),
-);
+ButtonStyle _legalLinkStyle(bool compact) => TextButton.styleFrom(
+      foregroundColor: const Color(0xFF1269F3),
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(0, 24),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      textStyle: TextStyle(
+        fontSize: compact ? 12 : 13,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0,
+      ),
+    );
 
 class _SketchCornerPattern extends CustomPainter {
   const _SketchCornerPattern();
