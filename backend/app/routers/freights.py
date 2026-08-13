@@ -1,8 +1,8 @@
 import secrets
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -17,6 +17,7 @@ from app.core.security import (
 from app.database import SessionLocal, get_db
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus, TripStatusHistory
+from app.models.pricing_quote import FreightPriceQuote
 from app.models.user import User, UserRole
 from app.schemas.freight import (
     DeliveryPinResponse,
@@ -28,8 +29,17 @@ from app.schemas.freight import (
 )
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
-from app.services.freight_service import calculate_distance_km, can_transition, estimate_price
+from app.services.freight_service import (
+    PRICING_VERSION,
+    can_transition,
+    normalize_service_type,
+)
 from app.services.cloud_tasks_service import enqueue_freight_driver_notification_task
+from app.services.maps_service import RouteCalculationError
+from app.services.pricing_estimate_service import calculate_pricing_estimate
+from app.services.pricing_history_service import record_pricing_snapshot
+from app.services.pricing_quote_service import consume_pricing_quote
+from app.services.pricing_service import PricingInputError
 from app.services.storage_service import (
     create_freight_evidence_view_token,
     decode_freight_evidence_view_token,
@@ -56,8 +66,8 @@ async def _notify_available_drivers(title: str, body: str, data: dict) -> None:
             body=body,
             data=data,
         )
-    except Exception as exc:
-        print(f"[notifications] Could not notify available drivers: {exc}")
+    except Exception:
+        print("[notifications] Could not notify available drivers")
     finally:
         db.close()
 
@@ -128,7 +138,7 @@ def _require_assigned_driver(
     return driver
 
 @router.post("", response_model=FreightCreateResponse, status_code=201)
-def create_freight(
+async def create_freight(
     data: FreightCreate,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -142,21 +152,60 @@ def create_freight(
         max_attempts=30,
         window_seconds=60 * 60,
     )
-    dist   = calculate_distance_km(
-        data.origin_lat, data.origin_lng,
-        data.destination_lat, data.destination_lng
-    )
-    prices = estimate_price(
-        distance_km  = dist,
-        weight_kg    = data.cargo_weight_kg,
-        helpers      = data.requires_helpers,
-        is_urgent    = data.is_urgent,
-        scheduled_at = data.scheduled_at,
-    )
+    confirmed_at = datetime.now(timezone.utc)
+    quote: FreightPriceQuote | None = None
+    if data.quote_id:
+        quote = consume_pricing_quote(
+            db,
+            quote_id=data.quote_id,
+            client_id=current_user.id,
+            data=data,
+            now=confirmed_at,
+        )
+        map_data = {
+            "distance_km": quote.route_distance_km,
+            "duration_minutes": quote.route_duration_minutes,
+            "provider": quote.route_provider,
+            "calculated_at": quote.route_calculated_at,
+        }
+        prices = quote.pricing_components
+    else:
+        try:
+            map_data, prices = await calculate_pricing_estimate(
+                data,
+                request_id=getattr(request.state, "request_id", None),
+            )
+        except RouteCalculationError:
+            raise HTTPException(
+                status_code=503,
+                detail="No pudimos calcular la tarifa en este momento. Intenta nuevamente.",
+            )
+        except PricingInputError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    if prices.get("requires_manual_quote"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "manual_quote_required",
+                "message": "Esta carga necesita una cotizacion personalizada.",
+                "requires_manual_quote": True,
+            },
+        )
 
     freight = FreightRequest(
         client_id        = current_user.id,
-        distance_km      = round(dist, 2),
+        distance_km      = round(map_data["distance_km"], 2),
+        estimated_duration_minutes = map_data.get("duration_minutes"),
+        service_type     = normalize_service_type(data.service_type),
+        recommended_vehicle_type = prices["recommended_vehicle_type"],
+        selected_vehicle_type = prices["selected_vehicle_type"],
+        pricing_version = prices["pricing_version"],
+        pricing_type = prices["pricing_type"],
+        requires_manual_quote = False,
+        route_provider = map_data.get("provider"),
+        route_calculated_at = map_data.get("calculated_at"),
+        quote_expires_at = quote.expires_at if quote else None,
         is_urgent        = data.is_urgent,
         mode             = prices["mode"],
         base_price       = prices["base_price"],
@@ -175,11 +224,38 @@ def create_freight(
         cargo_weight_kg     = data.cargo_weight_kg,
         cargo_volume_m3     = data.cargo_volume_m3,
         requires_helpers    = data.requires_helpers,
+        extra_stops         = data.extra_stops,
+        pickup_floor        = data.pickup_floor,
+        delivery_floor      = data.delivery_floor,
+        pickup_has_elevator = data.pickup_has_elevator,
+        delivery_has_elevator = data.delivery_has_elevator,
         scheduled_at        = data.scheduled_at,
+        requested_at        = confirmed_at,
+        price_estimated_at  = confirmed_at,
+        customer_confirmed_at = confirmed_at,
         last_modified_by    = current_user.id,
     )
     db.add(freight)
     db.flush()
+    if quote:
+        quote.used_at = confirmed_at
+        quote.freight_id = freight.id
+    snapshot_components = {
+        **prices,
+        "route_provider": freight.route_provider,
+        "route_calculated_at": (
+            freight.route_calculated_at.isoformat()
+            if freight.route_calculated_at
+            else None
+        ),
+        "quote_id": quote.id if quote else None,
+    }
+    record_pricing_snapshot(
+        db,
+        freight,
+        snapshot_type="customer_confirmed",
+        pricing_components=snapshot_components,
+    )
     history = TripStatusHistory(
         freight_id=freight.id,
         status=FreightStatus.pending,
@@ -199,6 +275,36 @@ def create_freight(
             "driver_receives": freight.driver_receives,
             "platform_fee": freight.platform_fee,
             "mode": freight.mode,
+            "pricing_version": freight.pricing_version,
+            "route_provider": freight.route_provider,
+        },
+        request=request,
+    )
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="pricing_estimated",
+        after_data={
+            "pricing_version": prices["pricing_version"],
+            "estimated_customer_price": freight.estimated_price,
+            "estimated_distance_km": freight.distance_km,
+            "estimated_duration_minutes": freight.estimated_duration_minutes,
+            "recommended_vehicle_type": freight.recommended_vehicle_type,
+            "route_provider": freight.route_provider,
+        },
+        request=request,
+    )
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="pricing_confirmed",
+        after_data={
+            "accepted_customer_price": freight.client_pays,
+            "pricing_type": "automatic",
         },
         request=request,
     )
@@ -235,7 +341,11 @@ def create_freight(
     return freight
 
 @router.get("", response_model=List[FreightResponse])
-def list_freights(status: str = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_freights(
+    status: FreightStatus | Literal["available"] | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     query = db.query(FreightRequest).options(
         selectinload(FreightRequest.status_history),
         selectinload(FreightRequest.payment),
@@ -407,7 +517,21 @@ async def upload_evidence(
     uploaded_at = datetime.now(timezone.utc)
     setattr(freight, ref_field, evidence_ref)
     setattr(freight, uploaded_at_field, uploaded_at)
+    if kind == "pickup" and not freight.driver_arrived_pickup_at:
+        freight.driver_arrived_pickup_at = uploaded_at
+    if kind == "delivery" and not freight.driver_arrived_destination_at:
+        freight.driver_arrived_destination_at = uploaded_at
     freight.last_modified_by = current_user.id
+    record_pricing_snapshot(
+        db,
+        freight,
+        snapshot_type=(
+            "driver_arrived_pickup"
+            if kind == "pickup"
+            else "driver_arrived_destination"
+        ),
+        captured_at=uploaded_at,
+    )
     record_audit_event(
         db,
         actor=current_user,
@@ -511,8 +635,18 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=400, detail="Flete no disponible")
 
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    vehicle = driver.vehicle
+    freight.actual_vehicle_id = vehicle.id if vehicle else None
+    freight.driver_assigned_at = accepted_at
+    freight.driver_accepted_at = accepted_at
     history = TripStatusHistory(freight_id=freight.id, status=FreightStatus.accepted, note=f"Aceptado por conductor {driver.id}")
     db.add(history)
+    record_pricing_snapshot(
+        db,
+        freight,
+        snapshot_type="driver_assigned",
+        captured_at=accepted_at,
+    )
     record_audit_event(
         db,
         actor=current_user,
@@ -527,6 +661,17 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
         },
         metadata={"driver_profile_id": driver.id},
     )
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="freight",
+        entity_id=freight.id,
+        event_type="driver_assigned",
+        after_data={
+            "driver_id": driver.id,
+            "actual_vehicle_id": freight.actual_vehicle_id,
+        },
+    )
     db.commit()
     db.refresh(freight)
     return freight
@@ -539,6 +684,13 @@ def update_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    check_rate_limit(
+        request,
+        scope="freight-status-update",
+        identifier=f"{current_user.id}:{freight_id}",
+        max_attempts=30,
+        window_seconds=15 * 60,
+    )
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
@@ -587,20 +739,34 @@ def update_status(
             raise HTTPException(status_code=400, detail="PIN de entrega incorrecto")
 
     status_before = freight.status.value if hasattr(freight.status, "value") else str(freight.status)
+    transitioned_at = datetime.now(timezone.utc)
     freight.status = data.status
     if data.status == FreightStatus.in_progress:
-        freight.started_at = datetime.utcnow()
+        freight.started_at = transitioned_at
+        freight.trip_started_at = transitioned_at
     elif data.status == FreightStatus.completed:
-        freight.completed_at = datetime.utcnow()
+        freight.completed_at = transitioned_at
+        freight.trip_completed_at = transitioned_at
         freight.final_price = freight.estimated_price
-        freight.delivery_pin_verified_at = datetime.now(timezone.utc)
+        freight.delivery_pin_verified_at = transitioned_at
     elif data.status == FreightStatus.cancelled:
-        freight.cancelled_at = datetime.utcnow()
+        freight.cancelled_at = transitioned_at
         freight.cancel_reason = data.note
     freight.last_modified_by = current_user.id
 
     history = TripStatusHistory(freight_id=freight.id, status=data.status, note=data.note)
     db.add(history)
+    snapshot_type = {
+        FreightStatus.in_progress: "trip_started",
+        FreightStatus.completed: "trip_completed",
+        FreightStatus.cancelled: "trip_cancelled",
+    }.get(data.status, "status_changed")
+    record_pricing_snapshot(
+        db,
+        freight,
+        snapshot_type=snapshot_type,
+        captured_at=transitioned_at,
+    )
     record_audit_event(
         db,
         actor=current_user,
@@ -616,25 +782,38 @@ def update_status(
         reason=data.note,
         request=request,
     )
+    if snapshot_type != "status_changed":
+        record_audit_event(
+            db,
+            actor=current_user,
+            entity_type="freight",
+            entity_id=freight.id,
+            event_type=snapshot_type,
+            after_data={
+                "pricing_version": PRICING_VERSION,
+                "estimated_customer_price": freight.estimated_price,
+                "final_customer_price": freight.final_price,
+                "actual_distance_km": freight.actual_distance_km,
+            },
+            request=request,
+        )
     db.commit()
     db.refresh(freight)
     return freight
 
-from app.services.maps_service import get_distance_and_duration
-from app.services.freight_service import estimate_price
-
 @router.post("/estimate")
 async def estimate_freight(
     request: Request,
-    origin_lat:       float,
-    origin_lng:       float,
-    destination_lat:  float,
-    destination_lng:  float,
-    cargo_weight_kg:  float,
-    requires_helpers: int = 0,
+    origin_lat: float = Query(..., ge=-90, le=90, allow_inf_nan=False),
+    origin_lng: float = Query(..., ge=-180, le=180, allow_inf_nan=False),
+    destination_lat: float = Query(..., ge=-90, le=90, allow_inf_nan=False),
+    destination_lng: float = Query(..., ge=-180, le=180, allow_inf_nan=False),
+    cargo_weight_kg: float = Query(..., gt=0, le=20_000, allow_inf_nan=False),
+    cargo_volume_m3: Optional[float] = Query(None, gt=0, le=200, allow_inf_nan=False),
+    requires_helpers: int = Query(0, ge=0, le=2),
     is_urgent:        bool = False,
     scheduled_at:     Optional[datetime] = None,
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(require_role("client")),
 ):
     check_rate_limit(
         request,
@@ -643,30 +822,45 @@ async def estimate_freight(
         max_attempts=120,
         window_seconds=60 * 60,
     )
-    from app.services.maps_service import get_distance_and_duration
-    from datetime import datetime as dt
+    from types import SimpleNamespace
 
-    map_data = await get_distance_and_duration(
-        origin_lat, origin_lng, destination_lat, destination_lng
+    data = SimpleNamespace(
+        origin_lat=origin_lat,
+        origin_lng=origin_lng,
+        destination_lat=destination_lat,
+        destination_lng=destination_lng,
+        cargo_weight_kg=cargo_weight_kg,
+        cargo_volume_m3=cargo_volume_m3,
+        cargo_description="Carga estandar",
+        requires_helpers=requires_helpers,
+        extra_stops=0,
+        pickup_floor=None,
+        delivery_floor=None,
+        pickup_has_elevator=True,
+        delivery_has_elevator=True,
+        service_type=None,
+        is_urgent=is_urgent,
+        scheduled_at=scheduled_at,
+        requested_vehicle_type=None,
     )
-    prices = estimate_price(
-        distance_km  = map_data["distance_km"],
-        weight_kg    = cargo_weight_kg,
-        helpers      = requires_helpers,
-        is_urgent    = is_urgent,
-        scheduled_at = scheduled_at or dt.utcnow(),
-    )
+    try:
+        map_data, prices = await calculate_pricing_estimate(
+            data,
+            request_id=getattr(request.state, "request_id", None),
+        )
+    except RouteCalculationError:
+        raise HTTPException(
+            status_code=503,
+            detail="No pudimos calcular la tarifa en este momento. Intenta nuevamente.",
+        )
+    except PricingInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     return {
-        "distance_km":      round(map_data["distance_km"], 2),
+        **prices,
+        "distance_km": round(map_data["distance_km"], 2),
         "duration_minutes": map_data["duration_minutes"],
-        "distance_text":    map_data.get("distance_text"),
-        "duration_text":    map_data.get("duration_text"),
-        "mode":             prices["mode"],
-        "base_price":       prices["base_price"],
-        "client_pays":      prices["client_pays"],
-        "driver_receives":  prices["driver_receives"],
-        "platform_fee":     prices["platform_fee"],
-        "helpers_cost":     prices["helpers_cost"],
-        "minimum_applied":  prices["minimum_applied"],
+        "distance_text": map_data.get("distance_text"),
+        "duration_text": map_data.get("duration_text"),
+        "route_provider": map_data.get("provider"),
     }

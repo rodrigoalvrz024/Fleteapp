@@ -3,6 +3,114 @@ from sqlalchemy import text
 
 STARTUP_MIGRATIONS = (
     """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS service_type VARCHAR(32)
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS extra_stops INTEGER NOT NULL DEFAULT 0
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS pickup_floor INTEGER
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS delivery_floor INTEGER
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS pickup_has_elevator BOOLEAN NOT NULL DEFAULT TRUE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS delivery_has_elevator BOOLEAN NOT NULL DEFAULT TRUE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS estimated_duration_minutes DOUBLE PRECISION
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS actual_distance_km DOUBLE PRECISION
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS recommended_vehicle_type VARCHAR(32)
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS selected_vehicle_type VARCHAR(32)
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS pricing_version VARCHAR(32)
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS pricing_type VARCHAR(32) NOT NULL DEFAULT 'automatic'
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS requires_manual_quote BOOLEAN NOT NULL DEFAULT FALSE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS route_provider VARCHAR(40)
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS route_calculated_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS quote_expires_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS actual_vehicle_id INTEGER
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS requested_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS price_estimated_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS customer_confirmed_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_assigned_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_accepted_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_arrived_pickup_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS trip_started_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_arrived_destination_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS trip_completed_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_freight_requests_actual_vehicle_id
+    ON freight_requests (actual_vehicle_id)
+    """,
+    """
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE
     """,

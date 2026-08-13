@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -7,8 +8,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: str = (
-        "https://fleteapp-8d8f7.web.app,"
-        "https://fleteapp-public-8d8f7.web.app,"
+        "https://muvv-dev.web.app,"
+        "https://muvv-dev-public.web.app,"
         "http://127.0.0.1:8090,"
         "http://localhost:8090,"
         "http://127.0.0.1:3000,"
@@ -22,12 +23,11 @@ class Settings(BaseSettings):
     TRANSBANK_API_KEY: str = ""
     TRANSBANK_ENVIRONMENT: str = "integration"
     ALLOW_SIMULATED_PAYMENTS: bool = False
-    FIREBASE_SERVER_KEY: str = ""
+    FIREBASE_CREDENTIALS_JSON: str = ""
     GOOGLE_MAPS_KEY: str = ""
-    FRONTEND_URL: str = "https://fleteapp-8d8f7.web.app"
+    FRONTEND_URL: str = "https://muvv-dev.web.app"
     RESEND_API_KEY: str = ""
     EMAIL_FROM: str = "Muvv <onboarding@resend.dev>"
-    ALLOW_PASSWORD_RESET_LINK_LOGS: bool = False
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     TERMS_VERSION: str = "2026-05-26"
     PRIVACY_VERSION: str = "2026-05-26"
@@ -54,8 +54,63 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 2
     DB_POOL_TIMEOUT_SECONDS: int = 5
+    MAX_REQUEST_BODY_MB: int = 10
+    JWT_ISSUER: str = "muvv-api"
+    JWT_AUDIENCE: str = "muvv-app"
+    PRICING_CONFIG_JSON: str = ""
+    PRICING_QUOTE_EXPIRE_MINUTES: int = 10
+    PRICING_ROUTE_MAX_RETRIES: int = 2
 
     class Config:
         env_file = ".env"
+
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV.strip().lower() in {"production", "prod"}
+
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = [
+            origin.strip().rstrip("/")
+            for origin in self.CORS_ORIGINS.split(",")
+            if origin.strip()
+        ]
+        if self.is_production:
+            origins = [
+                origin
+                for origin in origins
+                if not origin.startswith("http://localhost")
+                and not origin.startswith("http://127.0.0.1")
+            ]
+        return list(dict.fromkeys(origins))
+
+    @model_validator(mode="after")
+    def validate_security_configuration(self):
+        if self.ALGORITHM != "HS256":
+            raise ValueError("ALGORITHM debe ser HS256")
+        if not 5 <= self.ACCESS_TOKEN_EXPIRE_MINUTES <= 1440:
+            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES debe estar entre 5 y 1440")
+        if self.MAX_REQUEST_BODY_MB < 1 or self.MAX_REQUEST_BODY_MB > 25:
+            raise ValueError("MAX_REQUEST_BODY_MB debe estar entre 1 y 25")
+        if not 1 <= self.DRIVER_DOCUMENT_VIEW_EXPIRE_MINUTES <= 60:
+            raise ValueError("DRIVER_DOCUMENT_VIEW_EXPIRE_MINUTES debe estar entre 1 y 60")
+        if not 1 <= self.FREIGHT_EVIDENCE_VIEW_EXPIRE_MINUTES <= 60:
+            raise ValueError("FREIGHT_EVIDENCE_VIEW_EXPIRE_MINUTES debe estar entre 1 y 60")
+        if not 1 <= self.PRICING_QUOTE_EXPIRE_MINUTES <= 60:
+            raise ValueError("PRICING_QUOTE_EXPIRE_MINUTES debe estar entre 1 y 60")
+        if not 0 <= self.PRICING_ROUTE_MAX_RETRIES <= 4:
+            raise ValueError("PRICING_ROUTE_MAX_RETRIES debe estar entre 0 y 4")
+        if self.is_production:
+            if len(self.SECRET_KEY) < 32 or self.SECRET_KEY.startswith("change-me"):
+                raise ValueError("SECRET_KEY de produccion debe tener al menos 32 caracteres aleatorios")
+            if self.ALLOW_SIMULATED_PAYMENTS:
+                raise ValueError("Los pagos simulados no se pueden habilitar en produccion")
+            if not self.cors_origins:
+                raise ValueError("CORS_ORIGINS debe incluir al menos un origen HTTPS en produccion")
+            if any(not origin.startswith("https://") for origin in self.cors_origins):
+                raise ValueError("CORS_ORIGINS solo puede incluir origenes HTTPS en produccion")
+            if self.ALLOW_EXTERNAL_DOCUMENT_REFS:
+                raise ValueError("ALLOW_EXTERNAL_DOCUMENT_REFS no se permite en produccion")
+        return self
 
 settings = Settings()

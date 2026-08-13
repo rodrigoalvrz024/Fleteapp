@@ -1,58 +1,197 @@
-import httpx
-import math
-import os
+import asyncio
+from datetime import datetime, timezone
+import logging
 from urllib.parse import quote
+
+import httpx
+
 from app.core.config import settings
 
-GOOGLE_MAPS_KEY = settings.GOOGLE_MAPS_KEY  # o agrégala al .env
+
+logger = logging.getLogger(__name__)
+GOOGLE_MAPS_KEY = settings.GOOGLE_MAPS_KEY
+
+
+class RouteCalculationError(RuntimeError):
+    """A real road route could not be obtained from the configured provider."""
+
+
+def _duration_seconds(value: str | int | float | None) -> float | None:
+    if isinstance(value, str) and value.endswith("s"):
+        try:
+            return float(value[:-1])
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+async def _request_with_retries(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    **kwargs,
+) -> httpx.Response:
+    attempts = settings.PRICING_ROUTE_MAX_RETRIES + 1
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            response = await client.request(method, url, **kwargs)
+            if response.status_code < 500 and response.status_code != 429:
+                return response
+            last_error = httpx.HTTPStatusError(
+                "Transient route provider response",
+                request=response.request,
+                response=response,
+            )
+        except httpx.HTTPError as exc:
+            last_error = exc
+        if attempt < attempts - 1:
+            await asyncio.sleep(0.15 * (2**attempt))
+    raise RouteCalculationError("route_provider_unavailable") from last_error
+
+
+async def _routes_api_route(
+    client: httpx.AsyncClient,
+    origin_lat: float,
+    origin_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+) -> dict | None:
+    response = await _request_with_retries(
+        client,
+        "POST",
+        "https://routes.googleapis.com/directions/v2:computeRoutes",
+        headers={
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": GOOGLE_MAPS_KEY,
+            "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+        },
+        json={
+            "origin": {
+                "location": {
+                    "latLng": {"latitude": origin_lat, "longitude": origin_lng}
+                }
+            },
+            "destination": {
+                "location": {
+                    "latLng": {"latitude": dest_lat, "longitude": dest_lng}
+                }
+            },
+            "travelMode": "DRIVE",
+            "routingPreference": "TRAFFIC_AWARE",
+        },
+    )
+    if response.status_code != 200:
+        logger.info("Google Routes unavailable with status=%s", response.status_code)
+        return None
+    routes = response.json().get("routes") or []
+    if not routes:
+        return None
+    route = routes[0]
+    meters = route.get("distanceMeters")
+    seconds = _duration_seconds(route.get("duration"))
+    if not isinstance(meters, (int, float)) or not seconds or meters <= 0:
+        return None
+    return {
+        "distance_km": float(meters) / 1000,
+        "duration_minutes": max(round(seconds / 60, 1), 1),
+        "distance_text": f"{float(meters) / 1000:.1f} km",
+        "duration_text": f"{round(seconds / 60):.0f} min",
+        "provider": "google_routes",
+        "calculated_at": datetime.now(timezone.utc),
+    }
+
+
+async def _distance_matrix_route(
+    client: httpx.AsyncClient,
+    origin_lat: float,
+    origin_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+) -> dict | None:
+    response = await _request_with_retries(
+        client,
+        "GET",
+        "https://maps.googleapis.com/maps/api/distancematrix/json",
+        params={
+            "origins": f"{origin_lat},{origin_lng}",
+            "destinations": f"{dest_lat},{dest_lng}",
+            "key": GOOGLE_MAPS_KEY,
+            "units": "metric",
+            "language": "es",
+        },
+    )
+    if response.status_code != 200:
+        logger.info("Google Distance Matrix unavailable with status=%s", response.status_code)
+        return None
+    try:
+        element = response.json()["rows"][0]["elements"][0]
+        if element["status"] != "OK":
+            return None
+        return {
+            "distance_km": element["distance"]["value"] / 1000,
+            "duration_minutes": max(round(element["duration"]["value"] / 60, 1), 1),
+            "distance_text": element["distance"]["text"],
+            "duration_text": element["duration"]["text"],
+            "provider": "google_distance_matrix",
+            "calculated_at": datetime.now(timezone.utc),
+        }
+    except (KeyError, IndexError, TypeError):
+        return None
+
 
 async def get_distance_and_duration(
-    origin_lat: float, origin_lng: float,
-    dest_lat: float, dest_lng: float
+    origin_lat: float,
+    origin_lng: float,
+    dest_lat: float,
+    dest_lng: float,
 ) -> dict:
-    """Llama a Google Distance Matrix API para distancia y tiempo real."""
-    url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {
-        "origins": f"{origin_lat},{origin_lng}",
-        "destinations": f"{dest_lat},{dest_lng}",
-        "key": GOOGLE_MAPS_KEY,
-        "units": "metric",
-        "language": "es",
-    }
-    async with httpx.AsyncClient() as client:
-        res = await client.get(url, params=params)
-        data = res.json()
-
+    """Return a road route; geometric fallbacks are never used for billing."""
+    if not GOOGLE_MAPS_KEY:
+        logger.warning("Route calculation requested without a Google Maps key")
+        raise RouteCalculationError("route_provider_not_configured")
     try:
-        element = data["rows"][0]["elements"][0]
-        if element["status"] == "OK":
-            return {
-                "distance_km": element["distance"]["value"] / 1000,
-                "duration_minutes": element["duration"]["value"] // 60,
-                "distance_text": element["distance"]["text"],
-                "duration_text": element["duration"]["text"],
-            }
-    except Exception:
-        pass
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            route = await _routes_api_route(
+                client, origin_lat, origin_lng, dest_lat, dest_lng
+            )
+            if route:
+                return route
+            route = await _distance_matrix_route(
+                client, origin_lat, origin_lng, dest_lat, dest_lng
+            )
+            if route:
+                return route
+    except RouteCalculationError:
+        logger.warning("Route provider did not recover after retries")
+        raise
+    except httpx.HTTPError as exc:
+        logger.warning("Route provider request failed: %s", type(exc).__name__)
+    raise RouteCalculationError("route_not_available")
 
-    # Fallback: fórmula Haversine si la API falla
-    R = 6371
-    phi1, phi2 = math.radians(origin_lat), math.radians(dest_lat)
-    dphi = math.radians(dest_lat - origin_lat)
-    dlambda = math.radians(dest_lng - origin_lng)
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    dist = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-    return {"distance_km": round(dist, 2), "duration_minutes": int(dist * 3), "distance_text": f"{dist:.1f} km", "duration_text": f"{int(dist*3)} min"}
 
 async def geocode_address(address: str) -> dict | None:
-    """Convierte dirección en coordenadas."""
+    """Convert a Chilean address into coordinates for legacy callers."""
     url = "https://maps.googleapis.com/maps/api/geocode/json"
-    async with httpx.AsyncClient() as client:
-        res = await client.get(url, params={"address": address + ", Chile", "key": GOOGLE_MAPS_KEY, "language": "es"})
-        data = res.json()
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            url,
+            params={
+                "address": address + ", Chile",
+                "key": GOOGLE_MAPS_KEY,
+                "language": "es",
+            },
+        )
+        data = response.json()
     if data.get("results"):
-        loc = data["results"][0]["geometry"]["location"]
-        return {"lat": loc["lat"], "lng": loc["lng"], "formatted": data["results"][0]["formatted_address"]}
+        location = data["results"][0]["geometry"]["location"]
+        return {
+            "lat": location["lat"],
+            "lng": location["lng"],
+            "formatted": data["results"][0]["formatted_address"],
+        }
     return None
 
 
@@ -89,7 +228,6 @@ async def autocomplete_chilean_addresses(
     """Return address predictions while keeping the Maps key on the server."""
     if not settings.GOOGLE_MAPS_KEY:
         return []
-
     payload: dict = {
         "input": query,
         "languageCode": "es",
@@ -105,7 +243,6 @@ async def autocomplete_chilean_addresses(
                 "radius": 50000.0,
             }
         }
-
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": settings.GOOGLE_MAPS_KEY,
@@ -125,7 +262,11 @@ async def autocomplete_chilean_addresses(
                 headers=headers,
             )
             response.raise_for_status()
-    except httpx.HTTPError:
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Google Places autocomplete failed with status %s", exc.response.status_code)
+        return []
+    except httpx.HTTPError as exc:
+        logger.warning("Google Places autocomplete request failed: %s", type(exc).__name__)
         return []
     return _autocomplete_suggestions(response.json())
 
@@ -135,10 +276,9 @@ async def get_place_address(
     *,
     session_token: str | None = None,
 ) -> dict | None:
-    """Resolve a selected prediction to the address and coordinates needed by a freight."""
+    """Resolve a prediction to the address and coordinates needed by a freight."""
     if not settings.GOOGLE_MAPS_KEY or not place_id:
         return None
-
     headers = {
         "X-Goog-Api-Key": settings.GOOGLE_MAPS_KEY,
         "X-Goog-FieldMask": "formattedAddress,location,displayName",
@@ -153,9 +293,12 @@ async def get_place_address(
                 params=params,
             )
             response.raise_for_status()
-    except httpx.HTTPError:
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Google Place Details failed with status %s", exc.response.status_code)
         return None
-
+    except httpx.HTTPError as exc:
+        logger.warning("Google Place Details request failed: %s", type(exc).__name__)
+        return None
     data = response.json()
     location = data.get("location") or {}
     latitude = location.get("latitude")

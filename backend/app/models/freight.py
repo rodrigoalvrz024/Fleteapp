@@ -30,6 +30,29 @@ class FreightRequest(Base):
     cargo_weight_kg = Column(Float, nullable=False)
     cargo_volume_m3 = Column(Float, nullable=True)
     requires_helpers = Column(Integer, default=0)
+    extra_stops = Column(Integer, default=0, nullable=False)
+    pickup_floor = Column(Integer, nullable=True)
+    delivery_floor = Column(Integer, nullable=True)
+    pickup_has_elevator = Column(Boolean, default=True, nullable=False)
+    delivery_has_elevator = Column(Boolean, default=True, nullable=False)
+    service_type = Column(String(32), nullable=True)
+
+    estimated_duration_minutes = Column(Float, nullable=True)
+    actual_distance_km = Column(Float, nullable=True)
+    recommended_vehicle_type = Column(String(32), nullable=True)
+    selected_vehicle_type = Column(String(32), nullable=True)
+    pricing_version = Column(String(32), nullable=True)
+    pricing_type = Column(String(32), nullable=False, default="automatic")
+    requires_manual_quote = Column(Boolean, nullable=False, default=False)
+    route_provider = Column(String(40), nullable=True)
+    route_calculated_at = Column(DateTime(timezone=True), nullable=True)
+    quote_expires_at = Column(DateTime(timezone=True), nullable=True)
+    actual_vehicle_id = Column(
+        Integer,
+        ForeignKey("vehicles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     estimated_price = Column(Float, nullable=True)
         # Después de estimated_price:
@@ -49,6 +72,15 @@ class FreightRequest(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancel_reason = Column(String, nullable=True)
+    requested_at = Column(DateTime(timezone=True), nullable=True)
+    price_estimated_at = Column(DateTime(timezone=True), nullable=True)
+    customer_confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    driver_assigned_at = Column(DateTime(timezone=True), nullable=True)
+    driver_accepted_at = Column(DateTime(timezone=True), nullable=True)
+    driver_arrived_pickup_at = Column(DateTime(timezone=True), nullable=True)
+    trip_started_at = Column(DateTime(timezone=True), nullable=True)
+    driver_arrived_destination_at = Column(DateTime(timezone=True), nullable=True)
+    trip_completed_at = Column(DateTime(timezone=True), nullable=True)
 
     pickup_photo_ref = Column(String, nullable=True)
     pickup_photo_uploaded_at = Column(DateTime(timezone=True), nullable=True)
@@ -70,6 +102,12 @@ class FreightRequest(Base):
     payment = relationship("Payment", back_populates="freight", uselist=False)
     rating = relationship("Rating", back_populates="freight", uselist=False)
     driver_payout = relationship("DriverPayout", back_populates="freight", uselist=False)
+    pricing_snapshots = relationship(
+        "FreightPricingSnapshot",
+        back_populates="freight",
+        order_by="FreightPricingSnapshot.captured_at",
+    )
+    pricing_quotes = relationship("FreightPriceQuote", back_populates="freight")
 
     @property
     def has_pickup_photo(self) -> bool:
