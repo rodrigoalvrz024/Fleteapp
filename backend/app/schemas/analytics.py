@@ -12,3 +12,9 @@ class AnalyticsEventCreate(BaseModel):
 
 class AnalyticsEventResponse(BaseModel):
     status: str
+
+
+class AnalyticsPresenceUpdate(BaseModel):
+    screen: str = Field(min_length=1, max_length=120)
+
+    model_config = {"extra": "forbid", "str_strip_whitespace": True}

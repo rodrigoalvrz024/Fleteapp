@@ -14,6 +14,7 @@ from app.core.security import get_current_user, require_role
 from app.core.config import settings
 from app.services.audit_service import record_audit_event
 from app.services.payout_service import ensure_driver_payout
+from app.services.pricing_history_service import record_pricing_snapshot
 from app.services.transbank_service import (
     commit_webpay_transaction,
     create_webpay_transaction,
@@ -34,6 +35,14 @@ def initiate_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client")),
 ):
+    if (
+        settings.ALLOW_SIMULATED_PAYMENTS
+        and settings.TRANSBANK_ENVIRONMENT.lower() == "production"
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="La configuracion de pagos no esta disponible.",
+        )
     check_rate_limit(
         request,
         scope="payment-initiate",
@@ -226,6 +235,14 @@ async def _process_payment_callback(
         payment.paid_at = datetime.now(timezone.utc)
         payment.authorization_code = commit["authorization_code"]
         payment.transaction_id = commit["transaction_id"]
+        if payment.freight:
+            record_pricing_snapshot(
+                db,
+                payment.freight,
+                snapshot_type="payment_authorized",
+                final_customer_price=float(payment.amount),
+                captured_at=payment.paid_at,
+            )
         payout = ensure_driver_payout(db, payment)
         if payout:
             record_audit_event(

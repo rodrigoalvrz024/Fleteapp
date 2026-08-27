@@ -1,11 +1,13 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
 class RatingCreate(BaseModel):
-    freight_id: int
-    score: float
-    comment: Optional[str] = None
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    freight_id: int = Field(gt=0)
+    score: float = Field(allow_inf_nan=False)
+    comment: Optional[str] = Field(default=None, max_length=1000)
 
     @field_validator("score")
     def score_range(cls, v):

@@ -1,5 +1,8 @@
 import os
 import unittest
+
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -12,6 +15,7 @@ os.environ.setdefault(
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from app.models.driver import Driver, DriverStatus
+from app.models.freight_driver_decline import FreightDriverDecline
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle, VehicleType
@@ -21,7 +25,19 @@ from app.routers.freights import _require_freight_view_access
 class FreightAccessTests(unittest.TestCase):
     def _db_with_driver(self, driver: Driver):
         db = MagicMock()
-        db.query.return_value.filter.return_value.first.return_value = driver
+        driver_query = MagicMock()
+        driver_query.filter.return_value.first.return_value = driver
+        decline_query = MagicMock()
+        decline_query.filter.return_value.first.return_value = None
+
+        def query(model):
+            return (
+                decline_query
+                if getattr(model, "class_", None) is FreightDriverDecline
+                else driver_query
+            )
+
+        db.query.side_effect = query
         return db
 
     def _operational_driver(self, user_id: int) -> Driver:

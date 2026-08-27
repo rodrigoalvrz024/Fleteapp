@@ -1,5 +1,7 @@
 import io
+import hashlib
 import mimetypes
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
 from urllib.parse import quote
@@ -46,6 +48,7 @@ HEIF_BRANDS = {
 }
 DOCUMENT_VIEW_PURPOSE = "driver_document_view"
 FREIGHT_EVIDENCE_VIEW_PURPOSE = "freight_evidence_view"
+CHAT_IMAGE_VIEW_PURPOSE = "freight_chat_image_view"
 FILE_SIGNATURES = {
     "image/jpeg": (b"\xff\xd8\xff",),
     "image/png": (b"\x89PNG\r\n\x1a\n",),
@@ -62,6 +65,26 @@ def _max_upload_bytes() -> int:
 
 def _max_freight_evidence_bytes() -> int:
     return settings.FREIGHT_EVIDENCE_MAX_MB * 1024 * 1024
+
+
+def _max_chat_image_bytes() -> int:
+    return settings.CHAT_IMAGE_MAX_MB * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class PrivateImageUpload:
+    reference: str
+    content_type: str
+    size_bytes: int
+
+
+async def _read_limited_upload(file: UploadFile, max_bytes: int, message: str) -> bytes:
+    # UploadFile may be backed by a temporary file. Read at most one extra byte
+    # so a malicious upload cannot occupy the application's memory.
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return content
 
 
 def _ensure_storage_configured() -> None:
@@ -285,7 +308,12 @@ def _object_name(driver_id: int, field: str, extension: str) -> str:
 
 async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -> str:
     declared_type = file.content_type or "application/octet-stream"
-    content = await file.read()
+    max_bytes = _max_upload_bytes()
+    content = await _read_limited_upload(
+        file,
+        max_bytes,
+        f"El archivo supera el maximo de {settings.DRIVER_DOCUMENT_MAX_MB} MB.",
+    )
     content_type = _detect_upload_type(content, declared_type, file.filename or "")
     extension = ALLOWED_UPLOAD_TYPES.get(content_type)
     if not extension:
@@ -294,11 +322,6 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
             detail="Formato no permitido. Usa JPG, PNG, WEBP, HEIC, HEIF o PDF.",
         )
 
-    if len(content) > _max_upload_bytes():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"El archivo supera el maximo de {settings.DRIVER_DOCUMENT_MAX_MB} MB.",
-        )
     _validate_file_signature(content_type, content)
     content = _strip_image_metadata(content_type, content)
     _validate_file_signature(content_type, content)
@@ -310,7 +333,12 @@ async def upload_driver_document(file: UploadFile, driver_id: int, field: str) -
 
 async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) -> str:
     declared_type = file.content_type or "application/octet-stream"
-    content = await file.read()
+    max_bytes = _max_freight_evidence_bytes()
+    content = await _read_limited_upload(
+        file,
+        max_bytes,
+        f"La foto supera el maximo de {settings.FREIGHT_EVIDENCE_MAX_MB} MB.",
+    )
     content_type = _detect_upload_type(content, declared_type, file.filename or "")
     extension = ALLOWED_UPLOAD_TYPES.get(content_type)
     if not extension or content_type not in ALLOWED_IMAGE_UPLOAD_TYPES:
@@ -319,11 +347,6 @@ async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) 
             detail="Formato no permitido. Usa JPG, PNG, WEBP, HEIC o HEIF.",
         )
 
-    if len(content) > _max_freight_evidence_bytes():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"La foto supera el maximo de {settings.FREIGHT_EVIDENCE_MAX_MB} MB.",
-        )
     _validate_file_signature(content_type, content)
     content = _strip_image_metadata(content_type, content)
     _validate_file_signature(content_type, content)
@@ -333,6 +356,37 @@ async def upload_freight_evidence(file: UploadFile, freight_id: int, kind: str) 
     )
     _upload_private_object(object_name, content, content_type)
     return object_name
+
+
+async def upload_freight_chat_image(
+    file: UploadFile,
+    freight_id: int,
+) -> PrivateImageUpload:
+    declared_type = file.content_type or "application/octet-stream"
+    content = await _read_limited_upload(
+        file,
+        _max_chat_image_bytes(),
+        f"La foto supera el maximo de {settings.CHAT_IMAGE_MAX_MB} MB.",
+    )
+    content_type = _detect_upload_type(content, declared_type, file.filename or "")
+    extension = ALLOWED_UPLOAD_TYPES.get(content_type)
+    if not extension or content_type not in ALLOWED_IMAGE_UPLOAD_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato no permitido. Usa JPG, PNG, WEBP, HEIC o HEIF.",
+        )
+
+    _validate_file_signature(content_type, content)
+    content = _strip_image_metadata(content_type, content)
+    _validate_file_signature(content_type, content)
+
+    object_name = f"freights/{freight_id}/chat/{uuid4().hex}{extension}"
+    _upload_private_object(object_name, content, content_type)
+    return PrivateImageUpload(
+        reference=object_name,
+        content_type=content_type,
+        size_bytes=len(content),
+    )
 
 
 def create_driver_document_view_token(
@@ -350,13 +404,21 @@ def create_driver_document_view_token(
         "document_ref": document_ref,
         "exp": expires_at,
     }
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    token = jwt.encode(
+        payload,
+        _view_token_key(DOCUMENT_VIEW_PURPOSE),
+        algorithm=settings.ALGORITHM,
+    )
     return token, expires_at
 
 
 def decode_driver_document_view_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            _view_token_key(DOCUMENT_VIEW_PURPOSE),
+            algorithms=[settings.ALGORITHM],
+        )
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -385,13 +447,21 @@ def create_freight_evidence_view_token(
         "evidence_ref": evidence_ref,
         "exp": expires_at,
     }
-    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    token = jwt.encode(
+        payload,
+        _view_token_key(FREIGHT_EVIDENCE_VIEW_PURPOSE),
+        algorithm=settings.ALGORITHM,
+    )
     return token, expires_at
 
 
 def decode_freight_evidence_view_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            _view_token_key(FREIGHT_EVIDENCE_VIEW_PURPOSE),
+            algorithms=[settings.ALGORITHM],
+        )
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -401,6 +471,49 @@ def decode_freight_evidence_view_token(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evidencia no disponible",
+        )
+    return payload
+
+
+def create_chat_image_view_token(
+    freight_id: int,
+    message_id: int,
+    attachment_ref: str,
+) -> tuple[str, datetime]:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.CHAT_IMAGE_VIEW_EXPIRE_MINUTES
+    )
+    payload = {
+        "purpose": CHAT_IMAGE_VIEW_PURPOSE,
+        "freight_id": freight_id,
+        "message_id": message_id,
+        "attachment_ref": attachment_ref,
+        "exp": expires_at,
+    }
+    token = jwt.encode(
+        payload,
+        _view_token_key(CHAT_IMAGE_VIEW_PURPOSE),
+        algorithm=settings.ALGORITHM,
+    )
+    return token, expires_at
+
+
+def decode_chat_image_view_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            _view_token_key(CHAT_IMAGE_VIEW_PURPOSE),
+            algorithms=[settings.ALGORITHM],
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Imagen no disponible",
+        )
+    if payload.get("purpose") != CHAT_IMAGE_VIEW_PURPOSE:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Imagen no disponible",
         )
     return payload
 
@@ -469,14 +582,22 @@ def stream_private_document(document_ref: str) -> StreamingResponse:
 
     content_type = response.headers.get("content-type") or mimetypes.guess_type(object_name)[0]
     filename = PurePosixPath(object_name).name
+    content_disposition = "attachment" if content_type == "application/pdf" else "inline"
     return StreamingResponse(
         io.BytesIO(response.content),
         media_type=content_type or "application/octet-stream",
         headers={
             "Cache-Control": "private, no-store",
-            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Disposition": f'{content_disposition}; filename="{filename}"',
+            "Content-Security-Policy": "sandbox",
+            "Content-Length": str(len(response.content)),
         },
     )
+
+
+def _view_token_key(purpose: str) -> str:
+    material = f"{settings.SECRET_KEY}:{purpose}:v1".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
 
 
 def _normalize_document_ref(document_ref: str) -> str:

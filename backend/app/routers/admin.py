@@ -5,9 +5,9 @@ from datetime import datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from app.core.config import settings
 from app.database import get_db
 from app.models.data_privacy_request import (
@@ -20,6 +20,7 @@ from app.models.user import User
 from app.models.user_consent import UserConsent
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus
+from app.models.pricing_snapshot import FreightPricingSnapshot
 from app.models.payment import Payment, PaymentStatus
 from app.models.driver_payout import DriverPayout, DriverPayoutStatus
 from app.schemas.privacy_request import PrivacyRequestAdminUpdate
@@ -37,11 +38,15 @@ from app.services.storage_service import (
 router = APIRouter(prefix="/admin", tags=["Administración"])
 
 class RejectBody(BaseModel):
-    reason: str
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reason: str = Field(min_length=3, max_length=1000)
 
 
 class DeleteDocumentsBody(BaseModel):
-    reason: str | None = None
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reason: str | None = Field(default=None, max_length=1000)
 
 DOCUMENT_FIELDS = {
     "license_image": "license_image_url",
@@ -124,6 +129,104 @@ def _freight_platform_fee(freight: FreightRequest) -> float:
     return float(freight.platform_fee or 0)
 
 
+def _snapshot_for_type(
+    snapshots: list[FreightPricingSnapshot],
+    *snapshot_types: str,
+) -> FreightPricingSnapshot | None:
+    for snapshot in reversed(snapshots):
+        if snapshot.snapshot_type in snapshot_types:
+            return snapshot
+    return None
+
+
+def _pricing_dataset_row(freight: FreightRequest) -> dict:
+    snapshots = list(freight.pricing_snapshots or [])
+    original = _snapshot_for_type(snapshots, "customer_confirmed")
+    final = _snapshot_for_type(
+        snapshots,
+        "payment_authorized",
+        "trip_completed",
+        "trip_cancelled",
+    ) or original
+    source = original or final
+    return {
+        "freight_id": freight.id,
+        "created_at": _datetime_or_none(freight.created_at),
+        "requested_at": _datetime_or_none(freight.requested_at),
+        "pricing_version": source.pricing_version if source else None,
+        "pricing_type": source.pricing_type if source else None,
+        "service_type": source.service_type if source else freight.service_type,
+        "pickup_commune": source.pickup_commune if source else None,
+        "dropoff_commune": source.dropoff_commune if source else None,
+        "estimated_distance_km": (
+            source.estimated_distance_km if source else freight.distance_km
+        ),
+        "actual_distance_km": (
+            final.actual_distance_km if final else freight.actual_distance_km
+        ),
+        "estimated_duration_minutes": (
+            source.estimated_duration_minutes
+            if source
+            else freight.estimated_duration_minutes
+        ),
+        "actual_duration_minutes": final.actual_duration_minutes if final else None,
+        "estimated_weight_kg": (
+            source.estimated_weight_kg if source else freight.cargo_weight_kg
+        ),
+        "estimated_volume_m3": (
+            source.estimated_volume_m3 if source else freight.cargo_volume_m3
+        ),
+        "recommended_vehicle_type": (
+            source.recommended_vehicle_type
+            if source
+            else freight.recommended_vehicle_type
+        ),
+        "selected_vehicle_type": (
+            source.selected_vehicle_type if source else freight.selected_vehicle_type
+        ),
+        "actual_vehicle_id": final.actual_vehicle_id if final else freight.actual_vehicle_id,
+        "actual_vehicle_type": final.actual_vehicle_type if final else None,
+        "helpers_count": source.helpers_count if source else freight.requires_helpers,
+        "urgent": source.urgent if source else freight.is_urgent,
+        "estimated_customer_price": (
+            source.estimated_customer_price if source else freight.estimated_price
+        ),
+        "accepted_customer_price": source.accepted_customer_price if source else None,
+        "final_customer_price": (
+            final.final_customer_price if final else freight.final_price
+        ),
+        "estimated_driver_earnings": (
+            source.estimated_driver_earnings if source else freight.driver_receives
+        ),
+        "final_driver_earnings": final.final_driver_earnings if final else None,
+        "estimated_platform_fee": (
+            source.estimated_platform_fee if source else freight.platform_fee
+        ),
+        "final_platform_fee": final.final_platform_fee if final else None,
+        "price_adjustment_amount": (
+            final.price_adjustment_amount if final else None
+        ),
+        "price_adjustment_reason": (
+            final.price_adjustment_reason if final else None
+        ),
+        "customer_confirmed_at": _datetime_or_none(freight.customer_confirmed_at),
+        "driver_assigned_at": _datetime_or_none(freight.driver_assigned_at),
+        "driver_accepted_at": _datetime_or_none(freight.driver_accepted_at),
+        "driver_arrived_pickup_at": _datetime_or_none(
+            freight.driver_arrived_pickup_at
+        ),
+        "trip_started_at": _datetime_or_none(freight.trip_started_at),
+        "driver_arrived_destination_at": _datetime_or_none(
+            freight.driver_arrived_destination_at
+        ),
+        "trip_completed_at": _datetime_or_none(freight.trip_completed_at),
+        "cancelled_at": _datetime_or_none(freight.cancelled_at),
+        "completed": freight.status == FreightStatus.completed,
+        "cancelled": freight.status == FreightStatus.cancelled,
+        "status": _status_value(freight.status),
+    }
+
+
 def _documents_snapshot(driver: Driver) -> dict:
     return {
         "license_image": bool(driver.license_image_url),
@@ -202,7 +305,7 @@ def list_users(
     db: Session = Depends(get_db),
     _=Depends(require_role("admin"))
 ):
-    return db.query(User).offset(skip).limit(limit).all()
+    return db.query(User).offset(max(skip, 0)).limit(min(max(limit, 1), 500)).all()
 
 @router.put("/users/{user_id}/suspend")
 def suspend_user(
@@ -374,6 +477,121 @@ def _top_event_entities(
     ]
 
 
+def _usage_insights(db: Session, *, since: datetime, now: datetime) -> dict:
+    active_since = now - timedelta(minutes=2)
+    active_filter = (
+        User.is_active == True,  # noqa: E712
+        User.last_seen_at.is_not(None),
+        User.last_seen_at >= active_since,
+    )
+    active_now = db.query(func.count(User.id)).filter(*active_filter).scalar() or 0
+    active_role_rows = (
+        db.query(User.role, func.count(User.id))
+        .filter(*active_filter)
+        .group_by(User.role)
+        .all()
+    )
+    active_users = (
+        db.query(User)
+        .filter(*active_filter)
+        .order_by(User.last_seen_at.desc())
+        .limit(25)
+        .all()
+    )
+    active_by_role = {
+        _status_value(role): count for role, count in active_role_rows
+    }
+
+    login_rows = (
+        db.query(
+            AuditEvent.actor_role,
+            func.count(AuditEvent.id),
+            func.count(func.distinct(AuditEvent.actor_user_id)),
+        )
+        .filter(
+            AuditEvent.event_type == "auth.login_succeeded",
+            AuditEvent.occurred_at >= since,
+        )
+        .group_by(AuditEvent.actor_role)
+        .all()
+    )
+    logins_by_role = [
+        {
+            "role": role or "unknown",
+            "count": count,
+            "unique_users": unique_users,
+        }
+        for role, count, unique_users in login_rows
+    ]
+    logins_today = (
+        db.query(func.count(AuditEvent.id))
+        .filter(
+            AuditEvent.event_type == "auth.login_succeeded",
+            AuditEvent.occurred_at >= now - timedelta(hours=24),
+        )
+        .scalar()
+        or 0
+    )
+
+    screen_stats: dict[str, dict] = {}
+    dwell_events = (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.event_type == "app.screen_dwell",
+            AuditEvent.entity_type == "screen",
+            AuditEvent.occurred_at >= since,
+        )
+        .all()
+    )
+    for event in dwell_events:
+        metadata = event.event_metadata or {}
+        duration = metadata.get("duration_seconds")
+        if not isinstance(duration, int) or isinstance(duration, bool):
+            continue
+        row = screen_stats.setdefault(
+            event.entity_id,
+            {"screen": event.entity_id, "visits": 0, "seconds": 0, "users": set()},
+        )
+        row["visits"] += 1
+        row["seconds"] += duration
+        if event.actor_user_id:
+            row["users"].add(event.actor_user_id)
+
+    top_screens = [
+        {
+            "screen": row["screen"],
+            "visits": row["visits"],
+            "total_seconds": row["seconds"],
+            "average_seconds": round(row["seconds"] / row["visits"]),
+            "unique_users": len(row["users"]),
+        }
+        for row in sorted(
+            screen_stats.values(), key=lambda item: item["seconds"], reverse=True
+        )[:10]
+    ]
+
+    return {
+        "active_window_minutes": 2,
+        "active_now": int(active_now),
+        "active_by_role": active_by_role,
+        "logins_period": sum(row["count"] for row in logins_by_role),
+        "logins_last_24h": int(logins_today),
+        "logins_by_role": logins_by_role,
+        "top_screens_by_time": top_screens,
+        "recent_active_users": [
+            {
+                "user_id": user.id,
+                "full_name": user.full_name,
+                "role": _status_value(user.role),
+                "last_seen_at": _datetime_or_none(user.last_seen_at),
+                "last_seen_screen": user.last_seen_screen,
+                "last_login_at": _datetime_or_none(user.last_login_at),
+            }
+            for user in active_users
+        ],
+    }
+
+
 @router.get("/insights/events")
 def event_insights(
     days: int = 30,
@@ -397,7 +615,7 @@ def event_insights(
         .all()
     )
 
-    return {
+    payload = {
         "period": {
             "days": days,
             "since": since.isoformat(),
@@ -438,7 +656,17 @@ def event_insights(
             entity_type="driver",
             limit=limit,
         ),
+        "product_usage": _usage_insights(db, since=since, now=datetime.now(timezone.utc)),
     }
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="admin_dashboard",
+        entity_id="product_usage",
+        event_type="admin.product_usage_viewed",
+    )
+    db.commit()
+    return payload
 
 
 @router.get("/operations")
@@ -1429,4 +1657,46 @@ def get_metrics(
         "paid_driver_payout_clp":         paid_driver_payout_clp,
         # Compatibilidad: antes esta tarjeta se llamaba "Ingresos".
         "total_revenue_clp":              authorized_payments_clp,
+    }
+
+
+@router.get("/analytics/pricing-dataset")
+def pricing_dataset(
+    limit: int = 500,
+    status: FreightStatus | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    """Return a privacy-aware, one-row-per-freight pricing calibration dataset."""
+    limit = max(1, min(limit, 2_000))
+    query = db.query(FreightRequest).options(
+        selectinload(FreightRequest.pricing_snapshots)
+    )
+    if status:
+        query = query.filter(FreightRequest.status == status)
+    from_dt = _parse_datetime_filter(created_from)
+    to_dt = _parse_datetime_filter(created_to, end_of_day=True)
+    if from_dt:
+        query = query.filter(FreightRequest.created_at >= from_dt)
+    if to_dt:
+        query = query.filter(FreightRequest.created_at < to_dt)
+    freights = (
+        query.order_by(FreightRequest.created_at.desc()).limit(limit).all()
+    )
+    rows = [_pricing_dataset_row(freight) for freight in freights]
+    record_audit_event(
+        db,
+        actor=current_user,
+        entity_type="pricing_dataset",
+        entity_id="export",
+        event_type="admin.pricing_dataset_viewed",
+        metadata={"limit": limit, "status": _status_value(status) if status else None},
+    )
+    db.commit()
+    return {
+        "rows": rows,
+        "count": len(rows),
+        "schema_version": "pricing-dataset-v1",
     }

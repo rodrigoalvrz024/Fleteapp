@@ -19,13 +19,13 @@ def verify_cloud_tasks_request(request: Request) -> dict:
     if not expected_service_account or not expected_audience:
         raise HTTPException(
             status_code=503,
-            detail="Cloud Tasks authentication is not configured",
+            detail="Servicio interno no disponible",
         )
 
     auth_header = request.headers.get("authorization", "")
     scheme, _, token = auth_header.partition(" ")
     if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=401, detail="Missing Cloud Tasks token")
+        raise HTTPException(status_code=401, detail="No autorizado")
 
     try:
         claims = id_token.verify_oauth2_token(
@@ -34,9 +34,9 @@ def verify_cloud_tasks_request(request: Request) -> dict:
             audience=expected_audience,
         )
     except Exception:
-        raise HTTPException(status_code=401, detail="Invalid Cloud Tasks token")
+        raise HTTPException(status_code=401, detail="No autorizado")
 
     caller_email = claims.get("email")
     if caller_email != expected_service_account:
-        raise HTTPException(status_code=403, detail="Invalid Cloud Tasks caller")
+        raise HTTPException(status_code=403, detail="No autorizado")
     return claims

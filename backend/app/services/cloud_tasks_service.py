@@ -91,7 +91,7 @@ def enqueue_freight_driver_notification_task(
         print(f"[cloud-tasks] Notification task already exists for freight {freight_id}")
         return task_name
     if response.status_code >= 400:
-        print(f"[cloud-tasks] Could not enqueue task: {response.text[:500]}")
+        print(f"[cloud-tasks] Could not enqueue task (status={response.status_code})")
         return None
     created = response.json()
     created_name = created.get("name", task_name)

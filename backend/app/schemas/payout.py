@@ -1,16 +1,18 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.driver_payout import DriverPayoutStatus
 
 
 class DriverPayoutUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
     status: DriverPayoutStatus
     scheduled_for: Optional[datetime] = None
-    transfer_reference: Optional[str] = None
-    note: Optional[str] = None
+    transfer_reference: Optional[str] = Field(default=None, max_length=160)
+    note: Optional[str] = Field(default=None, max_length=1000)
 
     @field_validator("transfer_reference", "note")
     def trim_text(cls, value):

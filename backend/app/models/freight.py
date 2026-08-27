@@ -108,6 +108,12 @@ class FreightRequest(Base):
         order_by="FreightPricingSnapshot.captured_at",
     )
     pricing_quotes = relationship("FreightPriceQuote", back_populates="freight")
+    chat_messages = relationship(
+        "FreightChatMessage",
+        back_populates="freight",
+        cascade="all, delete-orphan",
+        order_by="FreightChatMessage.created_at",
+    )
 
     @property
     def has_pickup_photo(self) -> bool:

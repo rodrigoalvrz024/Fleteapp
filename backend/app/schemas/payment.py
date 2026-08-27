@@ -1,10 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 from app.models.payment import PaymentStatus, PaymentMethod
 
 class PaymentCreate(BaseModel):
-    freight_id: int
+    model_config = ConfigDict(extra="forbid")
+
+    freight_id: int = Field(gt=0)
     method: PaymentMethod
 
 class PaymentResponse(BaseModel):

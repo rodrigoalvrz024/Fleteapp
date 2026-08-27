@@ -18,7 +18,7 @@ from app.schemas.driver import (
 )
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
-from app.services.storage_service import upload_driver_document
+from app.services.storage_service import delete_private_document, upload_driver_document
 
 router = APIRouter(prefix="/drivers", tags=["Conductores"])
 
@@ -37,6 +37,15 @@ DOCUMENT_EXPIRY_FIELDS = {
     "circulation_permit": "circulation_permit_expiry",
     "technical_review": "technical_review_expiry",
     "soap": "soap_expiry",
+}
+
+REVIEW_REQUIRED_UPDATE_FIELDS = {
+    "license_number",
+    "license_expiry",
+    "vehicle_doc_expiry",
+    "circulation_permit_expiry",
+    "technical_review_expiry",
+    "soap_expiry",
 }
 
 
@@ -127,6 +136,7 @@ def update_driver(
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
     before_data = {
         "is_available": driver.is_available,
+        "status": driver.status.value if hasattr(driver.status, "value") else str(driver.status),
         "license_number": driver.license_number,
         "license_expiry": driver.license_expiry.isoformat()
         if driver.license_expiry
@@ -134,8 +144,17 @@ def update_driver(
     }
     if data.is_available is True:
         require_driver_can_operate(driver)
-    for field, value in data.model_dump(exclude_none=True).items():
+    update_data = data.model_dump(exclude_none=True)
+    requires_reverification = (
+        driver.status == DriverStatus.approved
+        and any(field in REVIEW_REQUIRED_UPDATE_FIELDS for field in update_data)
+    )
+    for field, value in update_data.items():
         setattr(driver, field, value)
+    if requires_reverification:
+        driver.status = DriverStatus.pending
+        driver.is_available = False
+        driver.submitted_at = None
     driver.last_modified_by = current_user.id
     record_audit_event(
         db,
@@ -144,7 +163,11 @@ def update_driver(
         entity_id=driver.id,
         event_type="driver.updated",
         before_data=before_data,
-        after_data=data.model_dump(exclude_none=True, mode="json"),
+        after_data={
+            **data.model_dump(exclude_none=True, mode="json"),
+            "status": driver.status.value if hasattr(driver.status, "value") else str(driver.status),
+            "reverification_required": requires_reverification,
+        },
         request=request,
     )
     db.commit()
@@ -218,6 +241,7 @@ async def upload_driver_file(
     if not selected_field or not selected_file:
         raise HTTPException(status_code=400, detail="Archivo no recibido")
 
+    previous_ref = getattr(driver, DOCUMENT_FIELDS[selected_field], None)
     url = await upload_driver_document(selected_file, driver.id, selected_field)
     setattr(driver, DOCUMENT_FIELDS[selected_field], url)
     expiry_field = DOCUMENT_EXPIRY_FIELDS.get(selected_field)
@@ -226,6 +250,14 @@ async def upload_driver_file(
     )
     if expiry_field and expiry_value:
         setattr(driver, expiry_field, expiry_value)
+    requires_reverification = (
+        selected_field != "profile_image"
+        and driver.status == DriverStatus.approved
+    )
+    if requires_reverification:
+        driver.status = DriverStatus.pending
+        driver.is_available = False
+        driver.submitted_at = None
     driver.last_modified_by = current_user.id
     record_audit_event(
         db,
@@ -238,10 +270,17 @@ async def upload_driver_file(
             "content_type": selected_file.content_type,
             "expiry_field": expiry_field,
             "expires_at": expiry_value.isoformat() if expiry_value else None,
+            "reverification_required": requires_reverification,
         },
         request=request,
     )
     db.commit()
+
+    if previous_ref and previous_ref != url:
+        try:
+            delete_private_document(previous_ref)
+        except HTTPException:
+            pass
 
     return {"field": selected_field, "url": url}
 

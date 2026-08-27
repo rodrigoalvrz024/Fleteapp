@@ -1,6 +1,9 @@
 import os
 import unittest
 
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
+
 os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost/muvv_test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 

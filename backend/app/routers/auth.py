@@ -3,16 +3,23 @@ import hashlib
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.rate_limit import check_rate_limit
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from app.database import get_db
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User, UserRole
 from app.models.user_consent import UserConsent
 from app.schemas.user import (
+    LegalUpdateAcceptance,
     MessageResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
@@ -26,6 +33,31 @@ from app.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 email_service = EmailService()
+DUMMY_PASSWORD_HASH = hash_password("muvv-invalid-password")
+
+
+def _legal_reacceptance_required(db: Session, user: User) -> bool:
+    current_consents = {
+        consent_type
+        for (consent_type,) in (
+            db.query(UserConsent.consent_type)
+            .filter(
+                UserConsent.user_id == user.id,
+                (
+                    ((UserConsent.consent_type == "terms") & (UserConsent.version == settings.TERMS_VERSION))
+                    | ((UserConsent.consent_type == "privacy") & (UserConsent.version == settings.PRIVACY_VERSION))
+                ),
+            )
+            .all()
+        )
+    }
+    return not {"terms", "privacy"}.issubset(current_consents)
+
+
+def _user_response(db: Session, user: User) -> UserResponse:
+    return UserResponse.model_validate(user).model_copy(
+        update={"legal_reacceptance_required": _legal_reacceptance_required(db, user)}
+    )
 
 
 def _is_expired(expires_at: datetime, now: datetime) -> bool:
@@ -46,6 +78,18 @@ def register(
         max_attempts=8,
         window_seconds=60 * 60,
     )
+    check_rate_limit(
+        request,
+        scope="auth-register-email",
+        identifier=data.email.lower(),
+        max_attempts=3,
+        window_seconds=60 * 60,
+    )
+    if settings.PILOT_MODE and data.email.lower() not in settings.pilot_allowed_emails:
+        raise HTTPException(
+            status_code=403,
+            detail="Este piloto funciona solo con invitacion. Solicita una invitacion al equipo Muvv.",
+        )
     if not data.accepts_terms:
         raise HTTPException(status_code=400, detail="Debes aceptar los Términos y Condiciones")
     if not data.accepts_privacy:
@@ -55,10 +99,16 @@ def register(
             status_code=400,
             detail="Debes autorizar la revisión de documentos de conductor",
         )
-    if db.query(User).filter(User.email == data.email).first():
-        raise HTTPException(status_code=400, detail="El email ya está registrado")
-    if db.query(User).filter(User.phone == data.phone).first():
-        raise HTTPException(status_code=400, detail="El teléfono ya está registrado")
+    existing_user = (
+        db.query(User)
+        .filter((User.email == data.email) | (User.phone == data.phone))
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="No fue posible crear la cuenta. Revisa tus datos o inicia sesion.",
+        )
 
     user = User(
         email=data.email,
@@ -68,7 +118,14 @@ def register(
         role=UserRole(data.role.value),
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No fue posible crear la cuenta. Revisa tus datos o inicia sesion.",
+        )
     db.refresh(user)
 
     _record_registration_consents(db, user, data, request)
@@ -85,7 +142,7 @@ def register(
     db.commit()
 
     token = create_access_token({"sub": str(user.id), "role": user.role})
-    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+    return TokenResponse(access_token=token, user=_user_response(db, user))
 
 
 def _record_registration_consents(
@@ -149,14 +206,100 @@ def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
         max_attempts=8,
         window_seconds=15 * 60,
     )
+    check_rate_limit(
+        request,
+        scope="auth-login-ip",
+        max_attempts=60,
+        window_seconds=15 * 60,
+    )
     user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+    password_is_valid = verify_password(
+        data.password,
+        user.hashed_password if user else DUMMY_PASSWORD_HASH,
+    )
+    if not user or not password_is_valid:
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Cuenta suspendida")
 
+    now = datetime.now(timezone.utc)
+    user.last_login_at = now
+    user.last_seen_at = now
+    user.last_seen_screen = "/auth/login"
+    record_audit_event(
+        db,
+        actor=user,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="auth.login_succeeded",
+        request=request,
+        metadata={"source": "password"},
+    )
+    db.commit()
+
     token = create_access_token({"sub": str(user.id), "role": user.role})
-    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
+    return TokenResponse(access_token=token, user=_user_response(db, user))
+
+
+@router.post("/accept-legal-update", response_model=UserResponse)
+def accept_legal_update(
+    data: LegalUpdateAcceptance,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Record an explicit acceptance when terms or privacy policy are revised."""
+
+    if not data.accepts_terms or not data.accepts_privacy:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes aceptar los Terminos y la Politica de Privacidad",
+        )
+
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    pending = []
+    for consent_type, version in (
+        ("terms", settings.TERMS_VERSION),
+        ("privacy", settings.PRIVACY_VERSION),
+    ):
+        exists = (
+            db.query(UserConsent.id)
+            .filter(
+                UserConsent.user_id == current_user.id,
+                UserConsent.consent_type == consent_type,
+                UserConsent.version == version,
+            )
+            .first()
+        )
+        if not exists:
+            pending.append(
+                UserConsent(
+                    user_id=current_user.id,
+                    consent_type=consent_type,
+                    version=version,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                )
+            )
+    if pending:
+        db.add_all(pending)
+        db.flush()
+        for consent in pending:
+            record_audit_event(
+                db,
+                actor=current_user,
+                entity_type="user_consent",
+                entity_id=consent.id,
+                event_type=f"legal.{consent.consent_type}_reaccepted",
+                after_data={
+                    "consent_type": consent.consent_type,
+                    "version": consent.version,
+                },
+                request=request,
+            )
+        db.commit()
+    return _user_response(db, current_user)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
@@ -204,8 +347,8 @@ def forgot_password(
     reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/#/reset-password?token={raw_token}"
     try:
         email_service.send_password_reset(user.email, reset_url)
-    except Exception as exc:
-        print(f"[password-reset] Email send failed for user {user.id}: {exc}")
+    except Exception:
+        print("[password-reset] Email delivery failed")
 
     return MessageResponse(message=generic)
 
@@ -249,6 +392,16 @@ def reset_password(
 
     user.hashed_password = hash_password(data.new_password)
     reset_token.used_at = now
+    user.last_modified_by = user.id
+    record_audit_event(
+        db,
+        actor=user,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="user.password_reset",
+        after_data={"reset_at": now.isoformat()},
+        request=request,
+    )
     db.commit()
 
     return MessageResponse(message="Contraseña actualizada correctamente.")

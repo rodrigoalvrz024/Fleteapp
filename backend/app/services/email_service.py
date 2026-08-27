@@ -6,10 +6,7 @@ from app.core.config import settings
 class EmailService:
     def send_password_reset(self, email: str, reset_url: str) -> None:
         if not settings.RESEND_API_KEY:
-            if settings.ALLOW_PASSWORD_RESET_LINK_LOGS:
-                print(f"[password-reset] Reset link for {email}: {reset_url}")
-            else:
-                print("[password-reset] RESEND_API_KEY missing; email not sent")
+            print("[password-reset] Email provider is not configured")
             return
 
         response = requests.post(

@@ -1,5 +1,8 @@
 import os
 import unittest
+
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException

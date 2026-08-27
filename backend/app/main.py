@@ -3,6 +3,8 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 from app.database import engine, Base, SessionLocal
 from app.db_migrations import run_startup_migrations
@@ -11,6 +13,7 @@ from app.routers import (
     admin,
     analytics,
     auth,
+    chat,
     drivers,
     freights,
     internal_tasks,
@@ -135,6 +138,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(drivers.router)
 app.include_router(freights.router)
+app.include_router(chat.router)
 app.include_router(internal_tasks.router)
 app.include_router(payments.router)
 app.include_router(payouts.router)
@@ -150,4 +154,17 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    # Railway uses this endpoint before routing traffic to a new deployment.
+    # A live API without its database is not ready to serve the application.
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable"},
+            headers={"Cache-Control": "no-store"},
+        )
+    finally:
+        db.close()
+    return {"status": "healthy", "pilot_mode": settings.PILOT_MODE}

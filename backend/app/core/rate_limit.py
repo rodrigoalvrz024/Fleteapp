@@ -10,7 +10,9 @@ _BUCKETS: dict[str, deque[float]] = defaultdict(deque)
 def _client_ip(request: Request) -> str:
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
-        return forwarded_for.split(",", 1)[0].strip()
+        # Proxies append their verified client address to the right. Reading the
+        # first value lets a caller bypass limits by supplying its own header.
+        return forwarded_for.rsplit(",", 1)[-1].strip()
     return request.client.host if request.client else "unknown"
 
 

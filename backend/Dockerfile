@@ -9,8 +9,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY alembic ./alembic
-COPY alembic.ini .
+RUN addgroup --system app && adduser --system --ingroup app app
+
+COPY --chown=app:app app ./app
+COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app alembic.ini .
+
+USER app
 
 CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

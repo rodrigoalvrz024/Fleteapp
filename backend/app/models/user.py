@@ -23,6 +23,11 @@ class User(Base):
     fcm_token = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    # Presence data is operational metadata only. We deliberately keep a
+    # normalized route here, never a raw URL, message, location, or token.
+    last_login_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_seen_screen = Column(String(120), nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     last_modified_by = Column(Integer, nullable=True)
 

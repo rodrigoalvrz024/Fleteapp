@@ -137,6 +137,11 @@ class EvidenceViewResponse(BaseModel):
     expires_at: datetime
 
 
+class FreightDeclineResponse(BaseModel):
+    freight_id: int
+    declined: bool
+
+
 class FreightDriverVehicleSummary(BaseModel):
     type: Optional[str] = None
     brand: Optional[str] = None

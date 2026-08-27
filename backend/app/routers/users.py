@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.data_privacy_request import (
@@ -6,6 +7,7 @@ from app.models.data_privacy_request import (
     DataPrivacyRequestStatus,
 )
 from app.models.user import User
+from app.models.user_consent import UserConsent
 from app.schemas.privacy_request import PrivacyRequestCreate, PrivacyRequestResponse
 from app.schemas.user import UserResponse, UserUpdate
 from app.core.security import get_current_user
@@ -13,6 +15,32 @@ from app.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
 SENSITIVE_AUDIT_FIELDS = {"fcm_token"}
+
+
+def _user_response_with_legal_status(db: Session, user: User) -> UserResponse:
+    from app.core.config import settings
+
+    current_consents = {
+        consent_type
+        for (consent_type,) in (
+            db.query(UserConsent.consent_type)
+            .filter(
+                UserConsent.user_id == user.id,
+                (
+                    ((UserConsent.consent_type == "terms") & (UserConsent.version == settings.TERMS_VERSION))
+                    | ((UserConsent.consent_type == "privacy") & (UserConsent.version == settings.PRIVACY_VERSION))
+                ),
+            )
+            .all()
+        )
+    }
+    return UserResponse.model_validate(user).model_copy(
+        update={
+            "legal_reacceptance_required": not {"terms", "privacy"}.issubset(
+                current_consents
+            )
+        }
+    )
 
 
 def _redact_user_audit_data(data: dict) -> dict:
@@ -23,8 +51,11 @@ def _redact_user_audit_data(data: dict) -> dict:
     return redacted
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _user_response_with_legal_status(db, current_user)
 
 @router.put("/me", response_model=UserResponse)
 def update_me(
@@ -53,9 +84,16 @@ def update_me(
         after_data=_redact_user_audit_data(update_data),
         request=request,
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No fue posible actualizar los datos. Revisa el telefono ingresado.",
+        )
     db.refresh(current_user)
-    return current_user
+    return _user_response_with_legal_status(db, current_user)
 
 
 @router.get("/me/privacy-requests", response_model=list[PrivacyRequestResponse])

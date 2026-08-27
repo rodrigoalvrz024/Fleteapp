@@ -16,12 +16,14 @@ from app.core.security import (
 )
 from app.database import SessionLocal, get_db
 from app.models.driver import Driver, DriverStatus
+from app.models.freight_driver_decline import FreightDriverDecline
 from app.models.freight import FreightRequest, FreightStatus, TripStatusHistory
 from app.models.pricing_quote import FreightPriceQuote
 from app.models.user import User, UserRole
 from app.schemas.freight import (
     DeliveryPinResponse,
     EvidenceViewResponse,
+    FreightDeclineResponse,
     FreightCreate,
     FreightCreateResponse,
     FreightResponse,
@@ -35,6 +37,8 @@ from app.services.freight_service import (
     normalize_service_type,
 )
 from app.services.cloud_tasks_service import enqueue_freight_driver_notification_task
+from app.services.chat_connections import freight_chat_connections
+from app.services.chat_service import CHAT_WRITABLE_STATUSES
 from app.services.maps_service import RouteCalculationError
 from app.services.pricing_estimate_service import calculate_pricing_estimate
 from app.services.pricing_history_service import record_pricing_snapshot
@@ -96,6 +100,16 @@ def _require_freight_view_access(
             and freight.driver_id is None
         ):
             require_driver_can_operate(driver)
+            was_declined = (
+                db.query(FreightDriverDecline.id)
+                .filter(
+                    FreightDriverDecline.freight_id == freight.id,
+                    FreightDriverDecline.driver_id == driver.id,
+                )
+                .first()
+            )
+            if was_declined:
+                raise HTTPException(status_code=403, detail="Ya rechazaste este flete")
             return
     raise HTTPException(status_code=403, detail="No tienes permiso para ver este flete")
 
@@ -369,6 +383,12 @@ def list_freights(
                 query = query.filter(
                     FreightRequest.status == FreightStatus.pending,
                     FreightRequest.driver_id == None,
+                    ~db.query(FreightDriverDecline.id)
+                    .filter(
+                        FreightDriverDecline.freight_id == FreightRequest.id,
+                        FreightDriverDecline.driver_id == driver.id,
+                    )
+                    .exists(),
                 )
         else:
             query = query.filter(FreightRequest.driver_id == driver.id) if driver else query.filter(False)
@@ -612,6 +632,16 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=403, detail="Conductor no aprobado")
     require_driver_can_operate(driver)
 
+    if (
+        db.query(FreightDriverDecline.id)
+        .filter(
+            FreightDriverDecline.freight_id == freight_id,
+            FreightDriverDecline.driver_id == driver.id,
+        )
+        .first()
+    ):
+        raise HTTPException(status_code=409, detail="Ya rechazaste este flete")
+
     accepted_at = datetime.now(timezone.utc)
     updated_rows = (
         db.query(FreightRequest)
@@ -676,11 +706,52 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
     db.refresh(freight)
     return freight
 
+
+@router.post("/{freight_id}/decline", response_model=FreightDeclineResponse)
+def decline_freight(
+    freight_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("driver")),
+):
+    driver = _get_driver_for_user(db, current_user)
+    if not driver:
+        raise HTTPException(status_code=403, detail="Perfil de conductor no encontrado")
+    require_driver_can_operate(driver)
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    if freight.status != FreightStatus.pending or freight.driver_id is not None:
+        raise HTTPException(status_code=409, detail="El flete ya no esta disponible")
+
+    already_declined = (
+        db.query(FreightDriverDecline.id)
+        .filter(
+            FreightDriverDecline.freight_id == freight.id,
+            FreightDriverDecline.driver_id == driver.id,
+        )
+        .first()
+    )
+    if not already_declined:
+        db.add(FreightDriverDecline(freight_id=freight.id, driver_id=driver.id))
+        record_audit_event(
+            db,
+            actor=current_user,
+            entity_type="freight",
+            entity_id=freight.id,
+            event_type="freight.declined",
+            request=request,
+            metadata={"driver_profile_id": driver.id},
+        )
+        db.commit()
+    return FreightDeclineResponse(freight_id=freight.id, declined=True)
+
 @router.put("/{freight_id}/status", response_model=FreightResponse)
 def update_status(
     freight_id: int,
     data: FreightStatusUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -799,6 +870,15 @@ def update_status(
         )
     db.commit()
     db.refresh(freight)
+    background_tasks.add_task(
+        freight_chat_connections.broadcast,
+        freight.id,
+        {
+            "type": "status",
+            "status": data.status.value,
+            "is_writable": data.status in CHAT_WRITABLE_STATUSES,
+        },
+    )
     return freight
 
 @router.post("/estimate")
