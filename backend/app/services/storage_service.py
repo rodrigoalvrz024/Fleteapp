@@ -1,5 +1,6 @@
 import io
 import hashlib
+import logging
 import mimetypes
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -13,6 +14,9 @@ from fastapi.responses import StreamingResponse
 from jose import JWTError, jwt
 
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 ALLOWED_UPLOAD_TYPES = {
@@ -289,13 +293,25 @@ def _upload_private_object(object_name: str, content: bytes, content_type: str) 
             content=content,
             timeout=20.0,
         )
-    except httpx.RequestError:
+    except httpx.RequestError as exc:
+        logger.warning(
+            "Supabase Storage upload request failed: bucket=%s object_prefix=%s error_type=%s",
+            settings.DRIVER_DOCUMENTS_BUCKET,
+            object_name.split("/", 1)[0],
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="No fue posible guardar el archivo. Intenta nuevamente.",
         )
     if response.status_code in {200, 201}:
         return
+    logger.warning(
+        "Supabase Storage upload rejected: bucket=%s object_prefix=%s status_code=%s",
+        settings.DRIVER_DOCUMENTS_BUCKET,
+        object_name.split("/", 1)[0],
+        response.status_code,
+    )
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="No fue posible guardar el archivo. Intenta nuevamente.",
