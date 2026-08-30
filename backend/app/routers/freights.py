@@ -371,7 +371,7 @@ async def create_freight(
     db.commit()
     db.refresh(freight)
 
-    if settings.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
+    if settings.firebase_push_configured:
         notification_title = "Nuevo flete disponible"
         notification_body = (
             f"{'URGENTE' if data.is_urgent else 'Programado'} - "

@@ -101,7 +101,7 @@ class SecurityHardeningTests(unittest.TestCase):
         finally:
             settings.PILOT_ALLOWED_EMAILS = original
 
-    def test_production_push_requires_valid_firebase_credentials(self):
+    def test_production_push_skips_delivery_without_valid_firebase_credentials(self):
         production_settings = {
             "APP_ENV": "production",
             "DATABASE_URL": "postgresql://postgres:postgres@localhost/muvv_test",
@@ -110,14 +110,24 @@ class SecurityHardeningTests(unittest.TestCase):
             "PILOT_MODE": False,
             "ENABLE_DRIVER_PUSH_NOTIFICATIONS": True,
         }
-        with self.assertRaises(ValueError):
-            Settings(**production_settings)
+        unconfigured = Settings(**production_settings)
+        self.assertFalse(unconfigured.firebase_push_configured)
 
-        configured = Settings(
+        invalid = Settings(
             **production_settings,
             FIREBASE_CREDENTIALS_JSON='{"client_email":"muvv@example.iam.gserviceaccount.com"}',
         )
-        self.assertTrue(configured.ENABLE_DRIVER_PUSH_NOTIFICATIONS)
+        self.assertFalse(invalid.firebase_push_configured)
+
+        configured = Settings(
+            **production_settings,
+            FIREBASE_CREDENTIALS_JSON=(
+                '{"type":"service_account",'
+                '"client_email":"muvv@example.iam.gserviceaccount.com",'
+                '"private_key":"test"}'
+            ),
+        )
+        self.assertTrue(configured.firebase_push_configured)
 
     def test_freight_input_rejects_out_of_range_coordinates_and_pin(self):
         with self.assertRaises(ValueError):

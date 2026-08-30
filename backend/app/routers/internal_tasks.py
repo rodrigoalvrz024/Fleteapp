@@ -32,7 +32,7 @@ async def notify_drivers_for_freight(
     db: Session = Depends(get_db),
 ):
     verify_cloud_tasks_request(request)
-    if not settings.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
+    if not settings.firebase_push_configured:
         return {"status": "skipped", "reason": "driver_push_notifications_disabled"}
 
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()

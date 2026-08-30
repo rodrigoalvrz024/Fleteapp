@@ -168,19 +168,25 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "PILOT_ALLOWED_EMAILS debe incluir al menos un correo cuando PILOT_MODE esta activo"
                 )
-            if self.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
-                if not self.FIREBASE_CREDENTIALS_JSON.strip():
-                    raise ValueError(
-                        "FIREBASE_CREDENTIALS_JSON es obligatorio cuando las notificaciones push estan activas"
-                    )
-                try:
-                    firebase_credentials = json.loads(self.FIREBASE_CREDENTIALS_JSON)
-                except json.JSONDecodeError as exc:
-                    raise ValueError("FIREBASE_CREDENTIALS_JSON debe ser JSON valido") from exc
-                if not firebase_credentials.get("client_email"):
-                    raise ValueError(
-                        "FIREBASE_CREDENTIALS_JSON debe incluir una cuenta de servicio valida"
-                    )
         return self
+
+    @property
+    def firebase_push_configured(self) -> bool:
+        """Whether Firebase Admin credentials can safely be used for push delivery.
+
+        Push is optional infrastructure. A malformed credential must never make the
+        freight API unavailable; delivery is skipped until a valid secret is set.
+        """
+        if not self.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
+            return False
+        try:
+            credentials = json.loads(self.FIREBASE_CREDENTIALS_JSON)
+        except (TypeError, json.JSONDecodeError):
+            return False
+        return bool(
+            credentials.get("type") == "service_account"
+            and credentials.get("client_email")
+            and credentials.get("private_key")
+        )
 
 settings = Settings()
