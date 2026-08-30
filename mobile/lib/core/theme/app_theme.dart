@@ -4,27 +4,39 @@ import 'package:flutter/services.dart';
 class AppTheme {
   static const String fontFamily = 'Inter';
   // ── Paleta principal ────────────────────────────────────
-  static const Color primary = Color(0xFF3B82F6); // azul moderno
-  static const Color primaryDark = Color(0xFF1D4ED8);
-  static const Color accent = Color(0xFF06B6D4); // cyan
+  static const Color primary = Color(0xFF1463FF); // azul electrico Muvv
+  static const Color primaryDark = Color(0xFF0B43D8);
+  static const Color accent = Color(0xFF15B8F3); // cyan de apoyo
   static const Color urgent = Color(0xFFF97316); // naranja urgente
   static const Color success = Color(0xFF10B981);
   static const Color error = Color(0xFFEF4444);
   static const Color warning = Color(0xFFF59E0B);
 
   // ── Neutros ─────────────────────────────────────────────
-  static const Color midnight = Color(0xFF0F172A); // texto principal
-  static const Color slate600 = Color(0xFF475569);
-  static const Color slate400 = Color(0xFF94A3B8);
-  static const Color slate200 = Color(0xFFE2E8F0);
-  static const Color slate100 = Color(0xFFF1F5F9);
-  static const Color background = Color(0xFFF8FAFC);
+  static const Color midnight = Color(0xFF0A1638); // navy Muvv
+  static const Color slate600 = Color(0xFF56637D);
+  static const Color slate400 = Color(0xFF8B96AB);
+  static const Color slate200 = Color(0xFFE2E6EF);
+  static const Color slate100 = Color(0xFFF4F6FA);
+  static const Color background = Color(0xFFFBFCFF);
   static const Color surface = Color(0xFFFFFFFF);
 
   // ── Alias para compatibilidad con código existente ──────
   static const Color textPrimary = midnight;
   static const Color textSecondary = slate400;
   static const Color secondary = accent;
+
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [Color(0xFF2476FF), Color(0xFF0E54EB)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  static const LinearGradient navyGradient = LinearGradient(
+    colors: [Color(0xFF0A1638), Color(0xFF10245A)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   // ── Status colors ───────────────────────────────────────
   static Color statusColor(String status) => switch (status) {
@@ -92,7 +104,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 52),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 0,
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
         ),
@@ -103,7 +115,7 @@ class AppTheme {
           minimumSize: const Size(double.infinity, 52),
           side: const BorderSide(color: slate200),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
         ),
       ),
@@ -111,19 +123,19 @@ class AppTheme {
         filled: true,
         fillColor: surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: slate200, width: 0.5),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: slate200, width: 0.5),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: error, width: 0.5),
         ),
         contentPadding:
@@ -135,7 +147,7 @@ class AppTheme {
         color: surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: slate200, width: 0.5),
         ),
         margin: EdgeInsets.zero,
@@ -150,7 +162,7 @@ class AppTheme {
 
   // ── Helpers de estilos ──────────────────────────────────
   static BoxDecoration cardDecoration({
-    double radius = 16,
+    double radius = 18,
     Color? borderColor,
   }) =>
       BoxDecoration(
@@ -164,7 +176,7 @@ class AppTheme {
 
   static BoxDecoration urgentDecoration() => BoxDecoration(
         color: surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: urgent.withValues(alpha: 0.4), width: 0.5),
       );
 }

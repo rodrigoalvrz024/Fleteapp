@@ -2,7 +2,7 @@ class ApiConstants {
   // URL de producción Cloud Run. Puedes sobrescribirla con --dart-define=API_BASE_URL=...
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://muvv-api.onrender.com',
+    defaultValue: 'https://muvv-api-production.up.railway.app',
   );
 
   // Locales comentadas
@@ -18,9 +18,12 @@ class ApiConstants {
   static const String driverReg = '/drivers/register';
   static const String driverMe = '/drivers/me';
   static const String driverVehicle = '/drivers/vehicle';
+  static const String driverVehicleCatalog = '/drivers/vehicle-catalog';
   static const String freights = '/freights';
   static const String pricingEstimate = '/pricing/estimate';
   static const String payments = '/payments';
   static const String ratings = '/ratings';
+  static const String feedback = '/feedback';
   static const String analyticsEvents = '/analytics/events';
+  static const String analyticsPresence = '/analytics/presence';
 }

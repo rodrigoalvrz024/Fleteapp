@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,6 +10,9 @@ import '../../services/freight_service.dart';
 import '../../services/payment_service.dart';
 import '../../services/rating_service.dart';
 import '../../widgets/common/status_tracker_widget.dart';
+import '../../widgets/muvv_mobile_ui.dart';
+import '../../widgets/freight_chat_access_button.dart';
+import '../../widgets/trip_feedback_dialog.dart';
 import '../shared/web_layout.dart';
 import 'widgets/freight_widgets.dart';
 
@@ -265,6 +269,21 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     }
   }
 
+  Future<void> _submitStructuredRating() async {
+    setState(() => _actionLoading = true);
+    try {
+      final submitted = await showTripFeedbackDialog(context, widget.freightId);
+      if (submitted) {
+        await _load();
+        _showMessage('Gracias por tu evaluacion.');
+      }
+    } catch (_) {
+      _showMessage('No pudimos guardar la evaluacion.', error: true);
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final freight = _freight;
@@ -304,6 +323,9 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
       title: 'Flete #${freight.id}',
       subtitle: 'Seguimiento operativo, ruta, carga y precio',
       actions: const [WebAppBarActions(homePath: '/app/client')],
+      bottomNavigationBar: const MuvvBottomNavigation(
+        selected: MuvvNavigationSection.activity,
+      ),
       child: WebPageBody(
         onRefresh: _load,
         children: [
@@ -316,7 +338,10 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
           StatusTrackerWidget(currentStatus: freight.status),
           if (freight.driverSummary != null) ...[
             const SizedBox(height: 16),
-            _AssignedDriverCard(driver: freight.driverSummary!),
+            _AssignedDriverCard(
+              driver: freight.driverSummary!,
+              freightId: freight.id,
+            ),
           ],
           const SizedBox(height: 16),
           FreightInfoCard(
@@ -536,12 +561,13 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                     icon: const Icon(Icons.lock_outline_rounded),
                     label: const Text('Pagar con Webpay'),
                   ),
-                ] else if (freight.ratingScore == null) ...[
+                ],
+                if (!freight.clientFeedbackSubmitted) ...[
                   const SizedBox(height: 14),
                   FilledButton.icon(
-                    onPressed: _actionLoading ? null : _rateService,
+                    onPressed: _actionLoading ? null : _submitStructuredRating,
                     icon: const Icon(Icons.star_outline_rounded),
-                    label: const Text('Calificar servicio'),
+                    label: const Text('Evaluar servicio'),
                   ),
                 ] else ...[
                   const SizedBox(height: 12),
@@ -577,8 +603,12 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
 
 class _AssignedDriverCard extends StatelessWidget {
   final FreightDriverSummary driver;
+  final int freightId;
 
-  const _AssignedDriverCard({required this.driver});
+  const _AssignedDriverCard({
+    required this.driver,
+    required this.freightId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -600,7 +630,7 @@ class _AssignedDriverCard extends StatelessWidget {
                 height: 54,
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(16),
                   image: driver.profileImageUrl != null &&
                           driver.profileImageUrl!.isNotEmpty
                       ? DecorationImage(
@@ -642,8 +672,7 @@ class _AssignedDriverCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (driver.isVerified)
-                          const _DriverVerifiedBadge(),
+                        if (driver.isVerified) const _DriverVerifiedBadge(),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -704,6 +733,11 @@ class _AssignedDriverCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          FreightChatAccessButton(
+            freightId: freightId,
+            label: 'Coordinar con conductor',
           ),
         ],
       ),

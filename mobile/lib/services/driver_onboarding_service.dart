@@ -49,6 +49,17 @@ class DriverOnboardingService {
     return getMyDriver();
   }
 
+  Future<List<VehicleCatalogItem>> listVehicleCatalog() async {
+    final res = await _api.get(ApiConstants.driverVehicleCatalog);
+    final items = res.data['items'] as List? ?? const [];
+    return items
+        .map((item) => VehicleCatalogItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ))
+        .where((item) => item.catalogId.isNotEmpty)
+        .toList();
+  }
+
   Future<DriverModel> submitForReview() async {
     final res = await _api.put('${ApiConstants.driverMe}/submit');
     return DriverModel.fromJson(res.data);

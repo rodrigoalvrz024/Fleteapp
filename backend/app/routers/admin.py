@@ -19,6 +19,7 @@ from app.models.driver_review_audit import DriverReviewAudit
 from app.models.user import User
 from app.models.user_consent import UserConsent
 from app.models.driver import Driver, DriverStatus
+from app.models.vehicle import Vehicle
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.pricing_snapshot import FreightPricingSnapshot
 from app.models.payment import Payment, PaymentStatus
@@ -47,6 +48,13 @@ class DeleteDocumentsBody(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class VehicleReviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    action: str = Field(pattern="^(approved|rejected)$")
+    reason: str | None = Field(default=None, max_length=500)
 
 DOCUMENT_FIELDS = {
     "license_image": "license_image_url",
@@ -1284,14 +1292,21 @@ def list_drivers(
             "rejection_reason":   getattr(d, "rejection_reason", None),
             "vehicles":           [
                 {
-                    "id":    d.vehicle.id,
-                    "brand": d.vehicle.brand,
-                    "model": d.vehicle.model,
-                    "year":  d.vehicle.year,
-                    "plate": d.vehicle.plate,
-                    "color": d.vehicle.color,
+                    "id": vehicle.id,
+                    "catalog_id": vehicle.catalog_id,
+                    "brand": vehicle.brand,
+                    "model": vehicle.model,
+                    "year": vehicle.year,
+                    "plate": vehicle.plate,
+                    "color": vehicle.color,
+                    "type": _status_value(vehicle.type),
+                    "approval_status": vehicle.approval_status,
+                    "approval_reason": vehicle.approval_reason,
+                    "reviewed_at": _datetime_or_none(vehicle.reviewed_at),
                 }
-            ] if d.vehicle else [],
+                for vehicle in d.vehicles
+                if vehicle.deleted_at is None
+            ],
             "created_at": str(u.created_at),
         }
         for d, u in driver_rows
@@ -1308,8 +1323,11 @@ def approve_driver(
         Driver.id == driver_id).first()
     if not driver:
         raise HTTPException(404, "Conductor no encontrado")
-    if not driver.vehicle:
-        raise HTTPException(400, "El conductor no tiene vehiculo registrado")
+    active_vehicles = [
+        vehicle for vehicle in driver.vehicles if vehicle.deleted_at is None
+    ]
+    if not active_vehicles:
+        raise HTTPException(400, "Falta registrar al menos un vehiculo")
     if not driver.license_image_url:
         raise HTTPException(400, "Falta licencia de conducir")
     if not (driver.vehicle_doc_url or driver.circulation_permit_url):
@@ -1326,6 +1344,19 @@ def approve_driver(
         raise HTTPException(400, "Falta vencimiento de SOAP")
     status_before = _status_value(driver.status)
     documents_before = _documents_snapshot(driver)
+    approved_vehicle_ids: list[int] = []
+    for vehicle in active_vehicles:
+        if vehicle.approval_status == "pending":
+            vehicle.approval_status = "approved"
+            vehicle.approval_reason = None
+            vehicle.reviewed_by = current_admin.id
+            vehicle.reviewed_at = datetime.now(timezone.utc)
+            vehicle.last_modified_by = current_admin.id
+            approved_vehicle_ids.append(vehicle.id)
+
+    if not any(vehicle.approval_status == "approved" for vehicle in active_vehicles):
+        raise HTTPException(400, "Aprueba al menos un vehiculo antes del conductor")
+
     driver.status           = DriverStatus.approved
     driver.rejection_reason = None
     driver.documents_retention_until = None
@@ -1349,11 +1380,80 @@ def approve_driver(
         after_data={
             "status": DriverStatus.approved.value,
             "documents": _documents_snapshot(driver),
+            "approved_vehicle_ids": approved_vehicle_ids,
         },
         request=request,
     )
     db.commit()
     return {"message": f"Conductor {driver_id} aprobado"}
+
+
+@router.get("/vehicles")
+def list_vehicles_for_review(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    query = db.query(Vehicle).filter(Vehicle.deleted_at.is_(None))
+    if status:
+        query = query.filter(Vehicle.approval_status == status)
+    return [
+        {
+            "id": vehicle.id,
+            "driver_id": vehicle.driver_id,
+            "catalog_id": vehicle.catalog_id,
+            "brand": vehicle.brand,
+            "model": vehicle.model,
+            "type": _status_value(vehicle.type),
+            "year": vehicle.year,
+            "plate": vehicle.plate,
+            "color": vehicle.color,
+            "max_weight_kg": vehicle.max_weight_kg,
+            "max_volume_m3": vehicle.max_volume_m3,
+            "approval_status": vehicle.approval_status,
+            "approval_reason": vehicle.approval_reason,
+            "reviewed_at": _datetime_or_none(vehicle.reviewed_at),
+        }
+        for vehicle in query.order_by(Vehicle.created_at.desc()).all()
+    ]
+
+
+@router.put("/vehicles/{vehicle_id}/review")
+def review_vehicle(
+    vehicle_id: int,
+    body: VehicleReviewBody,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_role("admin")),
+):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id, Vehicle.deleted_at.is_(None)).first()
+    if not vehicle:
+        raise HTTPException(404, "Vehiculo no encontrado")
+    if body.action == "rejected" and not (body.reason or "").strip():
+        raise HTTPException(400, "Indica un motivo para rechazar el vehiculo")
+
+    previous_status = vehicle.approval_status
+    vehicle.approval_status = body.action
+    vehicle.approval_reason = body.reason.strip() if body.reason else None
+    vehicle.reviewed_by = current_admin.id
+    vehicle.reviewed_at = datetime.now(timezone.utc)
+    vehicle.last_modified_by = current_admin.id
+    record_audit_event(
+        db,
+        actor=current_admin,
+        entity_type="vehicle",
+        entity_id=vehicle.id,
+        event_type=f"vehicle.{body.action}",
+        before_data={"approval_status": previous_status},
+        after_data={
+            "approval_status": vehicle.approval_status,
+            "driver_id": vehicle.driver_id,
+        },
+        reason=vehicle.approval_reason,
+        request=request,
+    )
+    db.commit()
+    return {"message": f"Vehiculo {vehicle_id} {body.action}", "approval_status": vehicle.approval_status}
 
 @router.put("/drivers/{driver_id}/reject")
 def reject_driver(

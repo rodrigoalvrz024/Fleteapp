@@ -10,6 +10,7 @@ import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'firebase_options.dart';
 import 'services/notification_service.dart';
+import 'services/analytics_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -45,16 +46,38 @@ Future<void> _initializeAppServices() async {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     }
     await NotificationService.initialize();
-  } catch (e) {
-    debugPrint('Firebase init error: $e');
+  } catch (_) {
+    debugPrint('Firebase initialization failed');
   }
 }
 
-class MuvvApp extends ConsumerWidget {
+class MuvvApp extends ConsumerStatefulWidget {
   const MuvvApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MuvvApp> createState() => _MuvvAppState();
+}
+
+class _MuvvAppState extends ConsumerState<MuvvApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    unawaited(AnalyticsService().handleLifecycle(state));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'Muvv',

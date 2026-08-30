@@ -67,6 +67,7 @@ async def notify_drivers_for_freight(
             "type": "new_freight",
             "mode": freight.mode,
         },
+        freight=freight,
     )
     record_audit_event(
         db,

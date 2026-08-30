@@ -21,7 +21,7 @@ class FreightStatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: resolvedColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(99),
         border: Border.all(color: resolvedColor.withValues(alpha: 0.22)),
       ),
       child: Text(
@@ -108,7 +108,7 @@ class FreightPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: resolvedColor.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(99),
         border: Border.all(color: resolvedColor.withValues(alpha: 0.16)),
       ),
       child: Text(
@@ -141,7 +141,7 @@ class FreightInfoCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: AppTheme.cardDecoration(radius: 8),
+      decoration: AppTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -247,7 +247,7 @@ class ClientEmptyState extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 color: AppTheme.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Icon(icon, size: 36, color: AppTheme.primary),
             ),

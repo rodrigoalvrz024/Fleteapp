@@ -6,6 +6,7 @@ class UserModel {
   final String role;
   final bool isActive;
   final String? avatarUrl;
+  final bool legalReacceptanceRequired;
 
   UserModel({
     required this.id,
@@ -15,6 +16,7 @@ class UserModel {
     required this.role,
     required this.isActive,
     this.avatarUrl,
+    this.legalReacceptanceRequired = false,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> j) => UserModel(
@@ -25,5 +27,6 @@ class UserModel {
         role: j['role'],
         isActive: j['is_active'],
         avatarUrl: j['avatar_url'],
+        legalReacceptanceRequired: j['legal_reacceptance_required'] == true,
       );
 }

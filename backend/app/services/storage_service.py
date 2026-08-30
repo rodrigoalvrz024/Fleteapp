@@ -53,6 +53,7 @@ HEIF_BRANDS = {
 DOCUMENT_VIEW_PURPOSE = "driver_document_view"
 FREIGHT_EVIDENCE_VIEW_PURPOSE = "freight_evidence_view"
 CHAT_IMAGE_VIEW_PURPOSE = "freight_chat_image_view"
+CARGO_PHOTO_VIEW_PURPOSE = "freight_cargo_photo_view"
 FILE_SIGNATURES = {
     "image/jpeg": (b"\xff\xd8\xff",),
     "image/png": (b"\x89PNG\r\n\x1a\n",),
@@ -405,6 +406,45 @@ async def upload_freight_chat_image(
     )
 
 
+async def upload_staged_freight_cargo_photo(
+    file: UploadFile,
+    client_id: int,
+) -> PrivateImageUpload:
+    """Store a client photo privately until its freight is confirmed."""
+    declared_type = file.content_type or "application/octet-stream"
+    content = await _read_limited_upload(
+        file,
+        _max_freight_evidence_bytes(),
+        f"La foto supera el maximo de {settings.FREIGHT_EVIDENCE_MAX_MB} MB.",
+    )
+    content_type = _detect_upload_type(content, declared_type, file.filename or "")
+    extension = ALLOWED_UPLOAD_TYPES.get(content_type)
+    if not extension or content_type not in ALLOWED_IMAGE_UPLOAD_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato no permitido. Usa JPG, PNG, WEBP, HEIC o HEIF.",
+        )
+
+    _validate_file_signature(content_type, content)
+    content = _strip_image_metadata(content_type, content)
+    _validate_file_signature(content_type, content)
+    object_name = f"freight-drafts/{client_id}/cargo/{uuid4().hex}{extension}"
+    _upload_private_object(object_name, content, content_type)
+    return PrivateImageUpload(
+        reference=object_name,
+        content_type=content_type,
+        size_bytes=len(content),
+    )
+
+
+def is_valid_staged_freight_cargo_ref(reference: str, client_id: int) -> bool:
+    if not reference or is_external_document_ref(reference):
+        return False
+    normalized = _normalize_document_ref(reference)
+    prefix = f"freight-drafts/{client_id}/cargo/"
+    return normalized == reference and normalized.startswith(prefix) and len(normalized) > len(prefix)
+
+
 def create_driver_document_view_token(
     driver_id: int,
     document_type: str,
@@ -487,6 +527,49 @@ def decode_freight_evidence_view_token(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evidencia no disponible",
+        )
+    return payload
+
+
+def create_cargo_photo_view_token(
+    freight_id: int,
+    photo_id: int,
+    photo_ref: str,
+) -> tuple[str, datetime]:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.FREIGHT_EVIDENCE_VIEW_EXPIRE_MINUTES
+    )
+    payload = {
+        "purpose": CARGO_PHOTO_VIEW_PURPOSE,
+        "freight_id": freight_id,
+        "photo_id": photo_id,
+        "photo_ref": photo_ref,
+        "exp": expires_at,
+    }
+    token = jwt.encode(
+        payload,
+        _view_token_key(CARGO_PHOTO_VIEW_PURPOSE),
+        algorithm=settings.ALGORITHM,
+    )
+    return token, expires_at
+
+
+def decode_cargo_photo_view_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            _view_token_key(CARGO_PHOTO_VIEW_PURPOSE),
+            algorithms=[settings.ALGORITHM],
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto no disponible",
+        )
+    if payload.get("purpose") != CARGO_PHOTO_VIEW_PURPOSE:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Foto no disponible",
         )
     return payload
 

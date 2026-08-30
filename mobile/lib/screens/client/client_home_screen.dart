@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -7,11 +9,11 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/place_suggestion.dart';
 import '../../services/places_service.dart';
+import '../../widgets/muvv_mobile_ui.dart';
 import 'package:uuid/uuid.dart';
 
 const String _mapStyle = '''
@@ -66,6 +68,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
   GoogleMapController? _mapCtrl;
   LatLng _currentPos = const LatLng(-33.4489, -70.6693);
   Set<Marker> _markers = {};
+  Set<Circle> _locationHalo = {};
+  bool _locationLoading = true;
   String _currentAddress = 'Obteniendo ubicación...';
 
   final _searchCtrl = TextEditingController();
@@ -79,42 +83,22 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
   String _placesSessionToken = const Uuid().v4();
 
   late DraggableScrollableController _sheetCtrl;
-  double _sheetSize = 0.28;
+  double _sheetSize = 0.44;
   bool _headerVisible = true;
+  String? _selectedService;
+  bool _isInitializingHome = true;
 
   late AnimationController _headerCtrl;
   late Animation<double> _headerFade;
   late Animation<Offset> _headerSlide;
-  late AnimationController _btnCtrl;
-  late Animation<double> _btnScale;
   late AnimationController _sheetEntryCtrl;
   late Animation<double> _sheetEntry;
 
   List<_SavedPlace> _recents = [];
 
-  static const double _snapMin = 0.28;
-  static const double _snapMax = 0.88;
-
-  final List<_SavedPlace> _defaultPlaces = const [
-    _SavedPlace(
-      label: 'Oficina',
-      address: 'Av. Providencia 1234, Providencia',
-      latLng: LatLng(-33.4319, -70.6108),
-      icon: Icons.work_outline_rounded,
-    ),
-    _SavedPlace(
-      label: 'Casa',
-      address: 'Lo Barnechea, Santiago',
-      latLng: LatLng(-33.3516, -70.5150),
-      icon: Icons.home_outlined,
-    ),
-    _SavedPlace(
-      label: 'Bodega',
-      address: 'Pudahuel, Santiago',
-      latLng: LatLng(-33.4430, -70.7575),
-      icon: Icons.warehouse_outlined,
-    ),
-  ];
+  static const double _snapMin = 0.44;
+  static const double _snapMiddle = 0.68;
+  static const double _snapMax = 0.92;
 
   @override
   void initState() {
@@ -129,20 +113,33 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     _headerSlide = Tween<Offset>(begin: Offset.zero, end: const Offset(0, -1))
         .animate(CurvedAnimation(parent: _headerCtrl, curve: Curves.easeInOut));
 
-    _btnCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 130));
-    _btnScale = Tween(begin: 1.0, end: 0.96)
-        .animate(CurvedAnimation(parent: _btnCtrl, curve: Curves.easeOut));
-
     _sheetEntryCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
     _sheetEntry =
         CurvedAnimation(parent: _sheetEntryCtrl, curve: Curves.easeOutCubic);
     _sheetEntryCtrl.forward();
 
+    // Start on the compact map-first state even if a previous focused field
+    // causes Flutter to restore the scrollable sheet at a larger snap point.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 220), () {
+        if (mounted && _sheetCtrl.isAttached) {
+          _searchFocus.unfocus();
+          _sheetCtrl.animateTo(
+            _snapMin,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          );
+        }
+        Future<void>.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _isInitializingHome = false;
+        });
+      });
+    });
+
     _searchFocus.addListener(() {
       setState(() => _isSearching = _searchFocus.hasFocus);
-      if (_searchFocus.hasFocus) _expandSheet();
+      if (_searchFocus.hasFocus && !_isInitializingHome) _expandSheet();
     });
 
     _loadRecents();
@@ -154,7 +151,6 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     _sheetCtrl.removeListener(_onSheetChanged);
     _sheetCtrl.dispose();
     _headerCtrl.dispose();
-    _btnCtrl.dispose();
     _sheetEntryCtrl.dispose();
     _searchCtrl.dispose();
     _searchFocus.dispose();
@@ -196,6 +192,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     }
     if (perm == LocationPermission.denied ||
         perm == LocationPermission.deniedForever) {
+      setState(() => _locationLoading = false);
       setState(() => _currentAddress = 'Permiso denegado');
       return;
     }
@@ -204,7 +201,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
           desiredAccuracy: LocationAccuracy.high);
       final ll = LatLng(pos.latitude, pos.longitude);
 
-      const address = 'Mi ubicacion actual';
+      const address = 'Mi ubicación actual';
 
       setState(() {
         _currentPos = ll;
@@ -213,37 +210,56 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
           Marker(
             markerId: const MarkerId('me'),
             position: ll,
-            icon:
-                BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-            infoWindow: InfoWindow(title: address),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+                BitmapDescriptor.hueAzure),
+            infoWindow: const InfoWindow(title: address),
           ),
         };
+        _locationHalo = {
+          Circle(
+            circleId: const CircleId('muvv-location-halo'),
+            center: ll,
+            radius: 115,
+            fillColor: AppTheme.primary.withValues(alpha: 0.12),
+            strokeColor: AppTheme.primary.withValues(alpha: 0.25),
+            strokeWidth: 1,
+          ),
+        };
+        _locationLoading = false;
       });
       await _mapCtrl?.animateCamera(CameraUpdate.newLatLngZoom(ll, 15));
     } catch (_) {
+      setState(() => _locationLoading = false);
       setState(() => _currentAddress = 'No se pudo obtener ubicación');
     }
   }
 
   void _onSheetChanged() {
     final s = _sheetCtrl.size;
-    setState(() => _sheetSize = s);
-    if (s > 0.42 && _headerVisible) {
-      setState(() => _headerVisible = false);
+    final shouldShowHeader = s <= 0.72;
+    final needsSizeUpdate = (_sheetSize - s).abs() > 0.002;
+    final headerChanged = _headerVisible != shouldShowHeader;
+    if (needsSizeUpdate || headerChanged) {
+      setState(() {
+        _sheetSize = s;
+        _headerVisible = shouldShowHeader;
+      });
+    }
+    if (!shouldShowHeader && headerChanged) {
       _headerCtrl.forward();
-    } else if (s <= 0.42 && !_headerVisible) {
-      setState(() => _headerVisible = true);
+    } else if (shouldShowHeader && headerChanged) {
       _headerCtrl.reverse();
     }
   }
 
-  void _expandSheet() => _sheetCtrl.animateTo(0.88,
-      duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+  void _expandSheet() => _sheetCtrl.animateTo(_snapMax,
+      duration: const Duration(milliseconds: 360), curve: Curves.easeOutCubic);
 
   void _collapseSheet() {
     _searchFocus.unfocus();
     _sheetCtrl.animateTo(_snapMin,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic);
   }
 
   void _goToMyLocation() {
@@ -258,6 +274,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     String originAddress = '',
     double? originLat,
     double? originLng,
+    bool urgent = false,
   }) {
     HapticFeedback.mediumImpact();
     final uri = Uri(
@@ -269,10 +286,20 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
         if (originAddress.isNotEmpty) 'origin_address': originAddress,
         if (originLat != null) 'origin_lat': originLat.toString(),
         if (originLng != null) 'origin_lng': originLng.toString(),
+        if (_selectedServiceLabel != null) 'service': _selectedServiceLabel!,
+        if (urgent) 'urgent': 'true',
       },
     );
     context.push(uri.toString());
   }
+
+  String? get _selectedServiceLabel => switch (_selectedService) {
+        'package' => 'Paquetería',
+        'moving' => 'Mudanza',
+        'home-office' => 'Hogar u oficina',
+        'urgent' => 'Envío urgente',
+        _ => null,
+      };
 
   void _onSolicitar() {
     final address = _searchCtrl.text.trim();
@@ -281,6 +308,29 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
       originAddress: _currentAddress,
       originLat: _currentPos.latitude,
       originLng: _currentPos.longitude,
+    );
+  }
+
+  void _openOriginFlow() {
+    _navigateToCreate(
+      originAddress: _currentAddress,
+      originLat: _currentPos.latitude,
+      originLng: _currentPos.longitude,
+    );
+  }
+
+  void _selectService(String service) {
+    HapticFeedback.selectionClick();
+    setState(() => _selectedService = service);
+    _searchFocus.requestFocus();
+  }
+
+  void _openUrgentFlow() {
+    _navigateToCreate(
+      originAddress: _currentAddress,
+      originLat: _currentPos.latitude,
+      originLng: _currentPos.longitude,
+      urgent: true,
     );
   }
 
@@ -417,7 +467,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
       builder: (_) => _ProfileMenu(
         onProfile: () {
           Navigator.pop(context);
-          context.push('/app/profile');
+          context.push('/app/client/account');
         },
         onFreights: () {
           Navigator.pop(context);
@@ -425,7 +475,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
         },
         onAddresses: () {
           Navigator.pop(context);
-          context.push('/app/profile');
+          context.push('/app/client/addresses');
         },
         onLogout: () async {
           Navigator.pop(context);
@@ -436,61 +486,52 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
     );
   }
 
-  bool get _isNight {
-    final h = DateTime.now().hour;
-    return h < 8 || h >= 21;
-  }
-
-  List<_SavedPlace> get _displayRecents =>
-      _recents.isEmpty ? _defaultPlaces : _recents;
-
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
     final name = user?.fullName.split(' ').first ?? 'Cliente';
     final size = MediaQuery.of(context).size;
     final desktop = size.width >= 900;
+    final showExpandedContent = _sheetSize >= _snapMiddle - 0.01;
+    final hasSearchQuery = _searchCtrl.text.trim().length >= 3;
+    final showSuggestions = _isSearching && hasSearchQuery;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.background,
         resizeToAvoidBottomInset: false,
+        bottomNavigationBar: desktop
+            ? null
+            : const MuvvBottomNavigation(
+                selected: MuvvNavigationSection.home,
+              ),
         body: Stack(
           children: [
-            // ── Mapa ────────────────────────────────────
             GoogleMap(
-              initialCameraPosition:
-                  CameraPosition(target: _currentPos, zoom: 14),
-              style: _mapStyle,
-              onMapCreated: (c) async {
-                _mapCtrl = c;
+              initialCameraPosition: CameraPosition(
+                target: _currentPos,
+                zoom: 14.5,
+              ),
+              onMapCreated: (controller) {
+                _mapCtrl = controller;
+                _mapCtrl?.setMapStyle(_mapStyle);
               },
-              onCameraMoveStarted: () {
-                if (_isSearching) _searchFocus.unfocus();
-                if (_headerVisible) {
-                  setState(() => _headerVisible = false);
-                  _headerCtrl.forward();
-                }
-              },
-              onCameraIdle: () {
-                if (!_headerVisible && _sheetSize <= 0.42) {
-                  setState(() => _headerVisible = true);
-                  _headerCtrl.reverse();
-                }
+              onTap: (_) {
+                _searchFocus.unfocus();
+                if (_sheetSize > _snapMin) _collapseSheet();
               },
               markers: _markers,
+              circles: _locationHalo,
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
               padding: EdgeInsets.only(
                 left: desktop ? 460 : 0,
-                bottom: desktop ? 0 : size.height * _snapMin,
+                bottom: desktop ? 0 : size.height * _sheetSize,
               ),
             ),
-
-            // ── Header dinámico ──────────────────────────
             Positioned(
               top: 0,
               left: 0,
@@ -502,165 +543,55 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                     opacity: ReverseAnimation(_headerFade),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                      child: Row(children: [
-                        // Saludo y ubicación
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppTheme.slate200,
-                                width: 0.8,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: desktop
-                                ? Row(children: [
-                                    Container(
-                                      width: 26,
-                                      height: 26,
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primary
-                                            .withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Icon(
-                                        Icons.local_shipping_rounded,
-                                        size: 14,
-                                        color: AppTheme.primary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Hola, $name',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppTheme.midnight,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text(
-                                        '· $_currentAddress',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.slate400,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ])
-                                : Row(children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(9),
-                                      child: Image.asset(
-                                        'assets/branding/muvv-app-icon.png',
-                                        width: 28,
-                                        height: 28,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 9),
-                                    const Text(
-                                      'Muvv',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppTheme.midnight,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _currentAddress,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: AppTheme.slate400,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ]),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-
-                        // Botón perfil — único
-                        GestureDetector(
-                          onTap: _showProfileMenu,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: AppTheme.slate200,
-                                width: 0.8,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(Icons.person_outline_rounded,
-                                size: 18, color: AppTheme.midnight),
-                          ),
-                        ),
-                      ]),
+                      child: _MuvvMapHeader(
+                        location: _currentAddress,
+                        isLoading: _locationLoading,
+                        onLocationTap: _openOriginFlow,
+                        onProfileTap: _showProfileMenu,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-
-            // ── Botón mi ubicación ────────────────────────
             AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
               right: 16,
-              bottom: desktop ? 24 : size.height * _sheetSize + 12,
-              child: GestureDetector(
-                onTap: _goToMyLocation,
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.09),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+              bottom: desktop ? 28 : size.height * _sheetSize + 18,
+              child: Semantics(
+                button: true,
+                label: 'Recentrar mi ubicación',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _goToMyLocation,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Ink(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.slate200),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.midnight.withValues(alpha: 0.10),
+                            blurRadius: 18,
+                            offset: const Offset(0, 7),
+                          ),
+                        ],
                       ),
-                    ],
+                      child: const Icon(
+                        Icons.my_location_rounded,
+                        size: 21,
+                        color: AppTheme.primary,
+                      ),
+                    ),
                   ),
-                  child: const Icon(Icons.my_location_rounded,
-                      size: 18, color: AppTheme.primary),
                 ),
               ),
             ),
-
-            // ── Bottom sheet ──────────────────────────────
             SlideTransition(
               position: Tween<Offset>(
                 begin: const Offset(0, 1),
@@ -670,7 +601,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                 alignment:
                     desktop ? Alignment.bottomLeft : Alignment.bottomCenter,
                 child: SizedBox(
-                  width: desktop ? 430 : double.infinity,
+                  width: desktop ? 440 : double.infinity,
                   child: DraggableScrollableSheet(
                     controller: _sheetCtrl,
                     expand: !desktop,
@@ -678,200 +609,168 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                     minChildSize: desktop ? 0.76 : _snapMin,
                     maxChildSize: desktop ? 0.76 : _snapMax,
                     snap: !desktop,
-                    snapSizes:
-                        desktop ? null : const [_snapMin, 0.52, _snapMax],
-                    builder: (ctx, scroll) => DecoratedBox(
+                    snapSizes: desktop
+                        ? null
+                        : const [_snapMin, _snapMiddle, _snapMax],
+                    builder: (context, scrollController) => DecoratedBox(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: desktop
-                            ? BorderRadius.circular(8)
+                            ? const BorderRadius.only(
+                                topRight: Radius.circular(28),
+                              )
                             : const BorderRadius.vertical(
-                                top: Radius.circular(8),
+                                top: Radius.circular(28),
                               ),
-                        border: desktop
-                            ? Border.all(color: AppTheme.slate200, width: 0.8)
-                            : const Border(
-                                top: BorderSide(
-                                  color: AppTheme.slate200,
-                                  width: 0.8,
-                                ),
-                              ),
+                        border: Border.all(
+                          color: AppTheme.slate200.withValues(alpha: 0.9),
+                          width: 0.8,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.10),
-                            blurRadius: 28,
-                            offset: const Offset(0, -6),
+                            color: AppTheme.midnight.withValues(alpha: 0.11),
+                            blurRadius: 30,
+                            offset: const Offset(0, -8),
                           ),
                         ],
                       ),
-                      child: ListView(
-                        controller: scroll,
-                        padding: EdgeInsets.zero,
-                        physics: const ClampingScrollPhysics(),
-                        children: [
-                          // Handle
-                          Center(
-                            child: Container(
-                              margin: const EdgeInsets.only(top: 10, bottom: 4),
-                              width: 38,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFCDD5DF),
-                                borderRadius: BorderRadius.circular(2),
+                      child: ClipRRect(
+                        borderRadius: desktop
+                            ? const BorderRadius.only(
+                                topRight: Radius.circular(28),
+                              )
+                            : const BorderRadius.vertical(
+                                top: Radius.circular(28),
+                              ),
+                        child: ListView(
+                          controller: scrollController,
+                          padding: EdgeInsets.zero,
+                          physics: const ClampingScrollPhysics(),
+                          children: [
+                            Center(
+                              child: Container(
+                                margin:
+                                    const EdgeInsets.only(top: 8, bottom: 5),
+                                width: 38,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.slate200,
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
                               ),
                             ),
-                          ),
-
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (desktop)
-                                  _ClientPanelHeader(
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _MuvvHomePanelHeader(
                                     name: name,
-                                    address: _currentAddress,
-                                    onFreights: () =>
-                                        context.push('/app/client/freights'),
-                                  )
-                                else
-                                  _MobileClientPanelHeader(
-                                    name: name,
-                                    address: _currentAddress,
                                     onFreights: () =>
                                         context.push('/app/client/freights'),
                                   ),
-                                const SizedBox(height: 16),
-
-                                // Input búsqueda
-                                _SearchInput(
-                                  controller: _searchCtrl,
-                                  focusNode: _searchFocus,
-                                  onChanged: _onSearchChanged,
-                                  onClear: () {
-                                    _searchCtrl.clear();
-                                    _onSearchChanged('');
-                                  },
-                                ),
-                                if (_isSearching &&
-                                    _searchCtrl.text.trim().length >= 3) ...[
+                                  const SizedBox(height: 10),
+                                  _MuvvOriginSelector(
+                                    address: _currentAddress,
+                                    isLoading: _locationLoading,
+                                    onTap: _openOriginFlow,
+                                  ),
                                   const SizedBox(height: 8),
-                                  _PlaceSuggestions(
-                                    suggestions: _placeSuggestions,
-                                    isLoading: _loadingSuggestions,
-                                    onSelected: _selectPlaceSuggestion,
-                                  ),
-                                ],
-                                const SizedBox(height: 14),
-
-                                // CTA solicitar flete
-                                ScaleTransition(
-                                  scale: _btnScale,
-                                  child: GestureDetector(
-                                    onTapDown: (_) => _btnCtrl.forward(),
-                                    onTapUp: (_) {
-                                      _btnCtrl.reverse();
-                                      _onSolicitar();
+                                  _MuvvDestinationField(
+                                    controller: _searchCtrl,
+                                    focusNode: _searchFocus,
+                                    onChanged: _onSearchChanged,
+                                    onClear: () {
+                                      _searchCtrl.clear();
+                                      _onSearchChanged('');
                                     },
-                                    onTapCancel: () => _btnCtrl.reverse(),
-                                    child: Container(
-                                      height: 54,
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [
-                                            Color(0xFF4F94F8),
-                                            Color(0xFF2563EB),
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: const Color(0xFF2563EB)
-                                                .withValues(alpha: 0.28),
-                                            blurRadius: 20,
-                                            offset: const Offset(0, 8),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.local_shipping_rounded,
-                                              color: Colors.white, size: 20),
-                                          SizedBox(width: 10),
-                                          Text('Cotizar un flete',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0,
-                                              )),
-                                        ],
+                                  ),
+                                  if (showSuggestions) ...[
+                                    const SizedBox(height: 9),
+                                    _PlaceSuggestions(
+                                      suggestions: _placeSuggestions,
+                                      isLoading: _loadingSuggestions,
+                                      onSelected: _selectPlaceSuggestion,
+                                    ),
+                                  ],
+                                  const SizedBox(height: 10),
+                                  MuvvGradientButton(
+                                    label: _searchCtrl.text.trim().isEmpty
+                                        ? 'Solicitar un flete'
+                                        : 'Calcular precio',
+                                    icon: Icons.local_shipping_rounded,
+                                    onPressed: _onSolicitar,
+                                  ),
+                                  if (!showSuggestions && !showExpandedContent)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: _MuvvCargoPickerPrompt(
+                                        selected: _selectedService,
+                                        onTap: _expandSheet,
                                       ),
                                     ),
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 260),
+                                    curve: Curves.easeOutCubic,
+                                    child: showSuggestions
+                                        ? const SizedBox(height: 18)
+                                        : showExpandedContent
+                                            ? Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  const SizedBox(height: 24),
+                                                  const Text(
+                                                    '¿Qué necesitas mover?',
+                                                    style: TextStyle(
+                                                      color: AppTheme.midnight,
+                                                      fontSize: 17,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  _MuvvServiceGrid(
+                                                    selected: _selectedService,
+                                                    onSelected: _selectService,
+                                                  ),
+                                                  const SizedBox(height: 18),
+                                                  const _MuvvPriceHint(),
+                                                  const SizedBox(height: 14),
+                                                  _MuvvUrgentOption(
+                                                    onTap: _openUrgentFlow,
+                                                  ),
+                                                  if (_recents.isNotEmpty) ...[
+                                                    const SizedBox(height: 26),
+                                                    const Text(
+                                                      'Recientes',
+                                                      style: TextStyle(
+                                                        color:
+                                                            AppTheme.midnight,
+                                                        fontSize: 17,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    ..._recents.map(
+                                                      (place) =>
+                                                          _MuvvRecentPlaceTile(
+                                                        place: place,
+                                                        onTap: () =>
+                                                            _selectPlace(place),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              )
+                                            : const SizedBox(height: 12),
                                   ),
-                                ),
-                                const SizedBox(height: 20),
-
-                                // Banner urgente / nocturno
-                                if (_isNight)
-                                  _InfoRow(
-                                    icon: Icons.nightlight_round,
-                                    color: Colors.deepPurple.shade300,
-                                    bg: const Color(0xFF1E1B4B)
-                                        .withValues(alpha: 0.05),
-                                    border: Colors.deepPurple
-                                        .withValues(alpha: 0.15),
-                                    text: 'Tarifa nocturna · Mínimo \$40.000',
-                                    onTap: _onSolicitar,
-                                  )
-                                else
-                                  _InfoRow(
-                                    icon: Icons.flash_on_rounded,
-                                    color: AppTheme.urgent,
-                                    bg: const Color(0xFFFFF7ED),
-                                    border:
-                                        AppTheme.urgent.withValues(alpha: 0.2),
-                                    text: 'Modo urgente · Mínimo \$30.000',
-                                    onTap: _onSolicitar,
-                                  ),
-                                const SizedBox(height: 22),
-
-                                // Ubicación actual
-                                _LocationCurrentTile(
-                                  address: _currentAddress,
-                                  onTap: () {
-                                    _searchCtrl.text = _currentAddress;
-                                    _mapCtrl?.animateCamera(
-                                      CameraUpdate.newLatLngZoom(
-                                          _currentPos, 15),
-                                    );
-                                    _collapseSheet();
-                                  },
-                                ),
-                                const SizedBox(height: 16),
-
-                                // Recientes
-                                const _Label('Recientes'),
-                                const SizedBox(height: 10),
-                                ..._displayRecents.map((d) => _RecentTile(
-                                      place: d,
-                                      onTap: () => _selectPlace(d),
-                                    )),
-                                const SizedBox(height: 22),
-
-                                // Cómo funciona
-                                const _Label('Cómo funciona'),
-                                const SizedBox(height: 12),
-                                const _HowItWorks(),
-                                const SizedBox(height: 32),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -886,6 +785,748 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
 }
 
 // ── Menú de perfil (bottom sheet) ──────────────────────────
+
+class _MuvvMapHeader extends StatelessWidget {
+  final String location;
+  final bool isLoading;
+  final VoidCallback onLocationTap;
+  final VoidCallback onProfileTap;
+
+  const _MuvvMapHeader({
+    required this.location,
+    required this.isLoading,
+    required this.onLocationTap,
+    required this.onProfileTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.slate200),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.midnight.withValues(alpha: 0.09),
+              blurRadius: 20,
+              offset: const Offset(0, 7),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                'assets/branding/muvv-app-icon.png',
+                width: 34,
+                height: 34,
+              ),
+            ),
+            const SizedBox(width: 9),
+            const Text(
+              'Muvv',
+              style: TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onLocationTap,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          color: AppTheme.primary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Mi ubicación',
+                                style: TextStyle(
+                                  color: AppTheme.slate400,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                isLoading
+                                    ? 'Obteniendo ubicación...'
+                                    : location,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppTheme.slate600,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onProfileTap,
+                borderRadius: BorderRadius.circular(20),
+                child: Ink(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.slate100,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.slate200),
+                  ),
+                  child: const Icon(
+                    Icons.person_outline_rounded,
+                    color: AppTheme.midnight,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _MuvvHomePanelHeader extends StatelessWidget {
+  final String name;
+  final VoidCallback onFreights;
+
+  const _MuvvHomePanelHeader({
+    required this.name,
+    required this.onFreights,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hola, $name',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  '¿Qué necesitas mover hoy?',
+                  style: TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 19,
+                    height: 1.15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Semantics(
+            button: true,
+            label: 'Ver mis fletes',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onFreights,
+                borderRadius: BorderRadius.circular(13),
+                child: Ink(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.09),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long_outlined,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _MuvvOriginSelector extends StatelessWidget {
+  final String address;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _MuvvOriginSelector({
+    required this.address,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withValues(alpha: 0.11),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: const Icon(
+                    Icons.my_location_rounded,
+                    color: AppTheme.success,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Desde',
+                        style: TextStyle(
+                          color: AppTheme.slate400,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isLoading ? 'Obteniendo ubicación...' : address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.slate600,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.edit_location_alt_outlined,
+                  color: AppTheme.slate400,
+                  size: 19,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _MuvvDestinationField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const _MuvvDestinationField({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        textField: true,
+        label: 'Destino del flete',
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.slate200),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.midnight.withValues(alpha: 0.035),
+                blurRadius: 13,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            onChanged: onChanged,
+            textInputAction: TextInputAction.search,
+            style: const TextStyle(
+              color: AppTheme.midnight,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+            decoration: InputDecoration(
+              hintText: '¿A dónde llevamos tu carga?',
+              hintStyle: const TextStyle(
+                color: AppTheme.slate400,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+              prefixIcon: const Icon(
+                Icons.location_on_rounded,
+                color: AppTheme.primary,
+                size: 22,
+              ),
+              suffixIcon: controller.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Limpiar destino',
+                      onPressed: onClear,
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: AppTheme.slate400,
+                      ),
+                    ),
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
+          ),
+        ),
+      );
+}
+
+class _MuvvServiceGrid extends StatelessWidget {
+  final String? selected;
+  final ValueChanged<String> onSelected;
+
+  const _MuvvServiceGrid({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const services = [
+      _MuvvServiceOption(
+        id: 'package',
+        label: 'Paquetería',
+        icon: Icons.inventory_2_outlined,
+      ),
+      _MuvvServiceOption(
+        id: 'moving',
+        label: 'Mudanza',
+        icon: Icons.local_shipping_outlined,
+      ),
+      _MuvvServiceOption(
+        id: 'home-office',
+        label: 'Hogar u oficina',
+        icon: Icons.chair_outlined,
+      ),
+      _MuvvServiceOption(
+        id: 'urgent',
+        label: 'Envío urgente',
+        icon: Icons.bolt_rounded,
+        urgent: true,
+      ),
+    ];
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 2.7,
+      children: [
+        for (final service in services)
+          _MuvvServiceCard(
+            service: service,
+            selected: selected == service.id,
+            onTap: () => onSelected(service.id),
+          ),
+      ],
+    );
+  }
+}
+
+class _MuvvCargoPickerPrompt extends StatelessWidget {
+  final String? selected;
+  final VoidCallback onTap;
+
+  const _MuvvCargoPickerPrompt({
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const icons = [
+      Icons.inventory_2_outlined,
+      Icons.local_shipping_outlined,
+      Icons.chair_outlined,
+      Icons.bolt_rounded,
+    ];
+    final label = switch (selected) {
+      'package' => 'Paquetería',
+      'moving' => 'Mudanza',
+      'home-office' => 'Hogar u oficina',
+      'urgent' => 'Envío urgente',
+      _ => 'Elige el tipo de carga',
+    };
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.slate100,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: AppTheme.slate200),
+          ),
+          child: Row(
+            children: [
+              for (var index = 0; index < icons.length; index++) ...[
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: index == icons.length - 1
+                        ? AppTheme.urgent.withValues(alpha: 0.10)
+                        : AppTheme.primary.withValues(alpha: 0.09),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(
+                    icons[index],
+                    size: 16,
+                    color: index == icons.length - 1
+                        ? AppTheme.urgent
+                        : AppTheme.primary,
+                  ),
+                ),
+                if (index != icons.length - 1) const SizedBox(width: 5),
+              ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.slate600,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.keyboard_arrow_up_rounded,
+                color: AppTheme.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MuvvServiceOption {
+  final String id;
+  final String label;
+  final IconData icon;
+  final bool urgent;
+
+  const _MuvvServiceOption({
+    required this.id,
+    required this.label,
+    required this.icon,
+    this.urgent = false,
+  });
+}
+
+class _MuvvServiceCard extends StatelessWidget {
+  final _MuvvServiceOption service;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _MuvvServiceCard({
+    required this.service,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = service.urgent ? AppTheme.urgent : AppTheme.primary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.10) : Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: selected ? color : AppTheme.slate200,
+              width: selected ? 1.25 : 0.9,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: selected ? 0.16 : 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(service.icon, color: color, size: 17),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  service.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? color : AppTheme.slate600,
+                    fontSize: 11,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MuvvPriceHint extends StatelessWidget {
+  const _MuvvPriceHint();
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.09),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: AppTheme.primary,
+              size: 15,
+            ),
+          ),
+          const SizedBox(width: 9),
+          const Expanded(
+            child: Text(
+              'El precio se calcula automáticamente al completar la solicitud.',
+              style: TextStyle(
+                color: AppTheme.slate600,
+                fontSize: 12,
+                height: 1.3,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _MuvvUrgentOption extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _MuvvUrgentOption({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Ink(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppTheme.urgent.withValues(alpha: 0.20),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.urgent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.bolt_rounded,
+                    color: AppTheme.urgent,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '¿Lo necesitas ahora?',
+                        style: TextStyle(
+                          color: AppTheme.midnight,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Solicita un conductor con prioridad.',
+                        style: TextStyle(
+                          color: AppTheme.slate600,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Ver opción',
+                  style: TextStyle(
+                    color: AppTheme.urgent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _MuvvRecentPlaceTile extends StatelessWidget {
+  final _SavedPlace place;
+  final VoidCallback onTap;
+
+  const _MuvvRecentPlaceTile({
+    required this.place,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppTheme.slate100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    place.icon,
+                    color: AppTheme.slate600,
+                    size: 19,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        place.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.midnight,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        place.address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppTheme.slate400,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.north_east_rounded,
+                  color: AppTheme.slate400,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
 
 class _ProfileMenu extends ConsumerWidget {
   final VoidCallback onProfile;

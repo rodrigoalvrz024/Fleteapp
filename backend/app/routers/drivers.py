@@ -8,7 +8,7 @@ from app.core.security import get_current_user, require_role
 from app.database import get_db
 from app.models.driver import Driver, DriverStatus
 from app.models.user import User, UserRole
-from app.models.vehicle import Vehicle
+from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
 from app.schemas.driver import (
     DriverCreate,
     DriverResponse,
@@ -19,6 +19,8 @@ from app.schemas.driver import (
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
 from app.services.storage_service import delete_private_document, upload_driver_document
+from app.services.freight_matching_service import default_service_types
+from app.services.vehicle_catalog import get_catalog_vehicle, list_vehicle_catalog
 
 router = APIRouter(prefix="/drivers", tags=["Conductores"])
 
@@ -114,7 +116,7 @@ def get_driver_profile(
             if hasattr(driver.status, "value")
             else str(driver.status),
             "is_available": driver.is_available,
-            "has_vehicle": driver.vehicle is not None,
+            "vehicle_count": len(driver.vehicles),
             "rating_average": driver.rating_average,
             "rating_count": driver.rating_count,
             "total_trips": driver.total_trips,
@@ -175,6 +177,14 @@ def update_driver(
     return driver
 
 
+@router.get("/vehicle-catalog")
+def get_vehicle_catalog(
+    _: User = Depends(require_role("driver")),
+):
+    """A reviewed list prevents unsearchable, misspelled vehicle names."""
+    return {"items": list_vehicle_catalog()}
+
+
 @router.post("/vehicle", response_model=VehicleResponse, status_code=201)
 def add_vehicle(
     data: VehicleCreate,
@@ -185,12 +195,23 @@ def add_vehicle(
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
     if not driver:
         raise HTTPException(status_code=404, detail="Primero registrate como conductor")
-    if driver.vehicle:
-        raise HTTPException(status_code=400, detail="Ya tienes un vehiculo registrado")
+    catalog_vehicle = get_catalog_vehicle(data.catalog_id)
+    if not catalog_vehicle:
+        raise HTTPException(status_code=422, detail="Selecciona un vehiculo valido del catalogo")
     vehicle = Vehicle(
         driver_id=driver.id,
         last_modified_by=current_user.id,
-        **data.model_dump(),
+        catalog_id=catalog_vehicle["catalog_id"],
+        type=VehicleType(catalog_vehicle["vehicle_type"]),
+        brand=catalog_vehicle["brand"],
+        model=catalog_vehicle["model"],
+        year=data.year,
+        plate=data.plate,
+        color=data.color,
+        max_weight_kg=data.max_weight_kg,
+        max_volume_m3=data.max_volume_m3,
+        approval_status=VehicleApprovalStatus.pending.value,
+        supported_service_types=default_service_types(catalog_vehicle["vehicle_type"]),
     )
     db.add(vehicle)
     db.flush()
@@ -200,7 +221,14 @@ def add_vehicle(
         entity_type="vehicle",
         entity_id=vehicle.id,
         event_type="vehicle.created",
-        after_data=data.model_dump(mode="json"),
+        after_data={
+            "catalog_id": vehicle.catalog_id,
+            "brand": vehicle.brand,
+            "model": vehicle.model,
+            "type": vehicle.type.value,
+            "plate": vehicle.plate,
+            "approval_status": vehicle.approval_status,
+        },
         request=request,
         metadata={"driver_id": driver.id},
     )
@@ -294,7 +322,7 @@ def submit_driver_for_review(
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
     if not driver:
         raise HTTPException(status_code=404, detail="Perfil de conductor no encontrado")
-    if not driver.vehicle:
+    if not driver.vehicles:
         raise HTTPException(status_code=400, detail="Debes registrar un vehiculo")
     if not driver.license_image_url:
         raise HTTPException(status_code=400, detail="Debes subir tu licencia de conducir")

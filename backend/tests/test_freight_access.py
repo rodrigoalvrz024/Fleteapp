@@ -18,7 +18,7 @@ from app.models.driver import Driver, DriverStatus
 from app.models.freight_driver_decline import FreightDriverDecline
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.user import User, UserRole
-from app.models.vehicle import Vehicle, VehicleType
+from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
 from app.routers.freights import _require_freight_view_access
 
 
@@ -67,6 +67,7 @@ class FreightAccessTests(unittest.TestCase):
             plate="ABCD12",
             color="Blanco",
             max_weight_kg=800,
+            approval_status=VehicleApprovalStatus.approved.value,
         )
         return driver
 

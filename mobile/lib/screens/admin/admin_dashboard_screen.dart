@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/payout_model.dart';
+import '../../models/freight_model.dart';
+import '../../models/chat_message_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/admin_service.dart';
 import '../../utils/file_download.dart';
@@ -39,6 +41,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   List<AdminOperationalAlert> _alerts = [];
   List<AdminLegalConsent> _legalConsents = [];
   List<PayoutModel> _payouts = [];
+  List<FreightModel> _freights = [];
   AdminEventInsights? _insights;
   String _auditEntityType = '';
   String _auditEventType = '';
@@ -108,6 +111,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           occurredFrom: _auditDateParam(_auditFromDate),
           occurredTo: _auditDateParam(_auditToDate),
         ),
+        _service.listFreights(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -121,6 +125,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         _legalConsents = results[7] as List<AdminLegalConsent>;
         _insights = results[8] as AdminEventInsights;
         _auditEvents = results[9] as List<AdminAuditEvent>;
+        _freights = results[10] as List<FreightModel>;
       });
     } catch (_) {
       if (mounted) {
@@ -302,6 +307,25 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           item.entityId,
           item.views,
           item.uniqueAuthenticatedUsers
+        ],
+      [
+        'uso_producto',
+        'usuarios_activos_ahora',
+        insights.productUsage.activeNow,
+        insights.productUsage.activeWindowMinutes
+      ],
+      [
+        'uso_producto',
+        'inicios_sesion_ultimas_24h',
+        insights.productUsage.loginsLast24h,
+        insights.productUsage.loginsPeriod
+      ],
+      for (final screen in insights.productUsage.topScreensByTime)
+        [
+          'tiempo_por_pantalla',
+          screen.screen,
+          screen.totalSeconds,
+          screen.uniqueUsers
         ],
     ];
     return rows.map((row) => row.map(_csvCell).join(',')).join('\r\n');
@@ -516,6 +540,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                             auditCount: _auditEvents.length,
                             insightCount: _insights?.totalEvents ?? 0,
                             legalCount: _legalConsents.length,
+                            freightCount: _freights.length,
                             onChanged: (value) =>
                                 setState(() => _tabIndex = value),
                           ),
@@ -581,8 +606,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               onClearFilters: _clearAuditFilters,
                               onExportCsv: _exportAuditEvents,
                             )
+                          else if (_tabIndex == 6)
+                            _LegalConsentsPanel(consents: _legalConsents)
                           else
-                            _LegalConsentsPanel(consents: _legalConsents),
+                            _AdminFreightsPanel(
+                              freights: _freights,
+                              money: _money,
+                              onReviewChat: _reviewFreightChat,
+                            ),
                         ],
                       ),
                     ),
@@ -591,6 +622,82 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _reviewFreightChat(FreightModel freight) async {
+    final reasonController = TextEditingController(
+      text: 'Revision de cumplimiento por posible desintermediacion.',
+    );
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Revisar conversacion'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Esta consulta es de solo lectura, queda registrada y debe usarse solo para seguridad, soporte o cumplimiento.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: reasonController,
+              minLines: 2,
+              maxLines: 4,
+              maxLength: 600,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Motivo de revision',
+                hintText: 'Describe por que necesitas abrir este chat',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              final value = reasonController.text.trim();
+              if (value.length < 12) return;
+              Navigator.pop(dialogContext, value);
+            },
+            icon: const Icon(Icons.visibility_outlined),
+            label: const Text('Abrir solo lectura'),
+          ),
+        ],
+      ),
+    );
+    reasonController.dispose();
+    if (reason == null || !mounted) return;
+
+    setState(() {
+      _actionLoading = true;
+      _error = null;
+    });
+    try {
+      final review = await _service.reviewFreightChat(
+        freightId: freight.id,
+        reason: reason,
+      );
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => _AdminChatReviewSheet(review: review),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No pudimos abrir la conversacion.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
   }
 }
 
@@ -1811,6 +1918,7 @@ class _TabSelector extends StatelessWidget {
   final int auditCount;
   final int insightCount;
   final int legalCount;
+  final int freightCount;
   final ValueChanged<int> onChanged;
 
   const _TabSelector({
@@ -1822,6 +1930,7 @@ class _TabSelector extends StatelessWidget {
     required this.auditCount,
     required this.insightCount,
     required this.legalCount,
+    required this.freightCount,
     required this.onChanged,
   });
 
@@ -1882,6 +1991,13 @@ class _TabSelector extends StatelessWidget {
               label: 'Legal',
               count: legalCount,
               onTap: () => onChanged(6),
+            ),
+            _TabButton(
+              selected: index == 7,
+              icon: Icons.route_outlined,
+              label: 'Fletes',
+              count: freightCount,
+              onTap: () => onChanged(7),
             ),
           ],
         ),
@@ -1959,6 +2075,467 @@ class _TabButton extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _AdminFreightsPanel extends StatelessWidget {
+  final List<FreightModel> freights;
+  final NumberFormat money;
+  final ValueChanged<FreightModel> onReviewChat;
+
+  const _AdminFreightsPanel({
+    required this.freights,
+    required this.money,
+    required this.onReviewChat,
+  });
+
+  String _money(num? value) => '\$${money.format(value ?? 0)} CLP';
+
+  @override
+  Widget build(BuildContext context) => _DataPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 14, 14, 6),
+              child: _PanelTitle(
+                icon: Icons.route_outlined,
+                title: 'Fletes y seguimiento operativo',
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: Text(
+                '${freights.length} solicitudes visibles para administracion',
+                style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
+              ),
+            ),
+            if (freights.isEmpty)
+              const _InlineEmptyState(
+                icon: Icons.route_outlined,
+                text: 'No hay fletes registrados',
+              )
+            else
+              for (var i = 0; i < freights.length; i++) ...[
+                _AdminFreightRow(
+                  freight: freights[i],
+                  money: _money,
+                  onReviewChat: onReviewChat,
+                ),
+                if (i != freights.length - 1) const Divider(height: 1),
+              ],
+          ],
+        ),
+      );
+}
+
+class _AdminFreightRow extends StatelessWidget {
+  final FreightModel freight;
+  final String Function(num? value) money;
+  final ValueChanged<FreightModel> onReviewChat;
+
+  const _AdminFreightRow({
+    required this.freight,
+    required this.money,
+    required this.onReviewChat,
+  });
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: () => context.go('/app/client/freights/${freight.id}'),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 620;
+              final details = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Flete #${freight.id}',
+                        style: const TextStyle(
+                          color: AppTheme.midnight,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _StatusPill(
+                        label: freight.statusLabel,
+                        color: freight.statusColor,
+                      ),
+                      if (freight.isUrgent == true) ...[
+                        const SizedBox(width: 6),
+                        _StatusPill(label: 'Urgente', color: AppTheme.urgent),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _AdminRouteLine(
+                    icon: Icons.trip_origin_rounded,
+                    color: AppTheme.success,
+                    text: freight.originAddress,
+                  ),
+                  const SizedBox(height: 5),
+                  _AdminRouteLine(
+                    icon: Icons.location_on_rounded,
+                    color: AppTheme.error,
+                    text: freight.destinationAddress,
+                  ),
+                  const SizedBox(height: 9),
+                  Text(
+                    'Cliente #${freight.clientId} · ${freight.driverSummary?.fullName ?? 'Sin conductor asignado'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(color: AppTheme.slate400, fontSize: 11),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: freight.driverId == null
+                        ? null
+                        : () => onReviewChat(freight),
+                    icon: const Icon(Icons.forum_outlined, size: 17),
+                    label: const Text('Revisar chat'),
+                  ),
+                ],
+              );
+              final price = Column(
+                crossAxisAlignment:
+                    compact ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    money(freight.clientPays ?? freight.estimatedPrice),
+                    style: const TextStyle(
+                      color: AppTheme.midnight,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${freight.distanceKm?.toStringAsFixed(1) ?? '-'} km · ${DateFormat('dd/MM HH:mm').format(freight.createdAt.toLocal())}',
+                    style:
+                        const TextStyle(color: AppTheme.slate400, fontSize: 11),
+                  ),
+                ],
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [details, const SizedBox(height: 12), price],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: details),
+                  const SizedBox(width: 18),
+                  price
+                ],
+              );
+            },
+          ),
+        ),
+      );
+}
+
+class _AdminRouteLine extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  const _AdminRouteLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, color: color, size: 15),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppTheme.slate600, fontSize: 12),
+            ),
+          ),
+        ],
+      );
+}
+
+class _AdminChatReviewSheet extends StatelessWidget {
+  final AdminChatReview review;
+
+  const _AdminChatReviewSheet({required this.review});
+
+  @override
+  Widget build(BuildContext context) {
+    final maximumHeight = MediaQuery.sizeOf(context).height * 0.88;
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: maximumHeight,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 12, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.visibility_outlined,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Chat del flete #${review.freightId}',
+                          style: const TextStyle(
+                            color: AppTheme.midnight,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17,
+                          ),
+                        ),
+                        Text(
+                          '${review.clientName} y ${review.driverName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.slate400,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.warning.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_outline_rounded,
+                      color: AppTheme.slate600, size: 17),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Solo lectura. Esta consulta quedo registrada.',
+                      style: TextStyle(
+                        color: AppTheme.slate600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (review.hasMore)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Se muestran los ultimos 200 mensajes de esta conversacion.',
+                  style: TextStyle(color: AppTheme.slate400, fontSize: 11),
+                ),
+              ),
+            Expanded(
+              child: review.messages.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Aun no hay mensajes en este flete.',
+                        style: TextStyle(color: AppTheme.slate400),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                      itemCount: review.messages.length,
+                      itemBuilder: (_, index) => _AdminReviewMessage(
+                        message: review.messages[index],
+                        senderName: review.messages[index].senderUserId ==
+                                review.clientUserId
+                            ? review.clientName
+                            : review.driverName,
+                        fromClient: review.messages[index].senderUserId ==
+                            review.clientUserId,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminReviewMessage extends StatelessWidget {
+  final FreightChatMessage message;
+  final String senderName;
+  final bool fromClient;
+
+  const _AdminReviewMessage({
+    required this.message,
+    required this.senderName,
+    required this.fromClient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = message.attachmentUrl;
+    final hasImage = message.isImage && imageUrl != null;
+    final time = DateFormat('dd/MM HH:mm').format(message.createdAt.toLocal());
+    return Align(
+      alignment: fromClient ? Alignment.centerLeft : Alignment.centerRight,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 360),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: hasImage
+            ? const EdgeInsets.fromLTRB(5, 5, 5, 8)
+            : const EdgeInsets.fromLTRB(12, 9, 12, 8),
+        decoration: BoxDecoration(
+          color: fromClient
+              ? Colors.white
+              : AppTheme.primary.withValues(alpha: 0.09),
+          border: Border.all(color: AppTheme.slate200),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: hasImage
+                  ? const EdgeInsets.fromLTRB(7, 4, 7, 5)
+                  : EdgeInsets.zero,
+              child: Text(
+                senderName,
+                style: const TextStyle(
+                  color: AppTheme.slate600,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (hasImage) _AdminReviewImage(imageUrl: imageUrl),
+            if (message.messageText.trim().isNotEmpty) ...[
+              if (hasImage) const SizedBox(height: 7),
+              Padding(
+                padding: hasImage
+                    ? const EdgeInsets.symmetric(horizontal: 7)
+                    : EdgeInsets.zero,
+                child: Text(
+                  message.messageText,
+                  style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 13,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 5),
+            Padding(
+              padding: hasImage
+                  ? const EdgeInsets.symmetric(horizontal: 7)
+                  : EdgeInsets.zero,
+              child: Text(
+                time,
+                style: const TextStyle(color: AppTheme.slate400, fontSize: 10),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminReviewImage extends StatelessWidget {
+  final String imageUrl;
+
+  const _AdminReviewImage({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: () => _showAdminReviewImage(context, imageUrl),
+        borderRadius: BorderRadius.circular(9),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(9),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                height: 130,
+                width: 200,
+                color: AppTheme.slate100,
+                alignment: Alignment.center,
+                child: const Text(
+                  'La foto ya no esta disponible',
+                  style: TextStyle(color: AppTheme.slate600, fontSize: 12),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+void _showAdminReviewImage(BuildContext context, String imageUrl) {
+  showDialog<void>(
+    context: context,
+    builder: (_) => Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: Stack(
+        children: [
+          Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4,
+              child: Image.network(imageUrl, fit: BoxFit.contain),
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: IconButton.filledTonal(
+                tooltip: 'Cerrar foto',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _CountBadge extends StatelessWidget {
@@ -2683,6 +3260,18 @@ class _InsightSummaryGrid extends StatelessWidget {
         icon: Icons.route_outlined,
         color: AppTheme.urgent,
       ),
+      _MetricData(
+        label: 'Activos ahora',
+        value: '${insights.productUsage.activeNow}',
+        icon: Icons.wifi_tethering_rounded,
+        color: AppTheme.success,
+      ),
+      _MetricData(
+        label: 'Logins ultimas 24 h',
+        value: '${insights.productUsage.loginsLast24h}',
+        icon: Icons.login_rounded,
+        color: AppTheme.midnight,
+      ),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2716,6 +3305,7 @@ class _InsightRankingGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sections = [
+      _ProductUsagePanel(usage: insights.productUsage),
       _InsightEventTypeSection(events: insights.eventsByType),
       _InsightEntitySection(
         title: 'Paginas publicas mas vistas',
@@ -2873,6 +3463,235 @@ class _InsightSectionShell extends StatelessWidget {
             child,
           ],
         ),
+      );
+}
+
+class _ProductUsagePanel extends StatelessWidget {
+  final AdminProductUsage usage;
+
+  const _ProductUsagePanel({required this.usage});
+
+  String _duration(int seconds) {
+    if (seconds < 60) return '$seconds s';
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return remainder == 0 ? '$minutes min' : '$minutes min $remainder s';
+  }
+
+  String _roleLabel(String role) => switch (role) {
+        'admin' => 'Admin',
+        'driver' => 'Conductores',
+        _ => 'Clientes',
+      };
+
+  String _lastSeen(String? value) {
+    if (value == null || value.isEmpty) return 'Sin actividad reciente';
+    try {
+      return DateFormat('HH:mm:ss').format(DateTime.parse(value).toLocal());
+    } catch (_) {
+      return 'Actividad reciente';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roles = usage.activeByRole.entries
+        .where((entry) => entry.value > 0)
+        .map((entry) => '${entry.value} ${_roleLabel(entry.key).toLowerCase()}')
+        .join(' · ');
+    final screens = usage.topScreensByTime.take(5).toList();
+    final users = usage.recentActiveUsers.take(6).toList();
+    return _InsightSectionShell(
+      icon: Icons.monitor_heart_outlined,
+      title: 'Actividad de la app',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _UsageMetric(
+                icon: Icons.circle,
+                color: AppTheme.success,
+                label: 'Activos ahora',
+                value: '${usage.activeNow}',
+              ),
+              _UsageMetric(
+                icon: Icons.login_rounded,
+                color: AppTheme.primary,
+                label: 'Logins 24 h',
+                value: '${usage.loginsLast24h}',
+              ),
+              _UsageMetric(
+                icon: Icons.bar_chart_rounded,
+                color: AppTheme.accent,
+                label: 'Logins periodo',
+                value: '${usage.loginsPeriod}',
+              ),
+            ],
+          ),
+          if (roles.isNotEmpty) ...[
+            const SizedBox(height: 9),
+            Text(
+              'Vistos durante los ultimos ${usage.activeWindowMinutes} min: $roles',
+              style: const TextStyle(color: AppTheme.slate400, fontSize: 11),
+            ),
+          ],
+          const SizedBox(height: 14),
+          const Text(
+            'Pantallas con mayor permanencia',
+            style: TextStyle(
+              color: AppTheme.midnight,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (screens.isEmpty)
+            const _CompactEmpty(text: 'Aun no hay tiempo de pantalla medido')
+          else
+            for (final screen in screens) ...[
+              _ScreenUsageRow(screen: screen, duration: _duration),
+              if (screen != screens.last) const SizedBox(height: 9),
+            ],
+          const SizedBox(height: 14),
+          const Text(
+            'Usuarios activos',
+            style: TextStyle(
+              color: AppTheme.midnight,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (users.isEmpty)
+            const _CompactEmpty(text: 'No hay sesiones activas en este momento')
+          else
+            for (final user in users) ...[
+              _ActiveUserRow(user: user, lastSeen: _lastSeen),
+              if (user != users.last) const Divider(height: 16),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _UsageMetric extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+
+  const _UsageMetric({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 126,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(height: 5),
+            Text(
+              value,
+              style: const TextStyle(
+                color: AppTheme.midnight,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              label,
+              style: const TextStyle(color: AppTheme.slate400, fontSize: 10),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ScreenUsageRow extends StatelessWidget {
+  final AdminScreenUsage screen;
+  final String Function(int seconds) duration;
+
+  const _ScreenUsageRow({required this.screen, required this.duration});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          const Icon(Icons.timer_outlined, size: 16, color: AppTheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              screen.screen,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.slate600,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${duration(screen.totalSeconds)} · ${screen.visits} visitas',
+            style: const TextStyle(color: AppTheme.slate400, fontSize: 10),
+          ),
+        ],
+      );
+}
+
+class _ActiveUserRow extends StatelessWidget {
+  final AdminRecentActiveUser user;
+  final String Function(String? value) lastSeen;
+
+  const _ActiveUserRow({required this.user, required this.lastSeen});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          _Avatar(label: user.fullName, active: true),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  '${user.lastSeenScreen ?? 'Pantalla no informada'} · ${lastSeen(user.lastSeenAt)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(color: AppTheme.slate400, fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _RoleBadge(role: user.role),
+        ],
       );
 }
 
@@ -3166,6 +3985,8 @@ class _AuditFiltersBar extends StatelessWidget {
     'driver': 'Conductores',
     'vehicle': 'Vehiculos',
     'freight': 'Fletes',
+    'screen': 'Pantallas',
+    'admin_dashboard': 'Panel CEO',
     'payment': 'Pagos',
     'driver_payout': 'Liquidaciones',
     'data_privacy_request': 'Privacidad',
@@ -3190,6 +4011,7 @@ class _AuditFiltersBar extends StatelessWidget {
     'freight.created': 'Flete creado',
     'freight.accepted': 'Flete aceptado',
     'freight.status_changed': 'Estado de flete',
+    'freight.chat_review_opened': 'Chat revisado',
     'payment.initiated': 'Pago iniciado',
     'payment.authorized': 'Pago autorizado',
     'driver_payout.created': 'Liquidacion creada',
@@ -3202,7 +4024,13 @@ class _AuditFiltersBar extends StatelessWidget {
     'legal.terms_accepted': 'Terminos aceptados',
     'legal.privacy_accepted': 'Privacidad aceptada',
     'legal.driver_document_verification_accepted': 'Docs conductor aceptados',
+    'legal.terms_reaccepted': 'Terminos actualizados aceptados',
+    'legal.privacy_reaccepted': 'Privacidad actualizada aceptada',
     'system.backend_error': 'Error backend',
+    'auth.login_succeeded': 'Inicio de sesion',
+    'app.screen_view': 'Pantalla abierta',
+    'app.screen_dwell': 'Tiempo en pantalla',
+    'admin.product_usage_viewed': 'Metricas revisadas',
   };
 
   static const _actorOptions = <String, String>{
@@ -4177,7 +5005,6 @@ class _DriverRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final vehicle = driver.vehicles.isNotEmpty ? driver.vehicles.first : null;
     return Padding(
       padding: const EdgeInsets.all(14),
       child: LayoutBuilder(
@@ -4213,7 +5040,15 @@ class _DriverRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              _VehicleLine(vehicle: vehicle),
+              if (driver.vehicles.isEmpty)
+                const _VehicleLine(vehicle: null)
+              else
+                ...driver.vehicles.map(
+                  (vehicle) => Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: _VehicleLine(vehicle: vehicle),
+                  ),
+                ),
               const SizedBox(height: 10),
               _DriverDocuments(driver: driver),
               if (driver.documentsRetentionUntil != null ||

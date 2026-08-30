@@ -46,6 +46,14 @@ class AuthService {
     return UserModel.fromJson(res.data);
   }
 
+  Future<UserModel> acceptLegalUpdate() async {
+    final res = await _api.post('/auth/accept-legal-update', {
+      'accepts_terms': true,
+      'accepts_privacy': true,
+    });
+    return UserModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
   Future<String> forgotPassword(String email) async {
     final res = await _api.post(ApiConstants.forgotPassword, {
       'email': email,

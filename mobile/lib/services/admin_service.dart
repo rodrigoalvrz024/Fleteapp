@@ -1,4 +1,6 @@
 import '../models/payout_model.dart';
+import '../models/freight_model.dart';
+import '../models/chat_message_model.dart';
 import 'api_service.dart';
 
 class AdminMetrics {
@@ -149,6 +151,8 @@ class AdminInsightEventType {
         'public.cta_click' => 'Clicks comerciales',
         'public.audience_click' => 'Clicks por audiencia',
         'app.screen_view' => 'Pantallas app',
+        'app.screen_dwell' => 'Tiempo en pantalla',
+        'auth.login_succeeded' => 'Inicios de sesion exitosos',
         'app.freight_detail_view' => 'Aperturas de flete',
         'app.driver_profile_view' => 'Aperturas perfil conductor',
         'app.driver_available_freight_view' => 'Fletes disponibles vistos',
@@ -159,6 +163,101 @@ class AdminInsightEventType {
         'payment.authorized' => 'Pagos autorizados',
         _ => eventType,
       };
+}
+
+class AdminScreenUsage {
+  final String screen;
+  final int visits;
+  final int totalSeconds;
+  final int averageSeconds;
+  final int uniqueUsers;
+
+  const AdminScreenUsage({
+    required this.screen,
+    required this.visits,
+    required this.totalSeconds,
+    required this.averageSeconds,
+    required this.uniqueUsers,
+  });
+
+  factory AdminScreenUsage.fromJson(Map<String, dynamic> json) =>
+      AdminScreenUsage(
+        screen: json['screen']?.toString() ?? '',
+        visits: (json['visits'] as num?)?.toInt() ?? 0,
+        totalSeconds: (json['total_seconds'] as num?)?.toInt() ?? 0,
+        averageSeconds: (json['average_seconds'] as num?)?.toInt() ?? 0,
+        uniqueUsers: (json['unique_users'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class AdminRecentActiveUser {
+  final int userId;
+  final String fullName;
+  final String role;
+  final String? lastSeenAt;
+  final String? lastSeenScreen;
+  final String? lastLoginAt;
+
+  const AdminRecentActiveUser({
+    required this.userId,
+    required this.fullName,
+    required this.role,
+    this.lastSeenAt,
+    this.lastSeenScreen,
+    this.lastLoginAt,
+  });
+
+  factory AdminRecentActiveUser.fromJson(Map<String, dynamic> json) =>
+      AdminRecentActiveUser(
+        userId: (json['user_id'] as num?)?.toInt() ?? 0,
+        fullName: json['full_name']?.toString() ?? 'Usuario',
+        role: json['role']?.toString() ?? 'client',
+        lastSeenAt: json['last_seen_at']?.toString(),
+        lastSeenScreen: json['last_seen_screen']?.toString(),
+        lastLoginAt: json['last_login_at']?.toString(),
+      );
+}
+
+class AdminProductUsage {
+  final int activeWindowMinutes;
+  final int activeNow;
+  final Map<String, int> activeByRole;
+  final int loginsPeriod;
+  final int loginsLast24h;
+  final List<AdminScreenUsage> topScreensByTime;
+  final List<AdminRecentActiveUser> recentActiveUsers;
+
+  const AdminProductUsage({
+    required this.activeWindowMinutes,
+    required this.activeNow,
+    required this.activeByRole,
+    required this.loginsPeriod,
+    required this.loginsLast24h,
+    required this.topScreensByTime,
+    required this.recentActiveUsers,
+  });
+
+  factory AdminProductUsage.fromJson(Map<String, dynamic> json) {
+    final roles = (json['active_by_role'] as Map<String, dynamic>? ?? {}).map(
+      (key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0),
+    );
+    List<T> list<T>(String key, T Function(Map<String, dynamic>) fromJson) =>
+        ((json[key] ?? []) as List)
+            .whereType<Map>()
+            .map((item) => fromJson(Map<String, dynamic>.from(item)))
+            .toList();
+    return AdminProductUsage(
+      activeWindowMinutes:
+          (json['active_window_minutes'] as num?)?.toInt() ?? 2,
+      activeNow: (json['active_now'] as num?)?.toInt() ?? 0,
+      activeByRole: roles,
+      loginsPeriod: (json['logins_period'] as num?)?.toInt() ?? 0,
+      loginsLast24h: (json['logins_last_24h'] as num?)?.toInt() ?? 0,
+      topScreensByTime: list('top_screens_by_time', AdminScreenUsage.fromJson),
+      recentActiveUsers:
+          list('recent_active_users', AdminRecentActiveUser.fromJson),
+    );
+  }
 }
 
 class AdminInsightEntity {
@@ -189,6 +288,7 @@ class AdminEventInsights {
   final List<AdminInsightEntity> topPublicCtas;
   final List<AdminInsightEntity> topFreightDetailViews;
   final List<AdminInsightEntity> topDriverProfileViews;
+  final AdminProductUsage productUsage;
 
   const AdminEventInsights({
     required this.days,
@@ -198,6 +298,7 @@ class AdminEventInsights {
     required this.topPublicCtas,
     required this.topFreightDetailViews,
     required this.topDriverProfileViews,
+    required this.productUsage,
   });
 
   factory AdminEventInsights.fromJson(Map<String, dynamic> json) {
@@ -219,6 +320,9 @@ class AdminEventInsights {
       topPublicCtas: entityList('top_public_ctas'),
       topFreightDetailViews: entityList('top_freight_detail_views'),
       topDriverProfileViews: entityList('top_driver_profile_views'),
+      productUsage: AdminProductUsage.fromJson(
+        json['product_usage'] as Map<String, dynamic>? ?? {},
+      ),
     );
   }
 
@@ -236,6 +340,7 @@ class AdminEventInsights {
 
   int get appEngagement =>
       countFor('app.screen_view') +
+      countFor('app.screen_dwell') +
       countFor('app.freight_detail_view') +
       countFor('app.driver_profile_view') +
       countFor('app.driver_available_freight_view');
@@ -316,8 +421,7 @@ class AdminOperationsRealtime {
         freightsLast24h: (json['freights_last_24h'] as num?)?.toInt() ?? 0,
         averageFreightsPerMinute60m:
             json['average_freights_per_minute_60m'] ?? 0,
-        averageFreightsPerHour24h:
-            json['average_freights_per_hour_24h'] ?? 0,
+        averageFreightsPerHour24h: json['average_freights_per_hour_24h'] ?? 0,
         activeFreights: (json['active_freights'] as num?)?.toInt() ?? 0,
         pendingFreights: (json['pending_freights'] as num?)?.toInt() ?? 0,
         acceptedFreights: (json['accepted_freights'] as num?)?.toInt() ?? 0,
@@ -330,8 +434,7 @@ class AdminOperationsRealtime {
         pendingDrivers: (json['pending_drivers'] as num?)?.toInt() ?? 0,
         activeClients24h: (json['active_clients_24h'] as num?)?.toInt() ?? 0,
         grossRequested24hClp: json['gross_requested_24h_clp'] ?? 0,
-        platformFeePotential24hClp:
-            json['platform_fee_potential_24h_clp'] ?? 0,
+        platformFeePotential24hClp: json['platform_fee_potential_24h_clp'] ?? 0,
       );
 }
 
@@ -598,6 +701,7 @@ class AdminAuditEvent {
         'freight.created' => 'Flete creado',
         'freight.accepted' => 'Flete aceptado',
         'freight.status_changed' => 'Estado de flete',
+        'freight.chat_review_opened' => 'Chat revisado',
         'payment.initiated' => 'Pago iniciado',
         'payment.authorized' => 'Pago autorizado',
         'driver_payout.created' => 'Liquidacion creada',
@@ -611,6 +715,8 @@ class AdminAuditEvent {
         'legal.privacy_accepted' => 'Privacidad aceptada',
         'legal.driver_document_verification_accepted' =>
           'Revision documentos aceptada',
+        'legal.terms_reaccepted' => 'Terminos actualizados aceptados',
+        'legal.privacy_reaccepted' => 'Privacidad actualizada aceptada',
         'system.backend_error' => 'Error backend',
         _ => eventType,
       };
@@ -734,28 +840,40 @@ class AdminUser {
 
 class AdminVehicle {
   final int id;
+  final String? catalogId;
   final String brand;
   final String model;
   final int year;
   final String plate;
   final String color;
+  final String type;
+  final String approvalStatus;
+  final String? approvalReason;
 
   const AdminVehicle({
     required this.id,
+    this.catalogId,
     required this.brand,
     required this.model,
     required this.year,
     required this.plate,
     required this.color,
+    this.type = 'pickup',
+    this.approvalStatus = 'pending',
+    this.approvalReason,
   });
 
   factory AdminVehicle.fromJson(Map<String, dynamic> json) => AdminVehicle(
         id: json['id'],
+        catalogId: json['catalog_id'],
         brand: json['brand'] ?? '',
         model: json['model'] ?? '',
         year: json['year'] ?? 0,
         plate: json['plate'] ?? '',
         color: json['color'] ?? '',
+        type: json['type'] ?? 'pickup',
+        approvalStatus: json['approval_status'] ?? 'pending',
+        approvalReason: json['approval_reason'],
       );
 }
 
@@ -884,6 +1002,51 @@ class AdminDriverReview {
       };
 }
 
+class AdminChatReview {
+  final int freightId;
+  final String status;
+  final int clientUserId;
+  final int driverUserId;
+  final String clientName;
+  final String driverName;
+  final List<FreightChatMessage> messages;
+  final bool hasMore;
+
+  const AdminChatReview({
+    required this.freightId,
+    required this.status,
+    required this.clientUserId,
+    required this.driverUserId,
+    required this.clientName,
+    required this.driverName,
+    required this.messages,
+    required this.hasMore,
+  });
+
+  factory AdminChatReview.fromJson(Map<String, dynamic> json) {
+    final client = json['client'] is Map
+        ? Map<String, dynamic>.from(json['client'] as Map)
+        : const <String, dynamic>{};
+    final driver = json['driver'] is Map
+        ? Map<String, dynamic>.from(json['driver'] as Map)
+        : const <String, dynamic>{};
+    final rawMessages = json['messages'] as List? ?? const [];
+    return AdminChatReview(
+      freightId: (json['freight_id'] as num).toInt(),
+      status: json['status']?.toString() ?? '',
+      clientUserId: (json['client_user_id'] as num).toInt(),
+      driverUserId: (json['driver_user_id'] as num).toInt(),
+      clientName: client['full_name']?.toString() ?? 'Cliente',
+      driverName: driver['full_name']?.toString() ?? 'Conductor',
+      messages: rawMessages
+          .map((item) => FreightChatMessage.fromJson(
+              Map<String, dynamic>.from(item as Map)))
+          .toList(),
+      hasMore: json['has_more'] == true,
+    );
+  }
+}
+
 class AdminService {
   final _api = ApiService();
 
@@ -931,6 +1094,23 @@ class AdminService {
   Future<AdminOperations> getOperations() async {
     final res = await _api.get('/admin/operations');
     return AdminOperations.fromJson(res.data);
+  }
+
+  Future<List<FreightModel>> listFreights() async {
+    final res = await _api.get('/freights');
+    return (res.data as List)
+        .map((item) => FreightModel.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<AdminChatReview> reviewFreightChat({
+    required int freightId,
+    required String reason,
+  }) async {
+    final res = await _api.post('/freights/$freightId/chat/admin-review', {
+      'reason': reason.trim(),
+    });
+    return AdminChatReview.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<List<AdminUser>> listUsers() async {
@@ -1051,6 +1231,17 @@ class AdminService {
 
   Future<void> approveDriver(int driverId) async {
     await _api.put('/admin/drivers/$driverId/approve');
+  }
+
+  Future<void> reviewVehicle({
+    required int vehicleId,
+    required String action,
+    String? reason,
+  }) async {
+    await _api.put('/admin/vehicles/$vehicleId/review', {
+      'action': action,
+      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+    });
   }
 
   Future<void> rejectDriver(int driverId, String reason) async {

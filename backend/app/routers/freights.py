@@ -17,7 +17,7 @@ from app.core.security import (
 from app.database import SessionLocal, get_db
 from app.models.driver import Driver, DriverStatus
 from app.models.freight_driver_decline import FreightDriverDecline
-from app.models.freight import FreightRequest, FreightStatus, TripStatusHistory
+from app.models.freight import FreightCargoPhoto, FreightRequest, FreightStatus, TripStatusHistory
 from app.models.pricing_quote import FreightPriceQuote
 from app.models.user import User, UserRole
 from app.schemas.freight import (
@@ -26,11 +26,13 @@ from app.schemas.freight import (
     FreightDeclineResponse,
     FreightCreate,
     FreightCreateResponse,
+    FreightAcceptRequest,
     FreightResponse,
     FreightStatusUpdate,
 )
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
+from app.services.freight_matching_service import compatible_vehicles, driver_matches_freight
 from app.services.freight_service import (
     PRICING_VERSION,
     can_transition,
@@ -46,9 +48,13 @@ from app.services.pricing_quote_service import consume_pricing_quote
 from app.services.pricing_service import PricingInputError
 from app.services.storage_service import (
     create_freight_evidence_view_token,
+    create_cargo_photo_view_token,
+    decode_cargo_photo_view_token,
     decode_freight_evidence_view_token,
     delete_private_document,
     stream_private_document,
+    is_valid_staged_freight_cargo_ref,
+    upload_staged_freight_cargo_photo,
     upload_freight_evidence,
 )
 
@@ -59,16 +65,20 @@ EVIDENCE_FIELDS = {
 }
 
 
-async def _notify_available_drivers(title: str, body: str, data: dict) -> None:
+async def _notify_available_drivers(freight_id: int, title: str, body: str, data: dict) -> None:
     from app.services.notification_service import send_notification_to_drivers
 
     db = SessionLocal()
     try:
+        freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+        if not freight:
+            return
         await send_notification_to_drivers(
             db=db,
             title=title,
             body=body,
             data=data,
+            freight=freight,
         )
     except Exception:
         print("[notifications] Could not notify available drivers")
@@ -110,6 +120,8 @@ def _require_freight_view_access(
             )
             if was_declined:
                 raise HTTPException(status_code=403, detail="Ya rechazaste este flete")
+            if not driver_matches_freight(driver, freight):
+                raise HTTPException(status_code=403, detail="Tu vehiculo no es compatible con este flete")
             return
     raise HTTPException(status_code=403, detail="No tienes permiso para ver este flete")
 
@@ -150,6 +162,23 @@ def _require_assigned_driver(
             detail="Solo el conductor asignado puede realizar esta accion",
         )
     return driver
+
+
+def _require_cargo_photo_view_access(
+    freight: FreightRequest,
+    current_user: User,
+) -> None:
+    if current_user.role == UserRole.admin:
+        return
+    if current_user.role == UserRole.client and freight.client_id == current_user.id:
+        return
+    if (
+        current_user.role == UserRole.driver
+        and freight.driver
+        and freight.driver.user_id == current_user.id
+    ):
+        return
+    raise HTTPException(status_code=403, detail="No tienes permiso para ver las fotos de la carga")
 
 @router.post("", response_model=FreightCreateResponse, status_code=201)
 async def create_freight(
@@ -251,6 +280,22 @@ async def create_freight(
     )
     db.add(freight)
     db.flush()
+    for photo_ref in dict.fromkeys(data.cargo_photo_refs):
+        try:
+            valid_ref = is_valid_staged_freight_cargo_ref(photo_ref, current_user.id)
+        except HTTPException:
+            valid_ref = False
+        if not valid_ref:
+            raise HTTPException(status_code=422, detail="Una foto de la carga no es valida")
+        db.add(
+            FreightCargoPhoto(
+                freight_id=freight.id,
+                client_id=current_user.id,
+                object_ref=photo_ref,
+                content_type="image/*",
+                size_bytes=0,
+            )
+        )
     if quote:
         quote.used_at = confirmed_at
         quote.freight_id = freight.id
@@ -291,6 +336,7 @@ async def create_freight(
             "mode": freight.mode,
             "pricing_version": freight.pricing_version,
             "route_provider": freight.route_provider,
+            "cargo_photo_count": len(data.cargo_photo_refs),
         },
         request=request,
     )
@@ -348,11 +394,34 @@ async def create_freight(
         else:
             background_tasks.add_task(
                 _notify_available_drivers,
+                freight.id,
                 title=notification_title,
                 body=notification_body,
                 data=notification_data,
             )
     return freight
+
+
+@router.post("/cargo-photos", status_code=201)
+async def upload_cargo_photo(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_role("client")),
+):
+    """Stage an image before a client confirms a freight."""
+    check_rate_limit(
+        request,
+        scope="freight-cargo-photo-upload",
+        identifier=str(current_user.id),
+        max_attempts=20,
+        window_seconds=60 * 60,
+    )
+    uploaded = await upload_staged_freight_cargo_photo(file, current_user.id)
+    return {
+        "reference": uploaded.reference,
+        "content_type": uploaded.content_type,
+        "size_bytes": uploaded.size_bytes,
+    }
 
 @router.get("", response_model=List[FreightResponse])
 def list_freights(
@@ -364,8 +433,11 @@ def list_freights(
         selectinload(FreightRequest.status_history),
         selectinload(FreightRequest.payment),
         selectinload(FreightRequest.rating),
+        selectinload(FreightRequest.cargo_photos),
+        selectinload(FreightRequest.feedback_entries),
         joinedload(FreightRequest.driver).joinedload(Driver.user),
-        joinedload(FreightRequest.driver).joinedload(Driver.vehicle),
+        joinedload(FreightRequest.driver).selectinload(Driver.vehicles),
+        joinedload(FreightRequest.actual_vehicle),
     )
     if current_user.role == UserRole.client:
         query = query.filter(FreightRequest.client_id == current_user.id)
@@ -394,7 +466,10 @@ def list_freights(
             query = query.filter(FreightRequest.driver_id == driver.id) if driver else query.filter(False)
     if status and status != "available":
         query = query.filter(FreightRequest.status == status)
-    return query.order_by(FreightRequest.created_at.desc()).all()
+    freights = query.order_by(FreightRequest.created_at.desc()).all()
+    if current_user.role == UserRole.driver and status == "available" and driver:
+        return [freight for freight in freights if driver_matches_freight(driver, freight)]
+    return freights
 
 @router.get("/{freight_id}", response_model=FreightResponse)
 def get_freight(
@@ -447,6 +522,60 @@ def get_freight(
         )
     db.commit()
     return freight
+
+
+@router.get("/{freight_id}/cargo-photos")
+def list_cargo_photo_view_urls(
+    freight_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    freight = (
+        db.query(FreightRequest)
+        .options(selectinload(FreightRequest.cargo_photos), joinedload(FreightRequest.driver))
+        .filter(FreightRequest.id == freight_id)
+        .first()
+    )
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_cargo_photo_view_access(freight, current_user)
+    base_url = (
+        settings.PUBLIC_API_URL.rstrip("/")
+        if settings.PUBLIC_API_URL
+        else str(request.base_url).rstrip("/")
+    )
+    photos = []
+    for photo in freight.cargo_photos:
+        token, expires_at = create_cargo_photo_view_token(
+            freight.id,
+            photo.id,
+            photo.object_ref,
+        )
+        photos.append(
+            {
+                "id": photo.id,
+                "url": f"{base_url}/freights/cargo-photos/{token}",
+                "expires_at": expires_at,
+            }
+        )
+    return {"photos": photos}
+
+
+@router.get("/cargo-photos/{token}", response_class=StreamingResponse)
+def view_cargo_photo(token: str, db: Session = Depends(get_db)):
+    payload = decode_cargo_photo_view_token(token)
+    photo = (
+        db.query(FreightCargoPhoto)
+        .filter(
+            FreightCargoPhoto.id == payload.get("photo_id"),
+            FreightCargoPhoto.freight_id == payload.get("freight_id"),
+        )
+        .first()
+    )
+    if not photo or photo.object_ref != payload.get("photo_ref"):
+        raise HTTPException(status_code=404, detail="Foto no disponible")
+    return stream_private_document(photo.object_ref)
 
 
 @router.post("/{freight_id}/delivery-pin", response_model=DeliveryPinResponse)
@@ -626,11 +755,44 @@ def view_evidence(token: str, db: Session = Depends(get_db)):
     return stream_private_document(evidence_ref)
 
 @router.put("/{freight_id}/accept", response_model=FreightResponse)
-def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_role("driver"))):
+def accept_freight(
+    freight_id: int,
+    data: FreightAcceptRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("driver")),
+):
     driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
     if not driver or driver.status != DriverStatus.approved:
         raise HTTPException(status_code=403, detail="Conductor no aprobado")
     require_driver_can_operate(driver)
+
+    freight_candidate = (
+        db.query(FreightRequest)
+        .filter(
+            FreightRequest.id == freight_id,
+            FreightRequest.status == FreightStatus.pending,
+            FreightRequest.driver_id.is_(None),
+        )
+        .first()
+    )
+    if not freight_candidate:
+        raise HTTPException(status_code=400, detail="Flete no disponible")
+    candidates = compatible_vehicles(driver, freight_candidate)
+    if not candidates:
+        raise HTTPException(status_code=403, detail="No tienes un vehiculo aprobado compatible")
+    requested_vehicle_id = data.vehicle_id if data else None
+    if requested_vehicle_id:
+        vehicle = next(
+            (item for item in candidates if item.id == requested_vehicle_id),
+            None,
+        )
+        if not vehicle:
+            raise HTTPException(status_code=403, detail="El vehiculo elegido no es compatible")
+    else:
+        vehicle = min(
+            candidates,
+            key=lambda item: (float(item.max_weight_kg or 0), item.id),
+        )
 
     if (
         db.query(FreightDriverDecline.id)
@@ -655,6 +817,7 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
                 FreightRequest.driver_id: driver.id,
                 FreightRequest.status: FreightStatus.accepted,
                 FreightRequest.accepted_at: accepted_at,
+                FreightRequest.actual_vehicle_id: vehicle.id,
                 FreightRequest.last_modified_by: current_user.id,
             },
             synchronize_session=False,
@@ -665,8 +828,6 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=400, detail="Flete no disponible")
 
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
-    vehicle = driver.vehicle
-    freight.actual_vehicle_id = vehicle.id if vehicle else None
     freight.driver_assigned_at = accepted_at
     freight.driver_accepted_at = accepted_at
     history = TripStatusHistory(freight_id=freight.id, status=FreightStatus.accepted, note=f"Aceptado por conductor {driver.id}")
@@ -688,6 +849,7 @@ def accept_freight(freight_id: int, db: Session = Depends(get_db), current_user:
             "status": FreightStatus.accepted.value,
             "driver_id": driver.id,
             "accepted_at": accepted_at.isoformat(),
+            "actual_vehicle_id": vehicle.id,
         },
         metadata={"driver_profile_id": driver.id},
     )

@@ -7,6 +7,9 @@ import '../../services/freight_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/api_error_message.dart';
 import '../../utils/image_file_picker.dart';
+import '../../widgets/muvv_mobile_ui.dart';
+import '../../widgets/freight_chat_access_button.dart';
+import '../../widgets/trip_feedback_dialog.dart';
 import '../shared/web_layout.dart';
 import 'widgets/driver_app_bar_actions.dart';
 
@@ -23,6 +26,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   FreightModel? _freight;
   bool _loading = true;
   bool _actionLoading = false;
+  List<String> _cargoPhotoUrls = const [];
   static const int _maxEvidenceBytes = 8 * 1024 * 1024;
 
   @override
@@ -34,14 +38,39 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   Future<void> _load() async {
     try {
       final f = await _service.getFreight(widget.freightId);
+      var cargoPhotoUrls = const <String>[];
+      if (f.cargoPhotoCount > 0 && f.status != 'pending') {
+        try {
+          cargoPhotoUrls = await _service.cargoPhotoUrls(widget.freightId);
+        } catch (_) {
+          // The details still render if a short-lived photo link is unavailable.
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _freight = f;
+        _cargoPhotoUrls = cargoPhotoUrls;
         _loading = false;
       });
     } catch (_) {
       setState(() {
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _submitDriverFeedback() async {
+    setState(() => _actionLoading = true);
+    try {
+      final submitted = await showTripFeedbackDialog(context, widget.freightId);
+      if (submitted) {
+        await _load();
+        _showMessage('Gracias por evaluar a tu cliente.');
+      }
+    } catch (_) {
+      _showMessage('No pudimos guardar la evaluacion.', error: true);
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
     }
   }
 
@@ -168,7 +197,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       _showMessage(
         apiErrorMessage(
           e,
-          fallback: 'No pudimos cargar la foto. Detalle: ${e.toString()}',
+          fallback: 'No pudimos cargar la foto. Intenta nuevamente.',
         ),
         error: true,
       );
@@ -270,6 +299,10 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       title: 'Flete #${f.id}',
       subtitle: 'Detalle operativo para conductor',
       actions: const [DriverAppBarActions()],
+      bottomNavigationBar: const MuvvBottomNavigation(
+        selected: MuvvNavigationSection.activity,
+        driver: true,
+      ),
       child: WebPageBody(
         children: [
           Center(
@@ -314,12 +347,33 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
                 color: AppTheme.accent,
                 label: 'Carga',
                 value: f.cargoDescription),
+            if (f.serviceType != null)
+              _Row(
+                icon: Icons.category_outlined,
+                color: AppTheme.primary,
+                label: 'Servicio',
+                value: _serviceTypeLabel(f.serviceType!),
+              ),
             const SizedBox(height: 8),
             _Row(
                 icon: Icons.scale_outlined,
                 color: AppTheme.accent,
                 label: 'Peso',
                 value: '${f.cargoWeightKg} kg'),
+            if (f.cargoPhotoCount > 0) ...[
+              const SizedBox(height: 12),
+              if (f.status == 'pending')
+                _Row(
+                  icon: Icons.photo_library_outlined,
+                  color: AppTheme.primary,
+                  label: 'Fotos de la carga',
+                  value:
+                      '${f.cargoPhotoCount} disponible${f.cargoPhotoCount == 1 ? '' : 's'} al aceptar',
+                )
+              else
+                _CargoPhotoGallery(
+                    urls: _cargoPhotoUrls, count: f.cargoPhotoCount),
+            ],
           ]),
           const SizedBox(height: 12),
           if (f.estimatedPrice != null)
@@ -441,6 +495,30 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
               ],
             ]),
           ],
+          if (f.status == 'completed' && !f.driverFeedbackSubmitted) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _actionLoading ? null : _submitDriverFeedback,
+              icon: const Icon(Icons.rate_review_outlined),
+              label: const Text('Evaluar a este cliente'),
+            ),
+          ] else if (f.status == 'completed') ...[
+            const SizedBox(height: 12),
+            _Card(children: const [
+              Text(
+                'Tu evaluacion del cliente fue enviada.',
+                style: TextStyle(
+                    color: AppTheme.success, fontWeight: FontWeight.w700),
+              ),
+            ]),
+          ],
+          if (f.status == 'accepted' || f.status == 'in_progress') ...[
+            const SizedBox(height: 12),
+            FreightChatAccessButton(
+              freightId: f.id,
+              label: 'Chat con cliente',
+            ),
+          ],
           const SizedBox(height: 24),
           if (_actionLoading)
             const Center(child: CircularProgressIndicator())
@@ -496,6 +574,61 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       ),
     );
   }
+}
+
+String _serviceTypeLabel(String value) => switch (value) {
+      'moving' => 'Mudanza',
+      'home_office' => 'Hogar u oficina',
+      'urgent' => 'Envio urgente',
+      _ => 'Paqueteria',
+    };
+
+class _CargoPhotoGallery extends StatelessWidget {
+  final List<String> urls;
+  final int count;
+
+  const _CargoPhotoGallery({required this.urls, required this.count});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Fotos de la carga ($count)',
+            style: const TextStyle(
+                fontWeight: FontWeight.w700, color: AppTheme.midnight),
+          ),
+          const SizedBox(height: 9),
+          if (urls.isEmpty)
+            const Text('No pudimos cargar las fotos. Intenta actualizar.',
+                style: TextStyle(color: AppTheme.slate600))
+          else
+            SizedBox(
+              height: 104,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: urls.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, index) => ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    urls[index],
+                    width: 132,
+                    height: 104,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 132,
+                      color: AppTheme.slate100,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.broken_image_outlined,
+                          color: AppTheme.slate400),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
 }
 
 class _Card extends StatelessWidget {

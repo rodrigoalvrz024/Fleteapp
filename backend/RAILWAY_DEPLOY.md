@@ -78,6 +78,12 @@ Mantiene vacias las variables de Transbank, Resend y Firebase Admin mientras
 esas integraciones no esten validadas en Railway. No actives Cloud Tasks: es
 una integracion de Google Cloud y no es necesaria para publicar el piloto.
 
+Cuando pruebes notificaciones entre dispositivos, guarda el contenido completo
+del JSON de una cuenta de servicio Firebase en `FIREBASE_CREDENTIALS_JSON` y
+cambia solo `ENABLE_DRIVER_PUSH_NOTIFICATIONS=true`. La aplicacion rechazara
+el despliegue si se habilita push sin una credencial JSON valida; asi evitamos
+creer que las alertas estan activas cuando no pueden enviarse.
+
 ## 3. Primer despliegue y comprobacion
 
 1. Aplica las variables y ejecuta el despliegue inicial desde Railway.

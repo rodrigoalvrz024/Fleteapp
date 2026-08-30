@@ -26,7 +26,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _start();
+    // Let Android paint the first splash frame before starting network work.
+    // Otherwise lower-end devices can advance the animation while the first
+    // Flutter frame is still waiting to be rendered.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _start();
+    });
   }
 
   Future<void> _start() async {
@@ -50,9 +55,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     });
 
     await Future.wait([
-      // The mobile story takes two seconds. The initial reveal work above
-      // consumes about 230 ms, so this keeps the full launch on screen.
-      Future<void>.delayed(const Duration(milliseconds: 1800)),
+      // Keep the complete two-second mobile story visible. On Android this
+      // starts after the first rendered frame, not while Flutter is booting.
+      Future<void>.delayed(const Duration(milliseconds: 2000)),
       authCheck.timeout(
         const Duration(milliseconds: 1800),
         onTimeout: () {},
@@ -66,6 +71,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     // No autenticado → login
     if (!auth.isAuthenticated) {
       context.go('/auth/login');
+      return;
+    }
+
+    if (auth.user?.legalReacceptanceRequired == true) {
+      context.go('/auth/legal-update');
       return;
     }
 

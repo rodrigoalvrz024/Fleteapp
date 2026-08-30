@@ -23,8 +23,7 @@ class LegalDocumentScreen extends StatelessWidget {
         maxWidth: 880,
         children: [
           _Header(
-            title:
-                _isTerms ? 'Terminos de uso muvv' : 'Privacidad muvv',
+            title: _isTerms ? 'Terminos de uso muvv' : 'Privacidad muvv',
             subtitle: _isTerms
                 ? 'Estos terminos regulan el uso de la plataforma.'
                 : 'Este documento explica como cuidamos tus datos.',
@@ -146,6 +145,10 @@ const _termsSections = [
     'Seguridad y responsabilidad',
     'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. muvv puede investigar incidentes y limitar el acceso para proteger la operacion.',
   ),
+  _LegalSection(
+    'Uso del chat de fletes',
+    'El chat se usa para coordinar el servicio dentro de muvv. No debe utilizarse para ofrecer o acordar servicios por fuera de la plataforma. Cuando exista una necesidad concreta de seguridad, soporte, fraude o cumplimiento, personal autorizado puede revisar una conversacion de forma limitada, de solo lectura y con registro de la consulta.',
+  ),
 ];
 
 const _privacySections = [
@@ -155,7 +158,11 @@ const _privacySections = [
   ),
   _LegalSection(
     'Finalidades',
-    'Usamos los datos para crear cuentas, autenticar usuarios, coordinar fletes, calcular rutas y precios, validar conductores, prevenir fraude, entregar soporte y cumplir obligaciones legales.',
+    'Usamos los datos para crear cuentas, autenticar usuarios, coordinar fletes, calcular rutas y precios, validar conductores, prevenir fraude, entregar soporte y cumplir obligaciones legales. Esto puede incluir revisar de forma limitada mensajes y fotos del chat de un flete cuando sea necesario para investigar fraude, incidentes, incumplimientos o intentos de coordinar servicios fuera de muvv.',
+  ),
+  _LegalSection(
+    'Acceso limitado a conversaciones',
+    'Las conversaciones no son publicas ni se usan para publicidad. El acceso excepcional se limita a personal autorizado, es de solo lectura, requiere un motivo y queda registrado. Las fotos compartidas se almacenan de manera privada y se consultan mediante enlaces temporales.',
   ),
   _LegalSection(
     'Documentos de conductor',

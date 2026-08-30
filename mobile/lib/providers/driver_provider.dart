@@ -157,7 +157,8 @@ class DriverNotifier extends StateNotifier<DriverState> {
 
       state = state.copyWith(availableFreights: list);
 
-      // Mostrar alerta solo si hay uno nuevo
+      // Present one available request at a time. Dismissed requests stay hidden
+      // for this online session while the driver reviews the next one.
       if (newOnes.isNotEmpty && state.incomingFreight == null) {
         state = state.copyWith(incomingFreight: newOnes.first);
         _seenFreightIds.add(newOnes.first.id);
@@ -174,9 +175,26 @@ class DriverNotifier extends StateNotifier<DriverState> {
       final freight = await _service.acceptFreight(id);
       state = state.copyWith(
         activeFreight: freight,
+        availableFreights: state.availableFreights
+            .where((candidate) => candidate.id != id)
+            .toList(),
         clearIncoming: true,
       );
       _stopPolling();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> declineFreight(int id) async {
+    try {
+      await _service.declineFreight(id);
+      state = state.copyWith(
+        availableFreights:
+            state.availableFreights.where((freight) => freight.id != id).toList(),
+        clearIncoming: true,
+      );
       return true;
     } catch (_) {
       return false;

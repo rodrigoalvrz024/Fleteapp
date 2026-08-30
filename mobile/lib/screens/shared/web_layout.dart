@@ -11,8 +11,10 @@ class WebPageScaffold extends StatelessWidget {
   final String? subtitle;
   final Widget child;
   final List<Widget> actions;
+  final Widget? leading;
   final Widget? floatingActionButton;
   final FloatingActionButtonLocation? floatingActionButtonLocation;
+  final Widget? bottomNavigationBar;
 
   const WebPageScaffold({
     super.key,
@@ -20,8 +22,10 @@ class WebPageScaffold extends StatelessWidget {
     required this.child,
     this.subtitle,
     this.actions = const [],
+    this.leading,
     this.floatingActionButton,
     this.floatingActionButtonLocation,
+    this.bottomNavigationBar,
   });
 
   @override
@@ -29,6 +33,8 @@ class WebPageScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
+        leading: leading,
+        automaticallyImplyLeading: leading == null,
         titleSpacing: 20,
         title: _AppBarTitle(title: title, subtitle: subtitle),
         actions: actions,
@@ -36,6 +42,7 @@ class WebPageScaffold extends StatelessWidget {
       body: SafeArea(child: child),
       floatingActionButton: floatingActionButton,
       floatingActionButtonLocation: floatingActionButtonLocation,
+      bottomNavigationBar: bottomNavigationBar,
     );
   }
 }

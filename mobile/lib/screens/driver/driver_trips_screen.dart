@@ -9,6 +9,7 @@ import '../../utils/api_error_message.dart';
 import '../client/widgets/freight_widgets.dart';
 import '../shared/web_layout.dart';
 import 'widgets/driver_app_bar_actions.dart';
+import '../../widgets/muvv_mobile_ui.dart';
 
 enum _TripFilter { all, active, completed, cancelled }
 
@@ -83,6 +84,10 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
       title: 'Mis viajes',
       subtitle: 'Historial y pagos',
       actions: const [DriverAppBarActions()],
+      bottomNavigationBar: const MuvvBottomNavigation(
+        selected: MuvvNavigationSection.activity,
+        driver: true,
+      ),
       child: _loading
           ? const WebLoadingState()
           : WebPageBody(

@@ -23,6 +23,7 @@ class FreightService {
     int requiresHelpers = 0,
     bool isUrgent = false,
     DateTime? scheduledAt,
+    List<String> cargoPhotoRefs = const [],
   }) async {
     final res = await _api.post(ApiConstants.freights, {
       'origin_address': originAddress,
@@ -38,6 +39,7 @@ class FreightService {
       if (quoteId != null) 'quote_id': quoteId,
       'requires_helpers': requiresHelpers,
       'is_urgent': isUrgent,
+      if (cargoPhotoRefs.isNotEmpty) 'cargo_photo_refs': cargoPhotoRefs,
       if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
     });
     return FreightModel.fromJson(res.data);
@@ -57,6 +59,33 @@ class FreightService {
   Future<FreightModel> acceptFreight(int id) async {
     final res = await _api.put('${ApiConstants.freights}/$id/accept');
     return FreightModel.fromJson(res.data);
+  }
+
+  Future<List<String>> cargoPhotoUrls(int id) async {
+    final res = await _api.get('${ApiConstants.freights}/$id/cargo-photos');
+    final photos = res.data['photos'] as List? ?? const [];
+    return photos
+        .map((photo) => (photo as Map)['url']?.toString() ?? '')
+        .where((url) => url.isNotEmpty)
+        .toList();
+  }
+
+  Future<String> uploadCargoPhoto(XFile file) async {
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) throw StateError('La foto seleccionada esta vacia.');
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: _safeImageFilename(file.name, bytes),
+      ),
+    });
+    final res =
+        await _api.uploadForm('${ApiConstants.freights}/cargo-photos', form);
+    return res.data['reference'] as String;
+  }
+
+  Future<void> declineFreight(int id) async {
+    await _api.post('${ApiConstants.freights}/$id/decline', {});
   }
 
   Future<FreightModel> updateStatus(

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/driver_model.dart';
 import '../../providers/driver_onboarding_provider.dart';
+import '../../services/driver_onboarding_service.dart';
 
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   const DriverOnboardingScreen({super.key});
@@ -244,7 +245,7 @@ class _DriverOnboardingScreenState
           }),
           onBack: () => setState(() => _step = 0),
           onNext: (driver.circulationPermitUrl != null ||
-                  driver.vehicleDocUrl != null) &&
+                      driver.vehicleDocUrl != null) &&
                   expiry != null
               ? () => setState(() => _step = 2)
               : null,
@@ -916,17 +917,31 @@ class _VehicleStep extends StatefulWidget {
 }
 
 class _VehicleStepState extends State<_VehicleStep> {
-  final _brandCtrl = TextEditingController();
-  final _modelCtrl = TextEditingController();
   final _yearCtrl = TextEditingController();
   final _plateCtrl = TextEditingController();
   final _colorCtrl = TextEditingController();
   bool _adding = false;
+  bool _loadingCatalog = true;
+  List<VehicleCatalogItem> _catalog = const [];
+  VehicleCatalogItem? _selectedVehicle;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await DriverOnboardingService().listVehicleCatalog();
+      if (mounted) setState(() => _catalog = catalog);
+    } finally {
+      if (mounted) setState(() => _loadingCatalog = false);
+    }
+  }
 
   @override
   void dispose() {
-    _brandCtrl.dispose();
-    _modelCtrl.dispose();
     _yearCtrl.dispose();
     _plateCtrl.dispose();
     _colorCtrl.dispose();
@@ -1000,9 +1015,38 @@ class _VehicleStepState extends State<_VehicleStep> {
         ),
         child: Column(
           children: [
-            _TextInput(controller: _brandCtrl, label: 'Marca', hint: 'Toyota'),
-            const SizedBox(height: 10),
-            _TextInput(controller: _modelCtrl, label: 'Modelo', hint: 'Hilux'),
+            DropdownButtonFormField<VehicleCatalogItem>(
+              initialValue: _selectedVehicle,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Marca y modelo',
+                hintText: 'Selecciona tu vehiculo',
+              ),
+              items: _catalog
+                  .map(
+                    (vehicle) => DropdownMenuItem(
+                      value: vehicle,
+                      child:
+                          Text(vehicle.label, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _loadingCatalog
+                  ? null
+                  : (vehicle) => setState(() => _selectedVehicle = vehicle),
+            ),
+            if (_loadingCatalog) ...[
+              const SizedBox(height: 10),
+              const LinearProgressIndicator(minHeight: 2),
+            ],
+            if (!_loadingCatalog && _catalog.isEmpty) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _loadCatalog,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Reintentar cargar catalogo'),
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [
@@ -1045,25 +1089,30 @@ class _VehicleStepState extends State<_VehicleStep> {
       );
 
   Future<void> _addVehicle() async {
-    if (_brandCtrl.text.trim().isEmpty ||
-        _modelCtrl.text.trim().isEmpty ||
-        _plateCtrl.text.trim().isEmpty) {
+    if (_selectedVehicle == null ||
+        _plateCtrl.text.trim().isEmpty ||
+        _colorCtrl.text.trim().isEmpty) {
       return;
     }
     final vehicle = VehicleModel(
-      brand: _brandCtrl.text.trim(),
-      model: _modelCtrl.text.trim(),
+      catalogId: _selectedVehicle!.catalogId,
+      brand: _selectedVehicle!.brand,
+      model: _selectedVehicle!.model,
+      type: _selectedVehicle!.vehicleType,
       year: int.tryParse(_yearCtrl.text) ?? DateTime.now().year,
       plate: _plateCtrl.text.trim().toUpperCase(),
       color: _colorCtrl.text.trim(),
     );
     await widget.onAdd(vehicle);
-    _brandCtrl.clear();
-    _modelCtrl.clear();
     _yearCtrl.clear();
     _plateCtrl.clear();
     _colorCtrl.clear();
-    if (mounted) setState(() => _adding = false);
+    if (mounted) {
+      setState(() {
+        _selectedVehicle = null;
+        _adding = false;
+      });
+    }
   }
 }
 
@@ -1117,8 +1166,15 @@ class _VehicleCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.check_circle_rounded,
-                size: 18, color: AppTheme.success),
+            Icon(
+              vehicle.approvalStatus == 'approved'
+                  ? Icons.verified_rounded
+                  : Icons.pending_outlined,
+              size: 18,
+              color: vehicle.approvalStatus == 'approved'
+                  ? AppTheme.success
+                  : AppTheme.accent,
+            ),
           ],
         ),
       );

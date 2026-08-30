@@ -39,8 +39,7 @@ class NotificationService {
 
       await _foregroundSubscription?.cancel();
       _foregroundSubscription =
-          FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('Notificacion recibida: ${message.notification?.title}');
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         _showForegroundBanner(message);
       });
 
@@ -54,8 +53,8 @@ class NotificationService {
           _handleNotificationTap(initialMessage);
         });
       }
-    } catch (e) {
-      debugPrint('NotificationService error: $e');
+    } catch (_) {
+      debugPrint('Notification service initialization failed');
     }
   }
 
@@ -68,8 +67,8 @@ class NotificationService {
         }
       }
       return await _messaging.getToken();
-    } catch (e) {
-      debugPrint('FCM token error: $e');
+    } catch (_) {
+      debugPrint('FCM token unavailable');
       return null;
     }
   }
@@ -87,8 +86,8 @@ class NotificationService {
       _tokenRefreshSubscription = _messaging.onTokenRefresh.listen(
         (newToken) => onToken(newToken),
       );
-    } catch (e) {
-      debugPrint('FCM backend registration error: $e');
+    } catch (_) {
+      debugPrint('FCM backend registration failed');
     }
   }
 

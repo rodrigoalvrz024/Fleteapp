@@ -67,6 +67,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     if (!mounted) return;
     if (ok) {
+      if (ref.read(authProvider).user?.legalReacceptanceRequired == true) {
+        context.go('/auth/legal-update');
+        return;
+      }
       final role = ref.read(authProvider).user?.role;
       context.go(_destinationFor(role));
     }

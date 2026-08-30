@@ -14,7 +14,7 @@ os.environ.setdefault(
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from app.models.driver import Driver, DriverStatus
-from app.models.vehicle import Vehicle, VehicleType
+from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
 from app.schemas.driver import DriverResponse
 from app.services.driver_operational_service import (
     driver_operational_blockers,
@@ -54,6 +54,7 @@ class DriverOperationalRulesTests(unittest.TestCase):
             plate="ABCD12",
             color="Blanco",
             max_weight_kg=800,
+            approval_status=VehicleApprovalStatus.approved.value,
         )
         return driver
 

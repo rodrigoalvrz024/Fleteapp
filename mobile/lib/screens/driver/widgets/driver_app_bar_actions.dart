@@ -30,7 +30,7 @@ class DriverAppBarActions extends ConsumerWidget {
         Tooltip(
           message: 'Perfil',
           child: IconButton(
-            onPressed: () => context.push('/app/profile'),
+            onPressed: () => context.push('/app/driver/account'),
             icon: const Icon(Icons.person_outline_rounded),
           ),
         ),

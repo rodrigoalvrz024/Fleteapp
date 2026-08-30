@@ -15,6 +15,7 @@ from app.routers import (
     auth,
     chat,
     drivers,
+    feedback,
     freights,
     internal_tasks,
     payments,
@@ -137,6 +138,7 @@ async def record_backend_errors(request, call_next):
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(drivers.router)
+app.include_router(feedback.router)
 app.include_router(freights.router)
 app.include_router(chat.router)
 app.include_router(internal_tasks.router)

@@ -47,6 +47,7 @@ class FreightCreate(BaseModel):
     scheduled_at: Optional[datetime] = None
     is_urgent: bool = False
     quote_id: Optional[str] = Field(default=None, min_length=32, max_length=64)
+    cargo_photo_refs: list[str] = Field(default_factory=list, max_length=5)
 
     @field_validator("origin_address", "destination_address", "cargo_description")
     @classmethod
@@ -75,6 +76,12 @@ class FreightStatusUpdate(BaseModel):
     )
 
 
+class FreightAcceptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vehicle_id: Optional[int] = Field(default=None, gt=0)
+
+
 class FreightCreateResponse(BaseModel):
     id: int
     client_id: int
@@ -89,6 +96,7 @@ class FreightCreateResponse(BaseModel):
     cargo_description: str
     cargo_weight_kg: float
     cargo_volume_m3: Optional[float] = None
+    service_type: Optional[str] = None
     requires_helpers: int
     extra_stops: int = 0
     recommended_vehicle_type: Optional[str] = None
@@ -112,6 +120,9 @@ class FreightCreateResponse(BaseModel):
     has_delivery_photo: bool = False
     delivery_pin_ready: bool = False
     delivery_pin_verified: bool = False
+    cargo_photo_count: int = 0
+    client_feedback_submitted: bool = False
+    driver_feedback_submitted: bool = False
 
     class Config:
         from_attributes = True
@@ -176,6 +187,7 @@ class FreightResponse(BaseModel):
     cargo_description: str
     cargo_weight_kg: float
     cargo_volume_m3: Optional[float] = None
+    service_type: Optional[str] = None
     requires_helpers: int
     extra_stops: int = 0
     recommended_vehicle_type: Optional[str] = None
@@ -199,6 +211,9 @@ class FreightResponse(BaseModel):
     has_delivery_photo: bool = False
     delivery_pin_ready: bool = False
     delivery_pin_verified: bool = False
+    cargo_photo_count: int = 0
+    client_feedback_submitted: bool = False
+    driver_feedback_submitted: bool = False
     payment_id: Optional[int] = None
     payment_status: Optional[str] = None
     rating_score: Optional[float] = None

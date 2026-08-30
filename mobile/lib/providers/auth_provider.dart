@@ -4,6 +4,7 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/api_service.dart';
+import '../services/analytics_service.dart';
 
 class AuthState {
   final UserModel? user;
@@ -90,10 +91,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await ApiService().put('/users/me', {'fcm_token': ''});
     } catch (_) {}
+    await AnalyticsService().endSession();
     await _service.logout();
     // Limpiar estado completamente — el router detecta
     // isAuthenticated=false y redirige a /login sin splash
     state = const AuthState();
+  }
+
+  Future<bool> acceptLegalUpdate() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final user = await _service.acceptLegalUpdate();
+      state = AuthState(user: user);
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _parseError(e));
+      return false;
+    }
   }
 
   String _parseError(dynamic e) {

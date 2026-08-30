@@ -16,7 +16,7 @@ from fastapi import HTTPException
 from jose import jwt
 from starlette.datastructures import UploadFile
 
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.core.rate_limit import _client_ip
 from app.core.security import create_access_token, decode_token, require_role
 from app.models.freight import FreightRequest, FreightStatus
@@ -100,6 +100,24 @@ class SecurityHardeningTests(unittest.TestCase):
             )
         finally:
             settings.PILOT_ALLOWED_EMAILS = original
+
+    def test_production_push_requires_valid_firebase_credentials(self):
+        production_settings = {
+            "APP_ENV": "production",
+            "DATABASE_URL": "postgresql://postgres:postgres@localhost/muvv_test",
+            "SECRET_KEY": "x" * 48,
+            "CORS_ORIGINS": "https://muvv-dev.web.app",
+            "PILOT_MODE": False,
+            "ENABLE_DRIVER_PUSH_NOTIFICATIONS": True,
+        }
+        with self.assertRaises(ValueError):
+            Settings(**production_settings)
+
+        configured = Settings(
+            **production_settings,
+            FIREBASE_CREDENTIALS_JSON='{"client_email":"muvv@example.iam.gserviceaccount.com"}',
+        )
+        self.assertTrue(configured.ENABLE_DRIVER_PUSH_NOTIFICATIONS)
 
     def test_freight_input_rejects_out_of_range_coordinates_and_pin(self):
         with self.assertRaises(ValueError):

@@ -4,6 +4,7 @@ from app.routers import (
     auth,
     chat,
     drivers,
+    feedback,
     freights,
     internal_tasks,
     payments,

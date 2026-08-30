@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text, Boolean
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, Text, Boolean, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -98,6 +98,7 @@ class FreightRequest(Base):
 
     client = relationship("User", back_populates="freight_requests", foreign_keys=[client_id])
     driver = relationship("Driver", back_populates="freight_requests", foreign_keys=[driver_id])
+    actual_vehicle = relationship("Vehicle", foreign_keys=[actual_vehicle_id])
     status_history = relationship("TripStatusHistory", back_populates="freight")
     payment = relationship("Payment", back_populates="freight", uselist=False)
     rating = relationship("Rating", back_populates="freight", uselist=False)
@@ -113,6 +114,17 @@ class FreightRequest(Base):
         back_populates="freight",
         cascade="all, delete-orphan",
         order_by="FreightChatMessage.created_at",
+    )
+    cargo_photos = relationship(
+        "FreightCargoPhoto",
+        back_populates="freight",
+        cascade="all, delete-orphan",
+        order_by="FreightCargoPhoto.created_at",
+    )
+    feedback_entries = relationship(
+        "TripFeedback",
+        back_populates="freight",
+        cascade="all, delete-orphan",
     )
 
     @property
@@ -158,7 +170,7 @@ class FreightRequest(Base):
         if not self.driver:
             return None
 
-        vehicle = self.driver.vehicle
+        vehicle = self.actual_vehicle or self.driver.vehicle
         return {
             "id": self.driver.id,
             "full_name": self.driver.user.full_name if self.driver.user else "Conductor",
@@ -183,6 +195,60 @@ class FreightRequest(Base):
             if vehicle
             else None,
         }
+
+    @property
+    def cargo_photo_count(self) -> int:
+        return len(self.cargo_photos)
+
+    @property
+    def client_feedback_submitted(self) -> bool:
+        return any(entry.recipient_role == "driver" for entry in self.feedback_entries)
+
+    @property
+    def driver_feedback_submitted(self) -> bool:
+        return any(entry.recipient_role == "client" for entry in self.feedback_entries)
+
+
+class FreightCargoPhoto(Base):
+    __tablename__ = "freight_cargo_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    freight_id = Column(
+        Integer,
+        ForeignKey("freight_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    client_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    object_ref = Column(String(512), nullable=False, unique=True)
+    content_type = Column(String(80), nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    freight = relationship("FreightRequest", back_populates="cargo_photos")
+
+
+class TripFeedback(Base):
+    __tablename__ = "trip_feedback"
+    __table_args__ = (
+        UniqueConstraint("freight_id", "rater_id", name="uq_trip_feedback_freight_rater"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    freight_id = Column(
+        Integer,
+        ForeignKey("freight_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    rater_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    recipient_role = Column(String(16), nullable=False)
+    overall_score = Column(Float, nullable=False)
+    answers = Column(JSON, nullable=False)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    freight = relationship("FreightRequest", back_populates="feedback_entries")
 
 
 class TripStatusHistory(Base):

@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../models/freight_model.dart';
 import '../../core/theme/app_theme.dart';
+import '../../widgets/muvv_mobile_ui.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -17,6 +18,7 @@ class DriverHomeScreen extends ConsumerStatefulWidget {
 
 class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   int _statusIndex = 0;
+  bool _incomingOverlayOpen = false;
   final List<String> _statusMsgs = [
     'Escuchando nuevos pedidos…',
     'Buscando fletes cerca…',
@@ -83,9 +85,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final fmt = NumberFormat('#,##0', 'es_CL');
 
     // Mostrar alerta de flete entrante
-    if (driver.incomingFreight != null) {
+    if (driver.incomingFreight != null && !_incomingOverlayOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showIncomingFreight(driver.incomingFreight!);
+        _showIncomingFreightOverlay(driver.incomingFreight!);
       });
     }
 
@@ -481,7 +483,84 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
           ),
         ),
       ),
+      bottomNavigationBar: const MuvvBottomNavigation(
+        selected: MuvvNavigationSection.home,
+        driver: true,
+      ),
     );
+  }
+
+  Future<void> _showIncomingFreightOverlay(FreightModel freight) async {
+    if (!mounted || _incomingOverlayOpen) return;
+    _incomingOverlayOpen = true;
+    final action = await showGeneralDialog<_IncomingFreightAction>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'Nuevo flete',
+      barrierColor: AppTheme.midnight.withValues(alpha: 0.42),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (_, __, ___) => _IncomingFreightOverlay(freight: freight),
+      transitionBuilder: (_, animation, __, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.08),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+          child: child,
+        ),
+      ),
+    );
+    if (!mounted || action == null) {
+      _incomingOverlayOpen = false;
+      return;
+    }
+
+    if (action == _IncomingFreightAction.decline) {
+      final declined = await ref.read(driverProvider.notifier).declineFreight(freight.id);
+      _incomingOverlayOpen = false;
+      if (!declined && mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No pudimos rechazar este flete. Intenta nuevamente.'),
+            backgroundColor: AppTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+    if (action == _IncomingFreightAction.details) {
+      ref.read(driverProvider.notifier).dismissIncoming();
+      _incomingOverlayOpen = false;
+      context.push('/app/driver/freights/${freight.id}');
+      return;
+    }
+
+    final accepted = await ref.read(driverProvider.notifier).acceptFreight(freight.id);
+    _incomingOverlayOpen = false;
+    if (!mounted) return;
+    if (accepted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Flete aceptado. Ya puedes coordinar con el cliente.'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.push('/app/driver/freights/${freight.id}');
+    } else {
+      ref.read(driverProvider.notifier).dismissIncoming();
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este flete ya no esta disponible.'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showIncomingFreight(FreightModel freight) {
@@ -517,6 +596,199 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 }
 
 // ── Dialog flete entrante ───────────────────────────────────
+
+enum _IncomingFreightAction { accept, decline, details }
+
+class _IncomingFreightOverlay extends StatelessWidget {
+  final FreightModel freight;
+
+  const _IncomingFreightOverlay({required this.freight});
+
+  @override
+  Widget build(BuildContext context) {
+    final format = NumberFormat('#,##0', 'es_CL');
+    final earnings = freight.driverReceives ?? freight.estimatedPrice;
+    final schedule = freight.scheduledAt;
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 22),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 28,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.bolt_rounded, size: 15, color: AppTheme.primary),
+                              SizedBox(width: 5),
+                              Text('Nuevo flete',
+                                  style: TextStyle(
+                                      color: AppTheme.primary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        if (freight.isUrgent == true)
+                          const MuvvStatusPill(
+                            label: 'Urgente',
+                            color: AppTheme.urgent,
+                            icon: Icons.flash_on_rounded,
+                          )
+                        else if (schedule != null)
+                          MuvvStatusPill(
+                            label: DateFormat('HH:mm', 'es_CL').format(schedule),
+                            color: AppTheme.slate600,
+                            icon: Icons.schedule_rounded,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const Text('Revisa esta solicitud',
+                        style: TextStyle(
+                            color: AppTheme.midnight,
+                            fontSize: 21,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 14),
+                    MuvvRouteStops(
+                      origin: freight.originAddress,
+                      destination: freight.destinationAddress,
+                      compact: true,
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _IncomingMetric(
+                          icon: Icons.account_balance_wallet_outlined,
+                          label: earnings == null
+                              ? 'Ganancia por confirmar'
+                              : 'Ganaras \$${format.format(earnings)}',
+                          color: AppTheme.success,
+                        ),
+                        if (freight.distanceKm != null)
+                          _IncomingMetric(
+                            icon: Icons.route_outlined,
+                            label: '${freight.distanceKm!.toStringAsFixed(1)} km',
+                            color: AppTheme.primary,
+                          ),
+                        _IncomingMetric(
+                          icon: Icons.scale_outlined,
+                          label: '${freight.cargoWeightKg.toStringAsFixed(0)} kg',
+                          color: AppTheme.slate600,
+                        ),
+                        if (freight.requiresHelpers != null && freight.requiresHelpers! > 0)
+                          _IncomingMetric(
+                            icon: Icons.people_outline_rounded,
+                            label: '${freight.requiresHelpers} ayudante${freight.requiresHelpers == 1 ? '' : 's'}',
+                            color: AppTheme.accent,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 13),
+                    const Text(
+                      'Responde pronto para tomar este viaje.',
+                      style: TextStyle(color: AppTheme.slate400, fontSize: 12),
+                    ),
+                    const SizedBox(height: 14),
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(context).pop(_IncomingFreightAction.details),
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('Ver detalles'),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(_IncomingFreightAction.decline),
+                            child: const Text('Rechazar'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.of(context).pop(_IncomingFreightAction.accept),
+                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
+                            icon: const Icon(Icons.check_circle_outline_rounded, size: 19),
+                            label: const Text('Aceptar'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IncomingMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _IncomingMetric({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.14)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(label,
+                style: const TextStyle(
+                    color: AppTheme.midnight,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
+}
 
 class _IncomingFreightDialog extends StatefulWidget {
   final FreightModel freight;

@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -55,6 +56,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
   final _volumeCtrl = TextEditingController();
   final _originCtrl = TextEditingController();
   final _destCtrl = TextEditingController();
+  final _imagePicker = ImagePicker();
 
   static const _santiago = LatLng(-33.4489, -70.6693);
 
@@ -88,6 +90,8 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
   String? _quoteId;
   bool _requiresManualQuote = false;
   bool _minimumApplied = false;
+  List<XFile> _cargoPhotos = const [];
+  List<String> _uploadedCargoPhotoRefs = const [];
 
   @override
   void initState() {
@@ -518,6 +522,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
       _error = null;
     });
     try {
+      final cargoPhotoRefs = await _uploadCargoPhotos();
       DateTime? scheduledAt;
       if (!_isUrgent) {
         scheduledAt = DateTime(
@@ -532,8 +537,8 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
       if (_quoteId == null) {
         await _estimatePrice();
         if (!mounted || _quoteId == null) {
-          setState(() => _error =
-              'No pudimos confirmar la tarifa. Reintenta el calculo.');
+          setState(() =>
+              _error = 'No pudimos confirmar la tarifa. Reintenta el calculo.');
           return;
         }
       }
@@ -552,6 +557,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         requiresHelpers: _helpers,
         isUrgent: _isUrgent,
         scheduledAt: scheduledAt,
+        cargoPhotoRefs: cargoPhotoRefs,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -579,6 +585,58 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _pickCargoPhotos() async {
+    final remaining = 5 - _cargoPhotos.length;
+    if (remaining <= 0) {
+      _showMessage('Puedes agregar hasta 5 fotos de la carga.');
+      return;
+    }
+    try {
+      final selected = await _imagePicker.pickMultiImage(
+        imageQuality: 82,
+        maxWidth: 1800,
+      );
+      if (selected.isEmpty || !mounted) return;
+      setState(() {
+        _cargoPhotos = [..._cargoPhotos, ...selected.take(remaining)];
+        // The staged upload is intentionally restarted if the selection changes.
+        _uploadedCargoPhotoRefs = const [];
+      });
+    } catch (_) {
+      _showMessage('No pudimos abrir tus fotos.', error: true);
+    }
+  }
+
+  void _removeCargoPhoto(int index) {
+    setState(() {
+      _cargoPhotos = List<XFile>.from(_cargoPhotos)..removeAt(index);
+      _uploadedCargoPhotoRefs = const [];
+    });
+  }
+
+  Future<List<String>> _uploadCargoPhotos() async {
+    if (_cargoPhotos.isEmpty) return const [];
+    if (_uploadedCargoPhotoRefs.length == _cargoPhotos.length) {
+      return _uploadedCargoPhotoRefs;
+    }
+    final references = <String>[];
+    for (final photo in _cargoPhotos) {
+      references.add(await _freightService.uploadCargoPhoto(photo));
+    }
+    if (mounted) setState(() => _uploadedCargoPhotoRefs = references);
+    return references;
+  }
+
+  void _showMessage(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppTheme.error : AppTheme.success,
+      ),
+    );
   }
 
   Future<void> _handleBack() async {
@@ -633,6 +691,8 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     );
   }
 
+  // Kept only for a backwards-compatible route; the active flow uses _pickCargoPhotos.
+  // ignore: unused_element
   void _showCargoPhotosInfo() {
     HapticFeedback.lightImpact();
     showModalBottomSheet<void>(
@@ -993,8 +1053,8 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
                 ),
               ],
             ),
-           ),
-           const SizedBox(height: 18),
+          ),
+          const SizedBox(height: 18),
           const _CargoSectionTitle(title: 'Volumen estimado (opcional)'),
           const SizedBox(height: 10),
           MuvvSurfaceCard(
@@ -1024,8 +1084,11 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
                 child: _CargoQuickAction(
                   icon: Icons.photo_camera_outlined,
                   title: 'Fotos de la carga',
-                  detail: 'Pronto',
-                  onTap: _showCargoPhotosInfo,
+                  detail: _cargoPhotos.isEmpty
+                      ? 'Opcional'
+                      : '${_cargoPhotos.length} seleccionada${_cargoPhotos.length == 1 ? '' : 's'}',
+                  selected: _cargoPhotos.isNotEmpty,
+                  onTap: _pickCargoPhotos,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1040,6 +1103,34 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
               ),
             ],
           ),
+          if (_cargoPhotos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            MuvvSurfaceCard(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                children: [
+                  for (var index = 0; index < _cargoPhotos.length; index++)
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.image_outlined,
+                          color: AppTheme.primary),
+                      title: Text(
+                        _cargoPhotos[index].name.isEmpty
+                            ? 'Foto de la carga ${index + 1}'
+                            : _cargoPhotos[index].name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Quitar foto',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => _removeCargoPhoto(index),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ],
       );
 
@@ -1210,9 +1301,9 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          _recommendedVehicleName == null
-                              ? 'Asignacion inteligente'
-                              : 'Vehiculo recomendado',
+                        _recommendedVehicleName == null
+                            ? 'Asignacion inteligente'
+                            : 'Vehiculo recomendado',
                         style: TextStyle(
                           color: AppTheme.midnight,
                           fontWeight: FontWeight.w800,
@@ -1220,9 +1311,9 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
                       ),
                       SizedBox(height: 3),
                       Text(
-                          _recommendedVehicleName == null
-                              ? 'Buscaremos un vehiculo compatible con tu carga.'
-                              : '$_recommendedVehicleName. Ideal para transportar tu carga de forma segura.',
+                        _recommendedVehicleName == null
+                            ? 'Buscaremos un vehiculo compatible con tu carga.'
+                            : '$_recommendedVehicleName. Ideal para transportar tu carga de forma segura.',
                         style: TextStyle(
                           color: AppTheme.slate600,
                           fontSize: 13,

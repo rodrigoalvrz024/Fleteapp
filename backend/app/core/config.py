@@ -1,3 +1,5 @@
+import json
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
@@ -166,6 +168,19 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "PILOT_ALLOWED_EMAILS debe incluir al menos un correo cuando PILOT_MODE esta activo"
                 )
+            if self.ENABLE_DRIVER_PUSH_NOTIFICATIONS:
+                if not self.FIREBASE_CREDENTIALS_JSON.strip():
+                    raise ValueError(
+                        "FIREBASE_CREDENTIALS_JSON es obligatorio cuando las notificaciones push estan activas"
+                    )
+                try:
+                    firebase_credentials = json.loads(self.FIREBASE_CREDENTIALS_JSON)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("FIREBASE_CREDENTIALS_JSON debe ser JSON valido") from exc
+                if not firebase_credentials.get("client_email"):
+                    raise ValueError(
+                        "FIREBASE_CREDENTIALS_JSON debe incluir una cuenta de servicio valida"
+                    )
         return self
 
 settings = Settings()

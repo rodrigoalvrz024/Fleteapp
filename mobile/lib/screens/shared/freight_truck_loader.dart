@@ -199,8 +199,20 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..forward();
+      // Leave a short, still confirmation frame before SplashScreen routes
+      // away at the two-second mark. The movement itself stays continuous.
+      duration: const Duration(milliseconds: 1800),
+    );
+    // Starting from the first rendered frame prevents a busy Android startup
+    // from consuming the entire animation before the user can see it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Do not loop a partial part of the story. Returning from the arrival
+      // frame to the route makes the truck, logo and confirmation visibly
+      // jump backwards on slower devices. Holding the final composition is
+      // both calmer and keeps every persistent element continuous.
+      _controller.forward();
+    });
   }
 
   @override
@@ -408,6 +420,11 @@ class _MuvvIntroScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Android can briefly report a zero-sized FlutterView during startup.
+    // A degenerate Path has no metrics, so skip this frame and paint normally
+    // as soon as the viewport receives its real dimensions.
+    if (size.isEmpty) return;
+
     final sceneIn = _introStage(progress, 0.16, 0.34);
     final cityOpacity = sceneIn;
     _paintCity(canvas, size, cityOpacity);

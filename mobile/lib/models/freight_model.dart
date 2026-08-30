@@ -95,6 +95,7 @@ class FreightModel {
   final double? distanceKm;
   final String cargoDescription;
   final double cargoWeightKg;
+  final String? serviceType;
   final int? requiresHelpers;
   final double? estimatedPrice;
   final double? finalPrice;
@@ -111,6 +112,9 @@ class FreightModel {
   final bool hasDeliveryPhoto;
   final bool deliveryPinReady;
   final bool deliveryPinVerified;
+  final int cargoPhotoCount;
+  final bool clientFeedbackSubmitted;
+  final bool driverFeedbackSubmitted;
   final int? paymentId;
   final String? paymentStatus;
   final double? ratingScore;
@@ -126,6 +130,7 @@ class FreightModel {
     this.distanceKm,
     required this.cargoDescription,
     required this.cargoWeightKg,
+    this.serviceType,
     this.requiresHelpers,
     this.estimatedPrice,
     this.finalPrice,
@@ -142,6 +147,9 @@ class FreightModel {
     this.hasDeliveryPhoto = false,
     this.deliveryPinReady = false,
     this.deliveryPinVerified = false,
+    this.cargoPhotoCount = 0,
+    this.clientFeedbackSubmitted = false,
+    this.driverFeedbackSubmitted = false,
     this.paymentId,
     this.paymentStatus,
     this.ratingScore,
@@ -158,6 +166,7 @@ class FreightModel {
         distanceKm: (j['distance_km'] as num?)?.toDouble(),
         cargoDescription: j['cargo_description'],
         cargoWeightKg: (j['cargo_weight_kg'] as num).toDouble(),
+        serviceType: j['service_type']?.toString(),
         requiresHelpers: j['requires_helpers'] ?? 0,
         estimatedPrice: (j['estimated_price'] as num?)?.toDouble(),
         finalPrice: (j['final_price'] as num?)?.toDouble(),
@@ -176,6 +185,9 @@ class FreightModel {
         hasDeliveryPhoto: j['has_delivery_photo'] ?? false,
         deliveryPinReady: j['delivery_pin_ready'] ?? false,
         deliveryPinVerified: j['delivery_pin_verified'] ?? false,
+        cargoPhotoCount: (j['cargo_photo_count'] as num?)?.toInt() ?? 0,
+        clientFeedbackSubmitted: j['client_feedback_submitted'] == true,
+        driverFeedbackSubmitted: j['driver_feedback_submitted'] == true,
         paymentId: j['payment_id'],
         paymentStatus: j['payment_status'],
         ratingScore: (j['rating_score'] as num?)?.toDouble(),

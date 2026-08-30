@@ -1,7 +1,13 @@
 from app.models.user import User, UserRole
 from app.models.driver import Driver, DriverStatus
-from app.models.vehicle import Vehicle, VehicleType
-from app.models.freight import FreightRequest, TripStatusHistory, FreightStatus
+from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
+from app.models.freight import (
+    FreightCargoPhoto,
+    FreightRequest,
+    FreightStatus,
+    TripFeedback,
+    TripStatusHistory,
+)
 from app.models.pricing_snapshot import FreightPricingSnapshot
 from app.models.pricing_quote import FreightPriceQuote
 from app.models.payment import Payment, PaymentStatus, PaymentMethod

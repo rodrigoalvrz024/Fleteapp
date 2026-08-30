@@ -76,9 +76,7 @@ class DriverUpdate(BaseModel):
 class VehicleCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    type: VehicleType = VehicleType.pickup
-    brand: str = Field(min_length=2, max_length=80)
-    model: str = Field(min_length=1, max_length=80)
+    catalog_id: str = Field(min_length=3, max_length=80, pattern=r"^[a-z0-9-]+$")
     year: int = Field(ge=1900, le=datetime.now().year + 1)
     plate: str = Field(min_length=5, max_length=10)
     color: str = Field(min_length=2, max_length=40)
@@ -102,6 +100,7 @@ class VehicleCreate(BaseModel):
 class VehicleResponse(BaseModel):
     id: int
     type: VehicleType
+    catalog_id: Optional[str] = None
     brand: str
     model: str
     year: int
@@ -110,6 +109,15 @@ class VehicleResponse(BaseModel):
     max_weight_kg: float
     max_volume_m3: Optional[float]
     photo_url: Optional[str]
+    approval_status: str = "pending"
+    approval_reason: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    supported_service_types: list[str] = Field(default_factory=list)
+
+    @field_validator("supported_service_types", mode="before")
+    @classmethod
+    def empty_supported_services_are_a_list(cls, value):
+        return value or []
 
     class Config:
         from_attributes = True
@@ -141,13 +149,16 @@ class DriverResponse(BaseModel):
     rating_count: int
     total_trips: int
     vehicle: Optional[VehicleResponse]
+    vehicles: list[VehicleResponse] = Field(default_factory=list)
 
     @computed_field
     @property
     def operational_blockers(self) -> list[str]:
         return build_driver_operational_blockers(
             status=self.status,
-            has_vehicle=self.vehicle is not None,
+            has_vehicle=any(
+                vehicle.approval_status == "approved" for vehicle in self.vehicles
+            ),
             license_image_url=self.license_image_url,
             license_expiry=self.license_expiry,
             vehicle_doc_url=self.vehicle_doc_url,

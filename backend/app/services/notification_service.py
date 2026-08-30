@@ -69,9 +69,11 @@ async def send_notification_to_drivers(
     title: str,
     body: str,
     data: dict | None = None,
+    freight=None,
 ) -> int:
     from app.models.driver import Driver, DriverStatus
     from app.models.user import User
+    from app.services.freight_matching_service import driver_matches_freight
 
     drivers = (
         db.query(Driver)
@@ -84,6 +86,8 @@ async def send_notification_to_drivers(
 
     sent = 0
     for driver in drivers:
+        if freight is not None and not driver_matches_freight(driver, freight):
+            continue
         user = db.query(User).filter(User.id == driver.user_id).first()
         if user and user.fcm_token:
             if await send_push_notification(user.fcm_token, title, body, data):

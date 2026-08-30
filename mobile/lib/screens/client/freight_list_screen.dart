@@ -10,6 +10,7 @@ import '../../services/freight_service.dart';
 import '../../utils/api_error_message.dart';
 import '../shared/web_layout.dart';
 import 'widgets/freight_widgets.dart';
+import '../../widgets/muvv_mobile_ui.dart';
 
 class FreightListScreen extends ConsumerStatefulWidget {
   const FreightListScreen({super.key});
@@ -100,11 +101,14 @@ class _FreightListScreenState extends ConsumerState<FreightListScreen> {
           ? 'Revisa solicitudes, estados, rutas y precios'
           : '${user.email} · revisa solicitudes, estados, rutas y precios',
       actions: [WebAppBarActions(homePath: homePath)],
+      bottomNavigationBar: const MuvvBottomNavigation(
+        selected: MuvvNavigationSection.activity,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: user?.role == 'client' ? _createFreight : null,
         backgroundColor: AppTheme.primary,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
           'Nuevo flete',
@@ -194,14 +198,14 @@ class FreightCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(18),
         onTap: () => context.push('/app/client/freights/${freight.id}'),
         child: Container(
           decoration: isUrgent
               ? AppTheme.urgentDecoration().copyWith(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(18),
                 )
-              : AppTheme.cardDecoration(radius: 8),
+              : AppTheme.cardDecoration(),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +310,7 @@ class _FreightListSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
-        decoration: AppTheme.cardDecoration(radius: 8),
+        decoration: AppTheme.cardDecoration(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

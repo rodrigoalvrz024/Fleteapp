@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app.models.driver import Driver, DriverStatus
+from app.services.freight_matching_service import vehicle_is_approved
 
 
 def _status_value(status: Any) -> str:
@@ -60,7 +61,7 @@ def build_driver_operational_blockers(
 def driver_operational_blockers(driver: Driver) -> list[str]:
     return build_driver_operational_blockers(
         status=driver.status,
-        has_vehicle=driver.vehicle is not None,
+        has_vehicle=any(vehicle_is_approved(vehicle) for vehicle in driver.vehicles),
         license_image_url=driver.license_image_url,
         license_expiry=driver.license_expiry,
         vehicle_doc_url=driver.vehicle_doc_url,

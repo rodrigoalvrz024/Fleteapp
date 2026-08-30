@@ -164,6 +164,7 @@ class DriverModel {
 
 class VehicleModel {
   final int? id;
+  final String? catalogId;
   final String brand;
   final String model;
   final int year;
@@ -172,9 +173,13 @@ class VehicleModel {
   final String type;
   final double maxWeightKg;
   final double? maxVolumeM3;
+  final String approvalStatus;
+  final String? approvalReason;
+  final List<String> supportedServiceTypes;
 
   const VehicleModel({
     this.id,
+    this.catalogId,
     required this.brand,
     required this.model,
     required this.year,
@@ -183,10 +188,14 @@ class VehicleModel {
     this.type = 'pickup',
     this.maxWeightKg = 1000,
     this.maxVolumeM3,
+    this.approvalStatus = 'pending',
+    this.approvalReason,
+    this.supportedServiceTypes = const [],
   });
 
   factory VehicleModel.fromJson(Map<String, dynamic> j) => VehicleModel(
         id: j['id'],
+        catalogId: j['catalog_id'],
         brand: j['brand'],
         model: j['model'],
         year: j['year'],
@@ -195,16 +204,44 @@ class VehicleModel {
         type: j['type'] ?? 'pickup',
         maxWeightKg: (j['max_weight_kg'] as num?)?.toDouble() ?? 1000,
         maxVolumeM3: (j['max_volume_m3'] as num?)?.toDouble(),
+        approvalStatus: j['approval_status'] ?? 'pending',
+        approvalReason: j['approval_reason'],
+        supportedServiceTypes:
+            ((j['supported_service_types'] as List?) ?? const [])
+                .map((item) => item.toString())
+                .toList(),
       );
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'brand': brand,
-        'model': model,
+        if (catalogId != null) 'catalog_id': catalogId,
         'year': year,
         'plate': plate,
         'color': color,
         'max_weight_kg': maxWeightKg,
         if (maxVolumeM3 != null) 'max_volume_m3': maxVolumeM3,
       };
+}
+
+class VehicleCatalogItem {
+  final String catalogId;
+  final String brand;
+  final String model;
+  final String vehicleType;
+
+  const VehicleCatalogItem({
+    required this.catalogId,
+    required this.brand,
+    required this.model,
+    required this.vehicleType,
+  });
+
+  factory VehicleCatalogItem.fromJson(Map<String, dynamic> json) =>
+      VehicleCatalogItem(
+        catalogId: json['catalog_id']?.toString() ?? '',
+        brand: json['brand']?.toString() ?? '',
+        model: json['model']?.toString() ?? '',
+        vehicleType: json['vehicle_type']?.toString() ?? 'pickup',
+      );
+
+  String get label => '$brand $model';
 }

@@ -42,7 +42,29 @@ class Driver(Base):
     last_modified_by = Column(Integer, nullable=True)
 
     user = relationship("User", foreign_keys=[user_id])
-    vehicle = relationship("Vehicle", back_populates="driver", uselist=False)
+    vehicles = relationship(
+        "Vehicle",
+        back_populates="driver",
+        order_by="Vehicle.created_at",
+    )
     freight_requests = relationship("FreightRequest", back_populates="driver", foreign_keys="FreightRequest.driver_id")
     review_audits = relationship("DriverReviewAudit", back_populates="driver")
     payouts = relationship("DriverPayout", back_populates="driver")
+
+    @property
+    def vehicle(self):
+        """Legacy primary vehicle, preferring an approved active vehicle."""
+        active = [vehicle for vehicle in self.vehicles if vehicle.deleted_at is None]
+        return next(
+            (vehicle for vehicle in active if vehicle.approval_status == "approved"),
+            active[0] if active else None,
+        )
+
+    @vehicle.setter
+    def vehicle(self, value):
+        """Compatibility bridge for code written before multi-vehicle support."""
+        if value is None:
+            self.vehicles.clear()
+            return
+        if value not in self.vehicles:
+            self.vehicles.append(value)

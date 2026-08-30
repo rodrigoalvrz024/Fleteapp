@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../screens/admin/admin_dashboard_screen.dart';
 import '../../screens/auth/forgot_password_screen.dart';
 import '../../screens/auth/login_screen.dart';
+import '../../screens/auth/legal_update_screen.dart';
 import '../../screens/auth/register_screen.dart';
 import '../../screens/auth/reset_password_screen.dart';
 import '../../screens/client/client_home_screen.dart';
@@ -22,6 +23,8 @@ import '../../screens/driver/driver_payouts_screen.dart';
 import '../../screens/driver/driver_trips_screen.dart';
 import '../../screens/legal/legal_document_screen.dart';
 import '../../screens/shared/profile_screen.dart';
+import '../../screens/shared/mobile_utility_screens.dart';
+import '../../screens/shared/freight_chat_screen.dart';
 import '../../screens/shared/splash_screen.dart';
 import '../../services/analytics_service.dart';
 
@@ -74,6 +77,10 @@ final _router = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/auth/legal-update',
+      builder: (_, __) => const LegalUpdateScreen(),
+    ),
+    GoRoute(
       path: '/auth/register',
       builder: (_, state) => RegisterScreen(
         redirectPath: state.uri.queryParameters['next'],
@@ -121,12 +128,61 @@ final _router = GoRouter(
           originAddress: q['origin_address'],
           originLat: double.tryParse(q['origin_lat'] ?? ''),
           originLng: double.tryParse(q['origin_lng'] ?? ''),
+          initialUrgent: q['urgent'] == 'true',
+          initialServiceType: q['service'],
         );
       },
     ),
     GoRoute(
       path: '/app/profile',
       builder: (_, __) => const ProfileScreen(),
+    ),
+    GoRoute(
+      path: '/app/client/account',
+      builder: (_, __) => const MuvvAccountHubScreen(),
+    ),
+    GoRoute(
+      path: '/app/driver/account',
+      builder: (_, __) => const MuvvAccountHubScreen(driver: true),
+    ),
+    GoRoute(
+      path: '/app/client/payments',
+      builder: (_, __) =>
+          const MuvvUtilityScreen(page: MuvvUtilityPage.payments),
+    ),
+    GoRoute(
+      path: '/app/client/addresses',
+      builder: (_, __) =>
+          const MuvvUtilityScreen(page: MuvvUtilityPage.addresses),
+    ),
+    GoRoute(
+      path: '/app/client/promotions',
+      builder: (_, __) =>
+          const MuvvUtilityScreen(page: MuvvUtilityPage.promotions),
+    ),
+    GoRoute(
+      path: '/app/chat/:id',
+      builder: (_, state) => FreightChatScreen(
+        freightId: int.parse(state.pathParameters['id']!),
+      ),
+    ),
+    GoRoute(
+      path: '/app/client/freights/:id/chat',
+      redirect: (_, state) => '/app/chat/${state.pathParameters['id']}',
+    ),
+    GoRoute(
+      path: '/app/settings/notifications',
+      builder: (_, __) =>
+          const MuvvUtilityScreen(page: MuvvUtilityPage.notifications),
+    ),
+    GoRoute(
+      path: '/app/settings/help',
+      builder: (_, __) => const MuvvUtilityScreen(page: MuvvUtilityPage.help),
+    ),
+    GoRoute(
+      path: '/app/settings/preferences',
+      builder: (_, __) =>
+          const MuvvUtilityScreen(page: MuvvUtilityPage.preferences),
     ),
     GoRoute(
       path: '/app/driver',
@@ -145,6 +201,10 @@ final _router = GoRouter(
       builder: (_, state) => DriverFreightDetailScreen(
         freightId: int.parse(state.pathParameters['id']!),
       ),
+    ),
+    GoRoute(
+      path: '/app/driver/freights/:id/chat',
+      redirect: (_, state) => '/app/chat/${state.pathParameters['id']}',
     ),
     GoRoute(
       path: '/app/driver/onboarding',
@@ -198,6 +258,10 @@ final _router = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/client/freights/:id/chat',
+      redirect: (_, state) => '/app/chat/${state.pathParameters['id']}',
+    ),
+    GoRoute(
       path: '/client/create-freight',
       redirect: (_, state) => _withQuery('/app/client/create-freight', state),
     ),
@@ -223,6 +287,10 @@ final _router = GoRouter(
         '/app/driver/freights/${state.pathParameters['id']}',
         state,
       ),
+    ),
+    GoRoute(
+      path: '/driver/freights/:id/chat',
+      redirect: (_, state) => '/app/chat/${state.pathParameters['id']}',
     ),
     GoRoute(
       path: '/driver/onboarding',
