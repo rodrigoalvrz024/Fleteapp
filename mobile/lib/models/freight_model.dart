@@ -86,12 +86,57 @@ class FreightDriverSummary {
   }
 }
 
+class DriverLiveLocation {
+  final int freightId;
+  final bool visible;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracyM;
+  final double? heading;
+  final DateTime? updatedAt;
+  final bool isStale;
+  final DateTime? availableFrom;
+
+  const DriverLiveLocation({
+    required this.freightId,
+    required this.visible,
+    this.latitude,
+    this.longitude,
+    this.accuracyM,
+    this.heading,
+    this.updatedAt,
+    this.isStale = false,
+    this.availableFrom,
+  });
+
+  factory DriverLiveLocation.fromJson(Map<String, dynamic> json) =>
+      DriverLiveLocation(
+        freightId: (json['freight_id'] as num).toInt(),
+        visible: json['visible'] == true,
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+        accuracyM: (json['accuracy_m'] as num?)?.toDouble(),
+        heading: (json['heading'] as num?)?.toDouble(),
+        updatedAt: json['updated_at'] != null
+            ? DateTime.tryParse(json['updated_at'].toString())
+            : null,
+        isStale: json['is_stale'] == true,
+        availableFrom: json['available_from'] != null
+            ? DateTime.tryParse(json['available_from'].toString())
+            : null,
+      );
+}
+
 class FreightModel {
   final int id;
   final int clientId;
   final int? driverId;
   final String originAddress;
   final String destinationAddress;
+  final double? originLat;
+  final double? originLng;
+  final double? destinationLat;
+  final double? destinationLng;
   final double? distanceKm;
   final String cargoDescription;
   final double cargoWeightKg;
@@ -127,6 +172,10 @@ class FreightModel {
     this.driverId,
     required this.originAddress,
     required this.destinationAddress,
+    this.originLat,
+    this.originLng,
+    this.destinationLat,
+    this.destinationLng,
     this.distanceKm,
     required this.cargoDescription,
     required this.cargoWeightKg,
@@ -163,6 +212,10 @@ class FreightModel {
         driverId: j['driver_id'],
         originAddress: j['origin_address'],
         destinationAddress: j['destination_address'],
+        originLat: (j['origin_lat'] as num?)?.toDouble(),
+        originLng: (j['origin_lng'] as num?)?.toDouble(),
+        destinationLat: (j['destination_lat'] as num?)?.toDouble(),
+        destinationLng: (j['destination_lng'] as num?)?.toDouble(),
         distanceKm: (j['distance_km'] as num?)?.toDouble(),
         cargoDescription: j['cargo_description'],
         cargoWeightKg: (j['cargo_weight_kg'] as num).toDouble(),

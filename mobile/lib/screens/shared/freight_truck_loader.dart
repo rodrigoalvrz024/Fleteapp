@@ -199,20 +199,8 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      // Leave a short, still confirmation frame before SplashScreen routes
-      // away at the two-second mark. The movement itself stays continuous.
-      duration: const Duration(milliseconds: 1800),
-    );
-    // Starting from the first rendered frame prevents a busy Android startup
-    // from consuming the entire animation before the user can see it.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // Do not loop a partial part of the story. Returning from the arrival
-      // frame to the route makes the truck, logo and confirmation visibly
-      // jump backwards on slower devices. Holding the final composition is
-      // both calmer and keeps every persistent element continuous.
-      _controller.forward();
-    });
+      duration: const Duration(milliseconds: 2000),
+    )..forward();
   }
 
   @override
@@ -233,24 +221,11 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
             animation: _controller,
             builder: (context, _) {
               final progress = _controller.value;
-              final identityIn = _introStage(progress, 0, 0.13);
-              final identityMove = _introStage(progress, 0.13, 0.48);
-              final taglineOut = 1 - _introStage(progress, 0.55, 0.68);
-              final complete = _introStage(progress, 0.84, 0.98);
-              final logoAlignment = Alignment(
-                _introLerp(0, -0.72, identityMove),
-                _introLerp(-0.12, -0.8, identityMove),
-              );
-              final nameAlignment = Alignment(
-                _introLerp(0, -0.28, identityMove),
-                _introLerp(0.1, -0.8, identityMove),
-              );
-              final taglineAlignment = Alignment(
-                0,
-                _introLerp(0.21, -0.59, identityMove),
-              );
-              final identityScale = _introLerp(1, 0.58, identityMove);
-              final nameScale = _introLerp(1, 0.62, identityMove);
+              final markIn = _introStage(progress, 0, 0.27);
+              final markOut = 1 - _introStage(progress, 0.27, 0.36);
+              final copyIn = _introStage(progress, 0.27, 0.54);
+              final copyOut = 1 - _introStage(progress, 0.82, 0.93);
+              final complete = _introStage(progress, 0.91, 1);
 
               return Stack(
                 fit: StackFit.expand,
@@ -259,50 +234,62 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
                     painter: _MuvvIntroScenePainter(progress: progress),
                   ),
                   Align(
-                    alignment: logoAlignment,
+                    alignment: Alignment(0, compact ? -0.2 : -0.27),
                     child: Opacity(
-                      opacity: identityIn,
+                      opacity: markIn * markOut,
                       child: Transform.scale(
-                        scale: identityScale,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(
-                            _introLerp(22, 14, identityMove),
-                          ),
-                          child: Image.asset(
-                            'assets/branding/muvv-app-icon.png',
-                            width: compact ? 84 : 96,
-                            height: compact ? 84 : 96,
-                            fit: BoxFit.cover,
-                          ),
+                        scale: 0.78 + (0.22 * markIn),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Image.asset(
+                                'assets/branding/muvv-app-icon.png',
+                                width: compact ? 76 : 88,
+                                height: compact ? 76 : 88,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Muvv',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 36,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const _IntroTagline(),
+                          ],
                         ),
                       ),
                     ),
                   ),
                   Align(
-                    alignment: nameAlignment,
+                    alignment: Alignment(0, compact ? -0.23 : -0.28),
                     child: Opacity(
-                      opacity: identityIn,
-                      child: Transform.scale(
-                        scale: nameScale,
-                        child: const Text(
-                          'Muvv',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 38,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0,
-                          ),
+                      opacity: copyIn * copyOut,
+                      child: Transform.translate(
+                        offset: Offset(0, 12 * (1 - copyIn)),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Muvv',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            _IntroTagline(),
+                          ],
                         ),
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: taglineAlignment,
-                    child: Opacity(
-                      opacity: identityIn * taglineOut,
-                      child: Transform.scale(
-                        scale: _introLerp(1, 0.9, identityMove),
-                        child: const _IntroTagline(),
                       ),
                     ),
                   ),
@@ -311,7 +298,7 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
                     child: Opacity(
                       opacity: complete,
                       child: Transform.scale(
-                        scale: _introLerp(0.88, 1, complete),
+                        scale: 0.88 + (0.12 * complete),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -407,11 +394,8 @@ class _IntroTagline extends StatelessWidget {
 double _introStage(double value, double start, double end) {
   if (value <= start) return 0;
   if (value >= end) return 1;
-  return Curves.easeInOutCubic.transform((value - start) / (end - start));
+  return Curves.easeOutCubic.transform((value - start) / (end - start));
 }
-
-double _introLerp(double begin, double end, double progress) =>
-    begin + ((end - begin) * progress);
 
 class _MuvvIntroScenePainter extends CustomPainter {
   final double progress;
@@ -420,13 +404,7 @@ class _MuvvIntroScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Android can briefly report a zero-sized FlutterView during startup.
-    // A degenerate Path has no metrics, so skip this frame and paint normally
-    // as soon as the viewport receives its real dimensions.
-    if (size.isEmpty) return;
-
-    final sceneIn = _introStage(progress, 0.16, 0.34);
-    final cityOpacity = sceneIn;
+    final cityOpacity = _introStage(progress, 0.28, 0.5);
     _paintCity(canvas, size, cityOpacity);
 
     final start = Offset(size.width * 0.03, size.height * 0.74);
@@ -442,14 +420,13 @@ class _MuvvIntroScenePainter extends CustomPainter {
       )
       ..lineTo(end.dx, end.dy);
     final metric = route.computeMetrics().first;
-    final journeyProgress = _introStage(progress, 0.24, 0.82);
-    final routeProgress = math.min(1.0, journeyProgress + 0.085);
+    final routeProgress = _introStage(progress, 0.27, 0.54);
     final routeStroke = math.max(3.0, size.width * 0.017);
 
     canvas.drawPath(
       route,
       Paint()
-        ..color = const Color(0xFF1269F3).withValues(alpha: 0.14 * sceneIn)
+        ..color = const Color(0xFF1269F3).withValues(alpha: 0.14)
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeWidth = routeStroke,
@@ -463,26 +440,27 @@ class _MuvvIntroScenePainter extends CustomPainter {
         ..strokeWidth = routeStroke,
     );
 
-    final destinationVisibility = _introStage(progress, 0.67, 0.78);
+    final destinationVisibility = _introStage(progress, 0.43, 0.56);
     if (destinationVisibility > 0) {
       _paintDestination(canvas, end, size.width, destinationVisibility);
     }
 
-    final truckVisibility = _introStage(progress, 0.21, 0.32);
+    final truckProgress = _introStage(progress, 0.54, 0.91);
+    final truckVisibility = _introStage(progress, 0.54, 0.61);
     if (truckVisibility > 0) {
-      final tangent = metric.getTangentForOffset(
-        metric.length * math.max(0.005, journeyProgress),
-      )!;
+      final tangent =
+          metric.getTangentForOffset(metric.length * truckProgress)!;
+      final tilt = math.sin(_introStage(progress, 0.77, 0.91) * math.pi) * 0.2;
       canvas.save();
       canvas.translate(tangent.position.dx, tangent.position.dy);
-      canvas.rotate(tangent.angle);
-      canvas.scale(_introLerp(0.78, 1, truckVisibility));
+      canvas.rotate(tangent.angle - tilt);
+      canvas.scale(0.84 + (0.16 * truckVisibility));
       _paintIntroTruck(canvas, size.width);
       canvas.restore();
-      _paintMotionMarks(canvas, tangent.position, size.width, journeyProgress);
+      _paintMotionMarks(canvas, tangent.position, size.width, truckProgress);
     }
 
-    final completed = _introStage(progress, 0.9, 1);
+    final completed = _introStage(progress, 0.91, 1);
     if (completed > 0) {
       _paintConfetti(canvas, size, completed);
     }

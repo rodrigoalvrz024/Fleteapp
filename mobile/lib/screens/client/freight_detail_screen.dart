@@ -1,6 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,6 +32,8 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
   final _paymentService = PaymentService();
   final _ratingService = RatingService();
   FreightModel? _freight;
+  DriverLiveLocation? _driverLocation;
+  Timer? _locationRefreshTimer;
   bool _loading = true;
   bool _actionLoading = false;
 
@@ -37,7 +41,17 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
   void initState() {
     super.initState();
     _load();
+    _locationRefreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _refreshDriverLocation(),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _showPaymentResult());
+  }
+
+  @override
+  void dispose() {
+    _locationRefreshTimer?.cancel();
+    super.dispose();
   }
 
   void _showPaymentResult() {
@@ -63,9 +77,27 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
         _freight = freight;
         _loading = false;
       });
+      unawaited(_refreshDriverLocation());
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshDriverLocation() async {
+    final freight = _freight;
+    if (freight == null || freight.driverId == null) {
+      if (mounted && _driverLocation != null) {
+        setState(() => _driverLocation = null);
+      }
+      return;
+    }
+    try {
+      final location = await _service.getDriverLiveLocation(freight.id);
+      if (!mounted) return;
+      setState(() => _driverLocation = location);
+    } catch (_) {
+      // The freight detail remains available when a short location refresh fails.
     }
   }
 
@@ -194,6 +226,8 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     }
   }
 
+  // Kept for legacy rating links that may still target this route.
+  // ignore: unused_element
   Future<void> _rateService() async {
     double score = 5;
     final comment = TextEditingController();
@@ -341,6 +375,12 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
             _AssignedDriverCard(
               driver: freight.driverSummary!,
               freightId: freight.id,
+            ),
+            const SizedBox(height: 14),
+            _DriverLiveLocationCard(
+              freight: freight,
+              location: _driverLocation,
+              onRefresh: _refreshDriverLocation,
             ),
           ],
           const SizedBox(height: 16),
@@ -739,6 +779,166 @@ class _AssignedDriverCard extends StatelessWidget {
             freightId: freightId,
             label: 'Coordinar con conductor',
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DriverLiveLocationCard extends StatelessWidget {
+  final FreightModel freight;
+  final DriverLiveLocation? location;
+  final Future<void> Function() onRefresh;
+
+  const _DriverLiveLocationCard({
+    required this.freight,
+    required this.location,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final live = location;
+    final hasCoordinates = live?.visible == true &&
+        live?.latitude != null &&
+        live?.longitude != null;
+    final availableFrom = live?.availableFrom?.toLocal();
+    final now = DateTime.now().toUtc();
+    final ageSeconds = live?.updatedAt == null
+        ? null
+        : now.difference(live!.updatedAt!.toUtc()).inSeconds.clamp(0, 9999);
+    final freshness = ageSeconds == null
+        ? null
+        : ageSeconds < 60
+            ? 'Actualizada hace ${ageSeconds}s'
+            : 'Actualizada hace ${(ageSeconds / 60).floor()} min';
+
+    String title;
+    String detail;
+    Color color;
+    IconData icon;
+    if (hasCoordinates) {
+      title = live!.isStale
+          ? 'Ultima ubicacion del conductor'
+          : 'Conductor en ruta';
+      detail = live.isStale
+          ? '${freshness ?? 'Sin actualizacion reciente'}. El conductor podria no tener senal.'
+          : freshness ?? 'Ubicacion compartida para este flete';
+      color = live.isStale ? AppTheme.warning : AppTheme.success;
+      icon = live.isStale
+          ? Icons.location_searching_outlined
+          : Icons.location_on_rounded;
+    } else if (availableFrom != null) {
+      title = 'Seguimiento programado';
+      detail =
+          'Se habilita desde ${DateFormat('HH:mm').format(availableFrom)}.';
+      color = AppTheme.primary;
+      icon = Icons.schedule_rounded;
+    } else {
+      title = 'Esperando ubicacion del conductor';
+      detail =
+          'Aparecera aqui cuando el conductor la comparta para este flete.';
+      color = AppTheme.slate600;
+      icon = Icons.location_off_outlined;
+    }
+
+    final driverPosition =
+        hasCoordinates ? LatLng(live!.latitude!, live.longitude!) : null;
+    final originPosition =
+        freight.originLat != null && freight.originLng != null
+            ? LatLng(freight.originLat!, freight.originLng!)
+            : null;
+    final markers = <Marker>{
+      if (driverPosition != null)
+        Marker(
+          markerId: const MarkerId('assigned-driver'),
+          position: driverPosition,
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow: const InfoWindow(title: 'Conductor asignado'),
+        ),
+      if (originPosition != null)
+        Marker(
+          markerId: const MarkerId('freight-pickup'),
+          position: originPosition,
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(title: 'Punto de retiro'),
+        ),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AppTheme.cardDecoration(radius: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppTheme.midnight,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      detail,
+                      style: const TextStyle(
+                        color: AppTheme.slate600,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Actualizar ubicacion',
+                onPressed: onRefresh,
+                icon:
+                    const Icon(Icons.refresh_rounded, color: AppTheme.primary),
+              ),
+            ],
+          ),
+          if (driverPosition != null) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 220,
+                width: double.infinity,
+                child: GoogleMap(
+                  key: ValueKey('driver-live-location-${freight.id}'),
+                  initialCameraPosition: CameraPosition(
+                    target: driverPosition,
+                    zoom: 14.5,
+                  ),
+                  markers: markers,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  mapToolbarEnabled: false,
+                  rotateGesturesEnabled: false,
+                  tiltGesturesEnabled: false,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     CHAT_IMAGE_SEND_MAX_PER_MINUTE: int = 12
     CHAT_ADMIN_REVIEW_MAX_PER_HOUR: int = 30
     CHAT_ADMIN_REVIEW_MESSAGE_LIMIT: int = 200
+    DRIVER_LOCATION_EARLY_ACCESS_MINUTES: int = 30
+    DRIVER_LOCATION_UPDATE_MIN_SECONDS: int = 10
+    DRIVER_LOCATION_STALE_SECONDS: int = 60
 
     class Config:
         env_file = ".env"
@@ -152,6 +155,18 @@ class Settings(BaseSettings):
         if not 20 <= self.CHAT_ADMIN_REVIEW_MESSAGE_LIMIT <= 300:
             raise ValueError(
                 "CHAT_ADMIN_REVIEW_MESSAGE_LIMIT debe estar entre 20 y 300"
+            )
+        if not 0 <= self.DRIVER_LOCATION_EARLY_ACCESS_MINUTES <= 180:
+            raise ValueError(
+                "DRIVER_LOCATION_EARLY_ACCESS_MINUTES debe estar entre 0 y 180"
+            )
+        if not 5 <= self.DRIVER_LOCATION_UPDATE_MIN_SECONDS <= 60:
+            raise ValueError(
+                "DRIVER_LOCATION_UPDATE_MIN_SECONDS debe estar entre 5 y 60"
+            )
+        if not 30 <= self.DRIVER_LOCATION_STALE_SECONDS <= 300:
+            raise ValueError(
+                "DRIVER_LOCATION_STALE_SECONDS debe estar entre 30 y 300"
             )
         if self.is_production:
             if len(self.SECRET_KEY) < 32 or self.SECRET_KEY.startswith("change-me"):

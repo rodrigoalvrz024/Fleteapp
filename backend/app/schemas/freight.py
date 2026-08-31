@@ -76,6 +76,29 @@ class FreightStatusUpdate(BaseModel):
     )
 
 
+class DriverLocationUpdate(BaseModel):
+    """A coarse, active-trip location reported by the assigned driver app."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    accuracy_m: float = Field(ge=0, le=2_000, allow_inf_nan=False)
+    heading: Optional[float] = Field(default=None, ge=0, lt=360, allow_inf_nan=False)
+
+
+class DriverLiveLocationResponse(BaseModel):
+    freight_id: int
+    visible: bool
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    accuracy_m: Optional[float] = None
+    heading: Optional[float] = None
+    updated_at: Optional[datetime] = None
+    is_stale: bool = False
+    available_from: Optional[datetime] = None
+
+
 class FreightAcceptRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

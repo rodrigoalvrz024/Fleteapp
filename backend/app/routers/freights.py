@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
@@ -22,6 +22,8 @@ from app.models.pricing_quote import FreightPriceQuote
 from app.models.user import User, UserRole
 from app.schemas.freight import (
     DeliveryPinResponse,
+    DriverLiveLocationResponse,
+    DriverLocationUpdate,
     EvidenceViewResponse,
     FreightDeclineResponse,
     FreightCreate,
@@ -162,6 +164,71 @@ def _require_assigned_driver(
             detail="Solo el conductor asignado puede realizar esta accion",
         )
     return driver
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _live_location_window(
+    freight: FreightRequest,
+    now: datetime,
+) -> tuple[bool, datetime | None]:
+    """Return whether a freight may expose a driver's active-trip location."""
+    if not freight.driver_id or freight.status not in (
+        FreightStatus.accepted,
+        FreightStatus.in_progress,
+    ):
+        return False, None
+
+    scheduled_at = _as_utc(freight.scheduled_at)
+    if scheduled_at and not freight.is_urgent:
+        available_from = scheduled_at - timedelta(
+            minutes=settings.DRIVER_LOCATION_EARLY_ACCESS_MINUTES
+        )
+        if now < available_from:
+            return False, available_from
+    return True, None
+
+
+def _live_location_response(
+    freight: FreightRequest,
+    now: datetime,
+) -> DriverLiveLocationResponse:
+    window_open, available_from = _live_location_window(freight, now)
+    updated_at = _as_utc(freight.driver_location_updated_at)
+    has_position = (
+        freight.driver_location_lat is not None
+        and freight.driver_location_lng is not None
+    )
+    is_stale = bool(
+        updated_at
+        and (now - updated_at).total_seconds() > settings.DRIVER_LOCATION_STALE_SECONDS
+    )
+    visible = window_open and has_position
+    return DriverLiveLocationResponse(
+        freight_id=freight.id,
+        visible=visible,
+        latitude=freight.driver_location_lat if visible else None,
+        longitude=freight.driver_location_lng if visible else None,
+        accuracy_m=freight.driver_location_accuracy_m if visible else None,
+        heading=freight.driver_location_heading if visible else None,
+        updated_at=updated_at if visible else None,
+        is_stale=is_stale if visible else False,
+        available_from=available_from,
+    )
+
+
+def _clear_live_location(freight: FreightRequest) -> None:
+    freight.driver_location_lat = None
+    freight.driver_location_lng = None
+    freight.driver_location_accuracy_m = None
+    freight.driver_location_heading = None
+    freight.driver_location_updated_at = None
 
 
 def _require_cargo_photo_view_access(
@@ -522,6 +589,114 @@ def get_freight(
         )
     db.commit()
     return freight
+
+
+def _require_live_location_view_access(
+    freight: FreightRequest,
+    db: Session,
+    current_user: User,
+) -> None:
+    if current_user.role == UserRole.admin:
+        return
+    if current_user.role == UserRole.client and freight.client_id == current_user.id:
+        return
+    if current_user.role == UserRole.driver:
+        driver = _get_driver_for_user(db, current_user)
+        if driver and freight.driver_id == driver.id:
+            return
+    raise HTTPException(status_code=403, detail="No tienes permiso para ver esta ubicacion")
+
+
+@router.get("/{freight_id}/live-location", response_model=DriverLiveLocationResponse)
+def get_driver_live_location(
+    freight_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_live_location_view_access(freight, db, current_user)
+    now = datetime.now(timezone.utc)
+    response = _live_location_response(freight, now)
+    if current_user.role == UserRole.client:
+        record_audit_event(
+            db,
+            actor=current_user,
+            entity_type="freight",
+            entity_id=freight.id,
+            event_type="freight.driver_location_viewed",
+            request=request,
+            metadata={"visible": response.visible, "is_stale": response.is_stale},
+        )
+        db.commit()
+    return response
+
+
+@router.put("/{freight_id}/live-location", response_model=DriverLiveLocationResponse)
+def update_driver_live_location(
+    freight_id: int,
+    data: DriverLocationUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("driver")),
+):
+    check_rate_limit(
+        request,
+        scope="driver-live-location-update",
+        identifier=f"{current_user.id}:{freight_id}",
+        max_attempts=400,
+        window_seconds=60 * 60,
+    )
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_assigned_driver(freight, db, current_user)
+
+    now = datetime.now(timezone.utc)
+    window_open, available_from = _live_location_window(freight, now)
+    if not window_open:
+        if available_from:
+            raise HTTPException(
+                status_code=409,
+                detail="El seguimiento comienza cerca de la hora agendada",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="El seguimiento solo esta disponible durante un flete activo",
+        )
+
+    last_update = _as_utc(freight.driver_location_updated_at)
+    if (
+        last_update
+        and (now - last_update).total_seconds()
+        < settings.DRIVER_LOCATION_UPDATE_MIN_SECONDS
+    ):
+        raise HTTPException(status_code=429, detail="Actualiza tu ubicacion en unos segundos")
+
+    freight.driver_location_lat = data.latitude
+    freight.driver_location_lng = data.longitude
+    freight.driver_location_accuracy_m = data.accuracy_m
+    freight.driver_location_heading = data.heading
+    freight.driver_location_updated_at = now
+    db.commit()
+    db.refresh(freight)
+    return _live_location_response(freight, now)
+
+
+@router.delete("/{freight_id}/live-location", status_code=204)
+def stop_driver_live_location(
+    freight_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("driver")),
+):
+    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    _require_assigned_driver(freight, db, current_user)
+    _clear_live_location(freight)
+    db.commit()
 
 
 @router.get("/{freight_id}/cargo-photos")
@@ -982,9 +1157,11 @@ def update_status(
         freight.trip_completed_at = transitioned_at
         freight.final_price = freight.estimated_price
         freight.delivery_pin_verified_at = transitioned_at
+        _clear_live_location(freight)
     elif data.status == FreightStatus.cancelled:
         freight.cancelled_at = transitioned_at
         freight.cancel_reason = data.note
+        _clear_live_location(freight)
     freight.last_modified_by = current_user.id
 
     history = TripStatusHistory(freight_id=freight.id, status=data.status, note=data.note)

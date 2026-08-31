@@ -56,6 +56,38 @@ class FreightService {
     return FreightModel.fromJson(res.data);
   }
 
+  Future<DriverLiveLocation> getDriverLiveLocation(int id) async {
+    final res = await _api.get(
+      '${ApiConstants.freights}/$id${ApiConstants.driverLiveLocation}',
+    );
+    return DriverLiveLocation.fromJson(Map<String, dynamic>.from(res.data));
+  }
+
+  Future<void> updateDriverLiveLocation(
+    int id, {
+    required double latitude,
+    required double longitude,
+    required double accuracyM,
+    double? heading,
+  }) async {
+    await _api.put(
+      '${ApiConstants.freights}/$id${ApiConstants.driverLiveLocation}',
+      {
+        'latitude': latitude,
+        'longitude': longitude,
+        'accuracy_m': accuracyM,
+        if (heading != null && heading >= 0 && heading < 360)
+          'heading': heading,
+      },
+    );
+  }
+
+  Future<void> stopDriverLiveLocation(int id) async {
+    await _api.delete(
+      '${ApiConstants.freights}/$id${ApiConstants.driverLiveLocation}',
+    );
+  }
+
   Future<FreightModel> acceptFreight(int id) async {
     final res = await _api.put('${ApiConstants.freights}/$id/accept');
     return FreightModel.fromJson(res.data);

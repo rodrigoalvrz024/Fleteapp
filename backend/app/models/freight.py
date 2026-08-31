@@ -91,6 +91,14 @@ class FreightRequest(Base):
     delivery_pin_verified_at = Column(DateTime(timezone=True), nullable=True)
     delivery_pin_failed_attempts = Column(Integer, default=0, nullable=False)
 
+    # Only the last active-trip position is kept. Historical driver routes are
+    # deliberately not collected by default.
+    driver_location_lat = Column(Float, nullable=True)
+    driver_location_lng = Column(Float, nullable=True)
+    driver_location_accuracy_m = Column(Float, nullable=True)
+    driver_location_heading = Column(Float, nullable=True)
+    driver_location_updated_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)

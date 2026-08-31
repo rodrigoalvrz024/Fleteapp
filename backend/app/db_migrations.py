@@ -199,6 +199,26 @@ STARTUP_MIGRATIONS = (
     ADD COLUMN IF NOT EXISTS delivery_pin_failed_attempts INTEGER NOT NULL DEFAULT 0
     """,
     """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_location_lat DOUBLE PRECISION
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_location_lng DOUBLE PRECISION
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_location_accuracy_m DOUBLE PRECISION
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_location_heading DOUBLE PRECISION
+    """,
+    """
+    ALTER TABLE freight_requests
+    ADD COLUMN IF NOT EXISTS driver_location_updated_at TIMESTAMP WITH TIME ZONE
+    """,
+    """
     ALTER TABLE payments
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE
     """,

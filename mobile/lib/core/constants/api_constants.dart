@@ -24,6 +24,7 @@ class ApiConstants {
   static const String payments = '/payments';
   static const String ratings = '/ratings';
   static const String feedback = '/feedback';
+  static const String driverLiveLocation = '/live-location';
   static const String analyticsEvents = '/analytics/events';
   static const String analyticsPresence = '/analytics/presence';
 }

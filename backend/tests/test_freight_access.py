@@ -19,7 +19,12 @@ from app.models.freight_driver_decline import FreightDriverDecline
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
-from app.routers.freights import _require_freight_view_access
+from app.routers.freights import (
+    _live_location_response,
+    _live_location_window,
+    _require_freight_view_access,
+    _require_live_location_view_access,
+)
 
 
 class FreightAccessTests(unittest.TestCase):
@@ -120,6 +125,65 @@ class FreightAccessTests(unittest.TestCase):
 
         self.assertEqual(error.exception.status_code, 403)
         self.assertIn("blockers", error.exception.detail)
+
+    def test_scheduled_freight_hides_location_until_the_pre_service_window(self):
+        now = datetime.now(timezone.utc)
+        freight = FreightRequest(
+            id=20,
+            client_id=3,
+            driver_id=5,
+            status=FreightStatus.accepted,
+            is_urgent=False,
+            scheduled_at=now + timedelta(minutes=45),
+            driver_location_lat=-33.45,
+            driver_location_lng=-70.66,
+            driver_location_updated_at=now,
+        )
+
+        visible, available_from = _live_location_window(freight, now)
+        response = _live_location_response(freight, now)
+
+        self.assertFalse(visible)
+        self.assertIsNotNone(available_from)
+        self.assertFalse(response.visible)
+        self.assertIsNone(response.latitude)
+
+    def test_only_active_assigned_freight_exposes_last_driver_position(self):
+        now = datetime.now(timezone.utc)
+        freight = FreightRequest(
+            id=21,
+            client_id=3,
+            driver_id=5,
+            status=FreightStatus.in_progress,
+            is_urgent=True,
+            driver_location_lat=-33.45,
+            driver_location_lng=-70.66,
+            driver_location_accuracy_m=12,
+            driver_location_updated_at=now,
+        )
+
+        response = _live_location_response(freight, now)
+        self.assertTrue(response.visible)
+        self.assertEqual(response.latitude, -33.45)
+
+        freight.status = FreightStatus.completed
+        completed = _live_location_response(freight, now)
+        self.assertFalse(completed.visible)
+        self.assertIsNone(completed.latitude)
+
+    def test_other_client_cannot_view_assigned_driver_location(self):
+        freight = FreightRequest(
+            id=22,
+            client_id=3,
+            driver_id=5,
+            status=FreightStatus.accepted,
+        )
+        unrelated_client = User(id=4, role=UserRole.client)
+
+        with self.assertRaises(HTTPException) as error:
+            _require_live_location_view_access(freight, MagicMock(), unrelated_client)
+
+        self.assertEqual(error.exception.status_code, 403)
 
 
 if __name__ == "__main__":
