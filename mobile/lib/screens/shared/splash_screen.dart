@@ -59,7 +59,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       // starts after the first rendered frame, not while Flutter is booting.
       Future<void>.delayed(const Duration(milliseconds: 2000)),
       authCheck.timeout(
-        const Duration(milliseconds: 1800),
+        // Secure storage can take a little longer to become available on a
+        // cold Android start. Do not discard a valid session just because
+        // that first read lags behind the visual intro.
+        const Duration(milliseconds: 4500),
         onTimeout: () {},
       ),
     ]);
