@@ -1642,7 +1642,9 @@ class _CargoQuickAction extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(15),
           child: Ink(
-            height: 88,
+            // Leaves enough vertical room for Android font metrics at the
+            // smallest supported text scale, avoiding a visual overflow.
+            height: 94,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: selected

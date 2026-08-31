@@ -263,8 +263,14 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
         ],
       ),
     );
+    // `showDialog` resolves when the pop starts, while the route still runs
+    // its exit animation. Keep the controller and the detail view intact
+    // until that transition has released its descendants.
+    await Future<void>.delayed(kThemeAnimationDuration);
     controller.dispose();
-    if (pin != null) await _updateStatus('completed', confirmationPin: pin);
+    if (!mounted || pin == null) return;
+
+    await _updateStatus('completed', confirmationPin: pin);
   }
 
   @override
