@@ -32,7 +32,10 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   List<String> _cargoPhotoUrls = const [];
   static const int _maxEvidenceBytes = 8 * 1024 * 1024;
   StreamSubscription<Position>? _locationSubscription;
+  Timer? _locationHeartbeat;
   DateTime? _lastLocationSentAt;
+  int _locationSession = 0;
+  Future<void> _locationWriteTail = Future.value();
   bool _sharingLocation = false;
   bool _locationSharingLoading = false;
 
@@ -97,19 +100,27 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
         throw StateError('Debes permitir la ubicacion para este flete.');
       }
 
+      final session = ++_locationSession;
       final initial = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      await _sendLocation(initial, force: true);
+      await _sendLocation(initial, force: true, session: session);
       _locationSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 25,
         ),
-      ).listen((position) => unawaited(_sendLocation(position)));
+      ).listen(
+        (position) => unawaited(_sendLocation(position, session: session)),
+      );
       if (mounted) {
         setState(() => _sharingLocation = true);
       }
+      _locationHeartbeat?.cancel();
+      _locationHeartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (!mounted || !_sharingLocation) return;
+        unawaited(_sendCurrentLocationHeartbeat(session));
+      });
       _showMessage('Tu ubicacion se comparte solo con este cliente.');
     } catch (error) {
       _showMessage(
@@ -123,7 +134,12 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     }
   }
 
-  Future<void> _sendLocation(Position position, {bool force = false}) async {
+  Future<void> _sendLocation(
+    Position position, {
+    bool force = false,
+    required int session,
+  }) async {
+    if (session != _locationSession) return;
     final now = DateTime.now();
     if (!force &&
         _lastLocationSentAt != null &&
@@ -131,26 +147,45 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       return;
     }
     _lastLocationSentAt = now;
+    _locationWriteTail = _locationWriteTail.then((_) async {
+      if (session != _locationSession) return;
+      try {
+        await _service.updateDriverLiveLocation(
+          widget.freightId,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracyM: position.accuracy < 0 ? 0 : position.accuracy,
+          heading: position.heading >= 0 && position.heading < 360
+              ? position.heading
+              : null,
+        );
+      } catch (_) {
+        // The screen remains usable if an intermittent location update fails.
+      }
+    });
+    await _locationWriteTail;
+  }
+
+  Future<void> _sendCurrentLocationHeartbeat(int session) async {
     try {
-      await _service.updateDriverLiveLocation(
-        widget.freightId,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracyM: position.accuracy < 0 ? 0 : position.accuracy,
-        heading: position.heading >= 0 && position.heading < 360
-            ? position.heading
-            : null,
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
       );
+      await _sendLocation(position, force: true, session: session);
     } catch (_) {
-      // The screen remains usable if an intermittent location update fails.
+      // The next GPS point or heartbeat will retry without disrupting the trip.
     }
   }
 
   Future<void> _stopLocationSharing({bool clearServer = true}) async {
+    _locationSession++;
     await _locationSubscription?.cancel();
     _locationSubscription = null;
+    _locationHeartbeat?.cancel();
+    _locationHeartbeat = null;
     _lastLocationSentAt = null;
     if (mounted) setState(() => _sharingLocation = false);
+    await _locationWriteTail;
     if (clearServer) {
       try {
         await _service.stopDriverLiveLocation(widget.freightId);
@@ -162,7 +197,9 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
 
   @override
   void dispose() {
+    _locationSession++;
     _locationSubscription?.cancel();
+    _locationHeartbeat?.cancel();
     super.dispose();
   }
 
