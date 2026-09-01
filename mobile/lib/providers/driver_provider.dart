@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/freight_model.dart';
 import '../services/driver_onboarding_service.dart';
+import '../services/driver_live_location_service.dart';
 import '../services/freight_service.dart';
 
 class DriverState {
@@ -70,6 +71,16 @@ class DriverNotifier extends StateNotifier<DriverState> {
   Future<void> goOnline() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
+      final locationReady =
+          await DriverLiveLocationService.instance.ensurePermission();
+      if (!locationReady) {
+        state = state.copyWith(
+          isOnline: false,
+          isLoading: false,
+          error: DriverLiveLocationService.permissionRequiredMessage,
+        );
+        return;
+      }
       await _driverService.updateAvailability(true);
       state = state.copyWith(isOnline: true, isLoading: false);
       _startPolling();
@@ -172,7 +183,22 @@ class DriverNotifier extends StateNotifier<DriverState> {
 
   Future<bool> acceptFreight(int id) async {
     try {
+      final locationReady =
+          await DriverLiveLocationService.instance.ensurePermission();
+      if (!locationReady) {
+        state = state.copyWith(
+          error: DriverLiveLocationService.permissionRequiredMessage,
+        );
+        return false;
+      }
       final freight = await _service.acceptFreight(id);
+      final trackingStarted =
+          await DriverLiveLocationService.instance.start(freight.id);
+      if (!trackingStarted) {
+        state = state.copyWith(
+          error: 'No pudimos iniciar tu ubicacion para este flete.',
+        );
+      }
       state = state.copyWith(
         activeFreight: freight,
         availableFreights: state.availableFreights
@@ -211,6 +237,12 @@ class DriverNotifier extends StateNotifier<DriverState> {
     try {
       final updated = await _service.updateStatus(id, status);
       if (status == 'completed') {
+        unawaited(
+          DriverLiveLocationService.instance.stop(
+            freightId: id,
+            clearServer: false,
+          ),
+        );
         state = state.copyWith(
           clearActive: true,
           completedToday: state.completedToday + 1,

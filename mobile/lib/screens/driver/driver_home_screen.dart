@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../models/freight_model.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/driver_live_location_service.dart';
 import '../../widgets/muvv_mobile_ui.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,23 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   void initState() {
     super.initState();
     _rotateStatus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestRequiredLocationPermission();
+    });
+  }
+
+  Future<void> _requestRequiredLocationPermission() async {
+    final ready = await DriverLiveLocationService.instance.ensurePermission();
+    if (!mounted || ready) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Permite tu ubicacion para conectarte y realizar fletes.',
+        ),
+        backgroundColor: AppTheme.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _rotateStatus() async {
@@ -553,9 +571,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     } else {
       ref.read(driverProvider.notifier).dismissIncoming();
       setState(() {});
+      final message = ref.read(driverProvider).error ??
+          'Este flete ya no esta disponible.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Este flete ya no esta disponible.'),
+        SnackBar(
+          content: Text(message),
           backgroundColor: AppTheme.error,
           behavior: SnackBarBehavior.floating,
         ),

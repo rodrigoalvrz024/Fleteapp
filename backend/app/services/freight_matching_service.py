@@ -17,7 +17,7 @@ SERVICE_VEHICLE_TYPES = {
     "package": {"pickup", "van", "truck_small", "truck_medium", "truck_large"},
     "urgent": {"pickup", "van", "truck_small", "truck_medium", "truck_large"},
     "home_office": {"van", "truck_small", "truck_medium", "truck_large"},
-    "moving": {"van", "truck_small", "truck_medium", "truck_large"},
+    "moving": {"truck_medium", "truck_large"},
 }
 
 

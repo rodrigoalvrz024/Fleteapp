@@ -1,11 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/freight_model.dart';
+import '../../services/driver_live_location_service.dart';
 import '../../services/freight_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../utils/api_error_message.dart';
@@ -31,13 +29,6 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   bool _actionLoading = false;
   List<String> _cargoPhotoUrls = const [];
   static const int _maxEvidenceBytes = 8 * 1024 * 1024;
-  StreamSubscription<Position>? _locationSubscription;
-  Timer? _locationHeartbeat;
-  DateTime? _lastLocationSentAt;
-  int _locationSession = 0;
-  Future<void> _locationWriteTail = Future.value();
-  bool _sharingLocation = false;
-  bool _locationSharingLoading = false;
 
   @override
   void initState() {
@@ -62,8 +53,15 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
         _cargoPhotoUrls = cargoPhotoUrls;
         _loading = false;
       });
-      if (!_canShareLocation(f) && _sharingLocation) {
-        unawaited(_stopLocationSharing(clearServer: false));
+      if (_canShareLocation(f)) {
+        // Tracking is started automatically after a driver accepts a freight
+        // and resumes here if the app returned to this detail screen.
+        DriverLiveLocationService.instance.start(f.id);
+      } else {
+        DriverLiveLocationService.instance.stop(
+          freightId: f.id,
+          clearServer: false,
+        );
       }
     } catch (_) {
       setState(() {
@@ -74,134 +72,6 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
 
   bool _canShareLocation(FreightModel freight) =>
       freight.status == 'accepted' || freight.status == 'in_progress';
-
-  Future<void> _toggleLocationSharing() async {
-    if (_sharingLocation) {
-      await _stopLocationSharing();
-    } else {
-      await _startLocationSharing();
-    }
-  }
-
-  Future<void> _startLocationSharing() async {
-    final freight = _freight;
-    if (freight == null || !_canShareLocation(freight)) return;
-    setState(() => _locationSharingLoading = true);
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        throw StateError('Activa la ubicacion del telefono para compartirla.');
-      }
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        throw StateError('Debes permitir la ubicacion para este flete.');
-      }
-
-      final session = ++_locationSession;
-      final initial = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      await _sendLocation(initial, force: true, session: session);
-      _locationSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 25,
-        ),
-      ).listen(
-        (position) => unawaited(_sendLocation(position, session: session)),
-      );
-      if (mounted) {
-        setState(() => _sharingLocation = true);
-      }
-      _locationHeartbeat?.cancel();
-      _locationHeartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
-        if (!mounted || !_sharingLocation) return;
-        unawaited(_sendCurrentLocationHeartbeat(session));
-      });
-      _showMessage('Tu ubicacion se comparte solo con este cliente.');
-    } catch (error) {
-      _showMessage(
-          apiErrorMessage(
-            error,
-            fallback: 'No pudimos activar tu ubicacion para el cliente.',
-          ),
-          error: true);
-    } finally {
-      if (mounted) setState(() => _locationSharingLoading = false);
-    }
-  }
-
-  Future<void> _sendLocation(
-    Position position, {
-    bool force = false,
-    required int session,
-  }) async {
-    if (session != _locationSession) return;
-    final now = DateTime.now();
-    if (!force &&
-        _lastLocationSentAt != null &&
-        now.difference(_lastLocationSentAt!).inSeconds < 10) {
-      return;
-    }
-    _lastLocationSentAt = now;
-    _locationWriteTail = _locationWriteTail.then((_) async {
-      if (session != _locationSession) return;
-      try {
-        await _service.updateDriverLiveLocation(
-          widget.freightId,
-          latitude: position.latitude,
-          longitude: position.longitude,
-          accuracyM: position.accuracy < 0 ? 0 : position.accuracy,
-          heading: position.heading >= 0 && position.heading < 360
-              ? position.heading
-              : null,
-        );
-      } catch (_) {
-        // The screen remains usable if an intermittent location update fails.
-      }
-    });
-    await _locationWriteTail;
-  }
-
-  Future<void> _sendCurrentLocationHeartbeat(int session) async {
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      await _sendLocation(position, force: true, session: session);
-    } catch (_) {
-      // The next GPS point or heartbeat will retry without disrupting the trip.
-    }
-  }
-
-  Future<void> _stopLocationSharing({bool clearServer = true}) async {
-    _locationSession++;
-    await _locationSubscription?.cancel();
-    _locationSubscription = null;
-    _locationHeartbeat?.cancel();
-    _locationHeartbeat = null;
-    _lastLocationSentAt = null;
-    if (mounted) setState(() => _sharingLocation = false);
-    await _locationWriteTail;
-    if (clearServer) {
-      try {
-        await _service.stopDriverLiveLocation(widget.freightId);
-      } catch (_) {
-        // Closing the trip server-side also clears the last active position.
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _locationSession++;
-    _locationSubscription?.cancel();
-    _locationHeartbeat?.cancel();
-    super.dispose();
-  }
 
   Future<void> _submitDriverFeedback() async {
     setState(() => _actionLoading = true);
@@ -223,12 +93,29 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       _actionLoading = true;
     });
     try {
+      final locationReady =
+          await DriverLiveLocationService.instance.ensurePermission();
+      if (!locationReady) {
+        _showMessage(
+          DriverLiveLocationService.permissionRequiredMessage,
+          error: true,
+        );
+        return;
+      }
       await _service.acceptFreight(widget.freightId);
+      final trackingStarted =
+          await DriverLiveLocationService.instance.start(widget.freightId);
       await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Flete aceptado'),
-            backgroundColor: AppTheme.success));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            trackingStarted
+                ? 'Flete aceptado. Tu ubicacion se comparte con el cliente.'
+                : 'Flete aceptado. Revisa que la ubicacion este activa.',
+          ),
+          backgroundColor:
+              trackingStarted ? AppTheme.success : AppTheme.error,
+        ));
       }
     } catch (e) {
       if (mounted) {
@@ -263,6 +150,12 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
         status,
         confirmationPin: confirmationPin,
       );
+      if (status == 'completed' || status == 'cancelled') {
+        await DriverLiveLocationService.instance.stop(
+          freightId: widget.freightId,
+          clearServer: false,
+        );
+      }
       await _load();
       _showMessage(
         status == 'completed' ? 'Entrega confirmada' : 'Estado actualizado',
@@ -545,11 +438,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
             ),
           if (_canShareLocation(f)) ...[
             const SizedBox(height: 12),
-            _LiveLocationSharingCard(
-              isSharing: _sharingLocation,
-              isLoading: _locationSharingLoading,
-              onToggle: _toggleLocationSharing,
-            ),
+            const _LiveLocationRequiredCard(),
           ],
           if (f.status == 'accepted' ||
               f.status == 'in_progress' ||
@@ -741,61 +630,41 @@ String _serviceTypeLabel(String value) => switch (value) {
       _ => 'Paqueteria',
     };
 
-class _LiveLocationSharingCard extends StatelessWidget {
-  final bool isSharing;
-  final bool isLoading;
-  final VoidCallback onToggle;
-
-  const _LiveLocationSharingCard({
-    required this.isSharing,
-    required this.isLoading,
-    required this.onToggle,
-  });
+class _LiveLocationRequiredCard extends StatelessWidget {
+  const _LiveLocationRequiredCard();
 
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: (isSharing ? AppTheme.success : AppTheme.primary)
-              .withValues(alpha: 0.08),
+          color: AppTheme.success.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: (isSharing ? AppTheme.success : AppTheme.primary)
-                .withValues(alpha: 0.18),
+            color: AppTheme.success.withValues(alpha: 0.18),
           ),
         ),
         child: Row(
           children: [
-            Icon(
-              isSharing
-                  ? Icons.location_on_rounded
-                  : Icons.location_off_outlined,
-              color: isSharing ? AppTheme.success : AppTheme.primary,
-            ),
+            const Icon(Icons.location_on_rounded, color: AppTheme.success),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    isSharing ? 'Ubicacion compartida' : 'Compartir ubicacion',
-                    style: const TextStyle(
+                  const Text(
+                    'Ubicacion en vivo activa',
+                    style: TextStyle(
                       color: AppTheme.midnight,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 3),
                   const Text(
-                    'Solo el cliente de este flete puede verla durante el servicio.',
+                    'Solo el cliente asignado puede verla durante este flete.',
                     style: TextStyle(color: AppTheme.slate600, fontSize: 12),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 10),
-            Switch.adaptive(
-              value: isSharing,
-              onChanged: isLoading ? null : (_) => onToggle(),
             ),
           ],
         ),

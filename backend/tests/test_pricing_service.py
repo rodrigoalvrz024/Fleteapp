@@ -59,6 +59,31 @@ class PricingServiceTests(unittest.TestCase):
         with self.assertRaises(PricingInputError):
             self.estimate(weight_kg=800, requested_vehicle_type="pickup")
 
+    def test_moving_requires_a_medium_truck_and_has_a_50k_floor(self):
+        price = self.estimate(
+            distance_km=1,
+            duration_minutes=3,
+            weight_kg=25,
+            volume_m3=0.5,
+            service_type="moving",
+            cargo_description="Cajas de mudanza",
+        )
+
+        self.assertEqual(price["recommended_vehicle_type"], "truck_medium")
+        self.assertEqual(price["selected_vehicle_type"], "truck_medium")
+        self.assertGreaterEqual(price["base_price"], 50_000)
+        self.assertEqual(
+            price["calculation_metadata"]["service_minimum_fare"], 50_000
+        )
+
+    def test_moving_rejects_a_smaller_requested_vehicle(self):
+        with self.assertRaises(PricingInputError):
+            self.estimate(
+                service_type="moving",
+                cargo_description="Cajas de mudanza",
+                requested_vehicle_type="van",
+            )
+
     def test_cargo_above_supported_capacity_requires_manual_quote(self):
         price = self.estimate(weight_kg=11_000, volume_m3=55)
 

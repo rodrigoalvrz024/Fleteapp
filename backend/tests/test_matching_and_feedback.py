@@ -37,18 +37,20 @@ class FreightMatchingTest(unittest.TestCase):
     def setUp(self):
         self.moving = SimpleNamespace(
             service_type="moving",
-            selected_vehicle_type="van",
-            recommended_vehicle_type="van",
+            selected_vehicle_type="truck_medium",
+            recommended_vehicle_type="truck_medium",
             cargo_weight_kg=350,
             cargo_volume_m3=4,
         )
 
-    def test_moving_rejects_pickup_and_accepts_approved_van(self):
+    def test_moving_rejects_pickup_and_van_and_accepts_medium_truck(self):
         pickup = _vehicle(VehicleType.pickup, weight=900, volume=6)
         van = _vehicle(VehicleType.van, weight=900, volume=9)
+        medium_truck = _vehicle(VehicleType.truck_medium, weight=900, volume=9)
 
         self.assertFalse(vehicle_supports_freight(pickup, self.moving))
-        self.assertTrue(vehicle_supports_freight(van, self.moving))
+        self.assertFalse(vehicle_supports_freight(van, self.moving))
+        self.assertTrue(vehicle_supports_freight(medium_truck, self.moving))
 
     def test_rejected_or_insufficient_vehicle_is_not_matched(self):
         rejected_van = _vehicle(

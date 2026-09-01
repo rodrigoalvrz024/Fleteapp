@@ -20,7 +20,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-PRICING_VERSION = "v2"
+PRICING_VERSION = "v3"
 SUPPORTED_VEHICLE_TYPES = (
     "pickup",
     "van",
@@ -59,6 +59,7 @@ class PricingPolicy:
     driver_service_fee_rate: Decimal = Decimal("0.075")
     tax_rate: Decimal = Decimal("0.00")
     rounding_increment: int = 100
+    moving_minimum_fare: int = 50_000
 
 
 DEFAULT_VEHICLE_CONFIGS: dict[str, VehiclePricingConfig] = {
@@ -324,6 +325,14 @@ class PricingService:
             weight_kg=weight_kg,
             volume_m3=volume_m3,
         )
+        if normalized_service == "moving" and recommended:
+            # A mudanza is a distinct service: use at least a medium truck even
+            # for a light load, then apply its dedicated service minimum below.
+            minimum_moving_vehicle = "truck_medium"
+            if SUPPORTED_VEHICLE_TYPES.index(recommended) < SUPPORTED_VEHICLE_TYPES.index(
+                minimum_moving_vehicle
+            ):
+                recommended = minimum_moving_vehicle
         if reason or not recommended:
             return {
                 "pricing_version": PRICING_VERSION,
@@ -366,6 +375,11 @@ class PricingService:
         adjusted_price = subtotal * urgency_multiplier * demand_multiplier
         urgency_charge = adjusted_price - (subtotal * demand_multiplier)
         minimum_fare = _decimal(config.minimum_fare) * urgency_multiplier
+        if normalized_service == "moving":
+            minimum_fare = max(
+                minimum_fare,
+                _decimal(self.policy.moving_minimum_fare) * urgency_multiplier,
+            )
         minimum_adjustment = max(minimum_fare - adjusted_price, Decimal("0"))
         gross_price = _round_money(
             max(adjusted_price, minimum_fare), self.policy.rounding_increment
@@ -397,6 +411,11 @@ class PricingService:
             "extra_stops_charge": float(extra_stops_charge),
             "stairs_charge": float(stairs_charge),
             "demand_multiplier": float(demand_multiplier),
+            "service_minimum_fare": (
+                self.policy.moving_minimum_fare
+                if normalized_service == "moving"
+                else None
+            ),
         }
         return {
             "currency": "CLP",
