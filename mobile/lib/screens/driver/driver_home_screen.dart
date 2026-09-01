@@ -524,7 +524,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
           position: Tween<Offset>(
             begin: const Offset(0, 0.08),
             end: Offset.zero,
-          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+          ).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
           child: child,
         ),
       ),
@@ -535,13 +536,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     }
 
     if (action == _IncomingFreightAction.decline) {
-      final declined = await ref.read(driverProvider.notifier).declineFreight(freight.id);
+      final declined =
+          await ref.read(driverProvider.notifier).declineFreight(freight.id);
       _incomingOverlayOpen = false;
       if (!declined && mounted) {
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No pudimos rechazar este flete. Intenta nuevamente.'),
+            content:
+                Text('No pudimos rechazar este flete. Intenta nuevamente.'),
             backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -556,7 +559,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       return;
     }
 
-    final accepted = await ref.read(driverProvider.notifier).acceptFreight(freight.id);
+    final accepted =
+        await ref.read(driverProvider.notifier).acceptFreight(freight.id);
     _incomingOverlayOpen = false;
     if (!mounted) return;
     if (accepted) {
@@ -571,8 +575,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     } else {
       ref.read(driverProvider.notifier).dismissIncoming();
       setState(() {});
-      final message = ref.read(driverProvider).error ??
-          'Este flete ya no esta disponible.';
+      final message =
+          ref.read(driverProvider).error ?? 'Este flete ya no esta disponible.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
@@ -658,7 +662,8 @@ class _IncomingFreightOverlay extends StatelessWidget {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 7),
                           decoration: BoxDecoration(
                             color: AppTheme.primary.withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(99),
@@ -666,7 +671,8 @@ class _IncomingFreightOverlay extends StatelessWidget {
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.bolt_rounded, size: 15, color: AppTheme.primary),
+                              Icon(Icons.bolt_rounded,
+                                  size: 15, color: AppTheme.primary),
                               SizedBox(width: 5),
                               Text('Nuevo flete',
                                   style: TextStyle(
@@ -685,7 +691,8 @@ class _IncomingFreightOverlay extends StatelessWidget {
                           )
                         else if (schedule != null)
                           MuvvStatusPill(
-                            label: DateFormat('HH:mm', 'es_CL').format(schedule),
+                            label:
+                                DateFormat('HH:mm', 'es_CL').format(schedule),
                             color: AppTheme.slate600,
                             icon: Icons.schedule_rounded,
                           ),
@@ -718,18 +725,22 @@ class _IncomingFreightOverlay extends StatelessWidget {
                         if (freight.distanceKm != null)
                           _IncomingMetric(
                             icon: Icons.route_outlined,
-                            label: '${freight.distanceKm!.toStringAsFixed(1)} km',
+                            label:
+                                '${freight.distanceKm!.toStringAsFixed(1)} km',
                             color: AppTheme.primary,
                           ),
                         _IncomingMetric(
                           icon: Icons.scale_outlined,
-                          label: '${freight.cargoWeightKg.toStringAsFixed(0)} kg',
+                          label:
+                              '${freight.cargoWeightKg.toStringAsFixed(0)} kg',
                           color: AppTheme.slate600,
                         ),
-                        if (freight.requiresHelpers != null && freight.requiresHelpers! > 0)
+                        if (freight.requiresHelpers != null &&
+                            freight.requiresHelpers! > 0)
                           _IncomingMetric(
                             icon: Icons.people_outline_rounded,
-                            label: '${freight.requiresHelpers} ayudante${freight.requiresHelpers == 1 ? '' : 's'}',
+                            label:
+                                '${freight.requiresHelpers} ayudante${freight.requiresHelpers == 1 ? '' : 's'}',
                             color: AppTheme.accent,
                           ),
                       ],
@@ -741,7 +752,8 @@ class _IncomingFreightOverlay extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                     TextButton.icon(
-                      onPressed: () => Navigator.of(context).pop(_IncomingFreightAction.details),
+                      onPressed: () => Navigator.of(context)
+                          .pop(_IncomingFreightAction.details),
                       icon: const Icon(Icons.visibility_outlined, size: 18),
                       label: const Text('Ver detalles'),
                     ),
@@ -750,16 +762,20 @@ class _IncomingFreightOverlay extends StatelessWidget {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(_IncomingFreightAction.decline),
+                            onPressed: () => Navigator.of(context)
+                                .pop(_IncomingFreightAction.decline),
                             child: const Text('Rechazar'),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => Navigator.of(context).pop(_IncomingFreightAction.accept),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.success),
-                            icon: const Icon(Icons.check_circle_outline_rounded, size: 19),
+                            onPressed: () => Navigator.of(context)
+                                .pop(_IncomingFreightAction.accept),
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.success),
+                            icon: const Icon(Icons.check_circle_outline_rounded,
+                                size: 19),
                             label: const Text('Aceptar'),
                           ),
                         ),

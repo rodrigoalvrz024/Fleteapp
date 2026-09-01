@@ -120,7 +120,8 @@ class DriverLiveLocationService {
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      await _send(position, freightId: freightId, session: session, force: true);
+      await _send(position,
+          freightId: freightId, session: session, force: true);
     } catch (_) {
       // The stream remains active and retries on the next update.
     }

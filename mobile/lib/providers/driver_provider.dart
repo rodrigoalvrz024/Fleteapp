@@ -217,8 +217,9 @@ class DriverNotifier extends StateNotifier<DriverState> {
     try {
       await _service.declineFreight(id);
       state = state.copyWith(
-        availableFreights:
-            state.availableFreights.where((freight) => freight.id != id).toList(),
+        availableFreights: state.availableFreights
+            .where((freight) => freight.id != id)
+            .toList(),
         clearIncoming: true,
       );
       return true;

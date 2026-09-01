@@ -113,8 +113,7 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
                 ? 'Flete aceptado. Tu ubicacion se comparte con el cliente.'
                 : 'Flete aceptado. Revisa que la ubicacion este activa.',
           ),
-          backgroundColor:
-              trackingStarted ? AppTheme.success : AppTheme.error,
+          backgroundColor: trackingStarted ? AppTheme.success : AppTheme.error,
         ));
       }
     } catch (e) {
