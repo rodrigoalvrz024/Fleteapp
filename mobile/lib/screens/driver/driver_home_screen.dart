@@ -38,16 +38,20 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
   Future<void> _requestRequiredLocationPermission() async {
     final ready = await DriverLiveLocationService.instance.ensurePermission();
-    if (!mounted || ready) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Permite tu ubicacion para conectarte y realizar fletes.',
+    if (!mounted) return;
+    if (!ready) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Permite tu ubicacion para conectarte y realizar fletes.',
+          ),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
         ),
-        backgroundColor: AppTheme.error,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+      return;
+    }
+    await ref.read(driverProvider.notifier).resumeActiveFreightTracking();
   }
 
   void _rotateStatus() async {

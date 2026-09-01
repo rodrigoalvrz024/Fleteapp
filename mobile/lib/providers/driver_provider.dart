@@ -108,6 +108,35 @@ class DriverNotifier extends StateNotifier<DriverState> {
     );
   }
 
+  /// Restores mandatory live tracking after the driver reopens the app.
+  /// The server returns only freights assigned to the authenticated driver.
+  Future<void> resumeActiveFreightTracking() async {
+    if (DriverLiveLocationService.instance.isTracking) return;
+
+    try {
+      final freights = await _service.listFreights();
+      FreightModel? activeFreight;
+      for (final freight in freights) {
+        if (freight.status == 'accepted' || freight.status == 'in_progress') {
+          activeFreight = freight;
+          break;
+        }
+      }
+      if (activeFreight == null) return;
+
+      final trackingStarted =
+          await DriverLiveLocationService.instance.start(activeFreight.id);
+      state = state.copyWith(activeFreight: activeFreight);
+      if (!trackingStarted) {
+        state = state.copyWith(
+          error: DriverLiveLocationService.permissionRequiredMessage,
+        );
+      }
+    } catch (_) {
+      // The trip remains visible in "Mis viajes" and retries on the detail.
+    }
+  }
+
   // ── Polling ─────────────────────────────────────────────
 
   void _startPolling() {
