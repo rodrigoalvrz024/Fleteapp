@@ -17,6 +17,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 from app.models.driver import Driver, DriverStatus
 from app.models.freight_driver_decline import FreightDriverDecline
 from app.models.freight import FreightRequest, FreightStatus
+from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
 from app.routers.freights import (
@@ -28,6 +29,18 @@ from app.routers.freights import (
 
 
 class FreightAccessTests(unittest.TestCase):
+    @staticmethod
+    def _authorized_payment(freight: FreightRequest) -> Payment:
+        payment = Payment(
+            id=1,
+            freight_id=freight.id,
+            amount=10000,
+            method=PaymentMethod.webpay,
+            status=PaymentStatus.authorized,
+        )
+        freight.payment = payment
+        return payment
+
     def _db_with_driver(self, driver: Driver):
         db = MagicMock()
         driver_query = MagicMock()
@@ -85,8 +98,24 @@ class FreightAccessTests(unittest.TestCase):
             driver_id=None,
             status=FreightStatus.pending,
         )
+        self._authorized_payment(freight)
 
         _require_freight_view_access(freight, self._db_with_driver(driver), user)
+
+    def test_driver_cannot_view_unpaid_available_freight(self):
+        user = User(id=10, role=UserRole.driver)
+        driver = self._operational_driver(user.id)
+        freight = FreightRequest(
+            id=15,
+            client_id=3,
+            driver_id=None,
+            status=FreightStatus.pending,
+        )
+
+        with self.assertRaises(HTTPException) as error:
+            _require_freight_view_access(freight, self._db_with_driver(driver), user)
+
+        self.assertEqual(error.exception.status_code, 404)
 
     def test_pending_driver_cannot_view_available_freight_detail(self):
         user = User(id=11, role=UserRole.driver)

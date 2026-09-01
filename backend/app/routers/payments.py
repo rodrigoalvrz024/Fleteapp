@@ -1,6 +1,6 @@
 import html
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -13,6 +13,8 @@ from app.core.rate_limit import check_rate_limit
 from app.core.security import get_current_user, require_role
 from app.core.config import settings
 from app.services.audit_service import record_audit_event
+from app.services.cloud_tasks_service import enqueue_freight_driver_notification_task
+from app.services.freight_notification_service import notify_available_drivers
 from app.services.payout_service import ensure_driver_payout
 from app.services.pricing_history_service import record_pricing_snapshot
 from app.services.transbank_service import (
@@ -58,10 +60,10 @@ def initiate_payment(
     freight = db.query(FreightRequest).filter(
         FreightRequest.id == data.freight_id,
         FreightRequest.client_id == current_user.id,
-        FreightRequest.status == FreightStatus.completed
+        FreightRequest.status != FreightStatus.cancelled,
     ).first()
     if not freight:
-        raise HTTPException(status_code=404, detail="Flete no encontrado o no completado")
+        raise HTTPException(status_code=404, detail="Flete no disponible para pago")
 
     if freight.payment and freight.payment.status == PaymentStatus.authorized:
         raise HTTPException(status_code=400, detail="Este flete ya fue pagado")
@@ -164,6 +166,7 @@ async def _process_payment_callback(
     request: Request,
     token_ws: str | None,
     db: Session,
+    background_tasks: BackgroundTasks,
 ):
     form = await request.form() if request.method == "POST" else {}
     callback_data = {**dict(request.query_params), **dict(form)}
@@ -187,9 +190,6 @@ async def _process_payment_callback(
         raise HTTPException(status_code=404, detail="Pago no encontrado")
 
     if payment.status == PaymentStatus.authorized:
-        payout = ensure_driver_payout(db, payment)
-        if payout:
-            db.commit()
         return RedirectResponse(
             _frontend_payment_result(payment.freight_id, "success"),
             status_code=303,
@@ -231,6 +231,7 @@ async def _process_payment_callback(
         and int(float(commit["amount"] or 0)) == int(payment.amount)
     )
     payment.status = PaymentStatus.authorized if authorized else PaymentStatus.failed
+    notification = None
     if authorized:
         payment.paid_at = datetime.now(timezone.utc)
         payment.authorization_code = commit["authorization_code"]
@@ -243,22 +244,46 @@ async def _process_payment_callback(
                 final_customer_price=float(payment.amount),
                 captured_at=payment.paid_at,
             )
-        payout = ensure_driver_payout(db, payment)
-        if payout:
-            record_audit_event(
-                db,
-                entity_type="driver_payout",
-                entity_id=payout.id,
-                event_type="driver_payout.created",
-                after_data={
-                    "payment_id": payment.id,
-                    "freight_id": payout.freight_id,
-                    "driver_id": payout.driver_id,
-                    "amount": payout.amount,
-                    "status": payout.status.value,
+        freight = payment.freight
+        if freight and freight.status == FreightStatus.completed:
+            payout = ensure_driver_payout(db, payment)
+            if payout:
+                record_audit_event(
+                    db,
+                    entity_type="driver_payout",
+                    entity_id=payout.id,
+                    event_type="driver_payout.created",
+                    after_data={
+                        "payment_id": payout.payment_id,
+                        "freight_id": payout.freight_id,
+                        "driver_id": payout.driver_id,
+                        "amount": payout.amount,
+                        "status": payout.status.value,
+                    },
+                    request=request,
+                )
+        if (
+            freight
+            and freight.status == FreightStatus.pending
+            and freight.driver_id is None
+            and settings.firebase_push_configured
+        ):
+            notification = {
+                "freight_id": freight.id,
+                "title": "Nuevo flete disponible",
+                "body": (
+                    f"{'URGENTE' if freight.is_urgent else 'Programado'} - "
+                    f"${payment.amount:,.0f} CLP"
+                ),
+                "data": {
+                    "freight_id": str(freight.id),
+                    "type": "new_freight",
+                    "mode": freight.mode.value
+                    if hasattr(freight.mode, "value")
+                    else str(freight.mode),
+                    "route": f"/app/driver/freights/{freight.id}",
                 },
-                request=request,
-            )
+            }
     record_audit_event(
         db,
         entity_type="payment",
@@ -276,6 +301,14 @@ async def _process_payment_callback(
         request=request,
     )
     db.commit()
+    if notification:
+        if settings.NOTIFICATION_TASKS_ENABLED:
+            background_tasks.add_task(
+                enqueue_freight_driver_notification_task,
+                **notification,
+            )
+        else:
+            background_tasks.add_task(notify_available_drivers, **notification)
     if not authorized:
         return RedirectResponse(
             _frontend_payment_result(payment.freight_id, "failed"),
@@ -290,19 +323,21 @@ async def _process_payment_callback(
 @router.get("/callback", operation_id="payment_callback_get")
 async def payment_callback_get(
     request: Request,
+    background_tasks: BackgroundTasks,
     token_ws: str | None = None,
     db: Session = Depends(get_db),
 ):
-    return await _process_payment_callback(request, token_ws, db)
+    return await _process_payment_callback(request, token_ws, db, background_tasks)
 
 
 @router.post("/callback", operation_id="payment_callback_post")
 async def payment_callback_post(
     request: Request,
+    background_tasks: BackgroundTasks,
     token_ws: str | None = None,
     db: Session = Depends(get_db),
 ):
-    return await _process_payment_callback(request, token_ws, db)
+    return await _process_payment_callback(request, token_ws, db, background_tasks)
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

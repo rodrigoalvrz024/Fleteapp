@@ -12,7 +12,7 @@ os.environ.setdefault(
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from app.models.driver_payout import DriverPayout, DriverPayoutStatus
-from app.models.freight import FreightRequest
+from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus
 from app.routers.payouts import VALID_TRANSITIONS
 from app.services.payout_service import ensure_driver_payout
@@ -24,6 +24,7 @@ class DriverPayoutFlowTests(unittest.TestCase):
             id=9,
             driver_id=3,
             driver_receives=27800,
+            status=FreightStatus.completed,
         )
         payment = Payment(
             id=4,
@@ -55,6 +56,17 @@ class DriverPayoutFlowTests(unittest.TestCase):
         payout = ensure_driver_payout(db, self._authorized_payment())
 
         self.assertIs(payout, existing)
+        db.add.assert_not_called()
+
+    def test_authorized_payment_waits_until_delivery_is_completed(self):
+        db = MagicMock()
+        payment = self._authorized_payment()
+        payment.freight.status = FreightStatus.in_progress
+
+        payout = ensure_driver_payout(db, payment)
+
+        self.assertIsNone(payout)
+        db.query.assert_not_called()
         db.add.assert_not_called()
 
     def test_paid_payout_is_final(self):

@@ -542,7 +542,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
           return;
         }
       }
-      await _freightService.createFreight(
+      final freight = await _freightService.createFreight(
         originAddress: _originCtrl.text.trim(),
         originLat: _originLatLng!.latitude,
         originLng: _originLatLng!.longitude,
@@ -563,15 +563,13 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isUrgent
-                ? 'Flete solicitado. Buscaremos un conductor.'
-                : 'Flete programado correctamente.',
+            'Solicitud creada. Confirma el pago para publicarla a conductores.',
           ),
           backgroundColor: AppTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
-      context.go('/app/client/freights');
+      context.go('/app/client/freights/${freight.id}');
     } catch (error) {
       if (mounted) {
         setState(() {

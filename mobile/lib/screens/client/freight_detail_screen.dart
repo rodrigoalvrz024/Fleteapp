@@ -59,7 +59,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     if (!fragment.contains('?')) return;
     final result = Uri.tryParse(fragment)?.queryParameters['payment'];
     if (result == 'success') {
-      _showMessage('Pago confirmado correctamente.');
+      _showMessage('Pago confirmado. Tu flete ya puede ser visto por conductores.');
     } else if (result == 'cancelled') {
       _showMessage('Pago cancelado. Puedes intentarlo nuevamente.',
           error: true);
@@ -563,10 +563,10 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
               ],
             ),
           ],
-          if (freight.status == 'completed') ...[
+          if (freight.status != 'cancelled') ...[
             const SizedBox(height: 14),
             FreightInfoCard(
-              title: 'Pago y calificación',
+              title: 'Pago y resguardo',
               icon: Icons.receipt_long_outlined,
               children: [
                 FreightInfoRow(
@@ -580,9 +580,9 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                       : freight.paymentStatus == 'failed'
                           ? AppTheme.error
                           : AppTheme.primary,
-                  label: 'Pago',
+                  label: 'Pago Webpay',
                   value: freight.paymentStatus == 'authorized'
-                      ? 'Pagado con Webpay'
+                      ? 'Confirmado y resguardado'
                       : freight.paymentStatus == 'failed'
                           ? 'No completado'
                           : 'Pendiente',
@@ -594,22 +594,35 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
                     style: TextStyle(color: AppTheme.slate600, height: 1.4),
                   ),
                 ],
+                if (freight.paymentStatus == 'authorized') ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Muvv resguarda este pago y programa la liquidación al conductor una vez confirmada la entrega.',
+                    style: TextStyle(color: AppTheme.slate600, height: 1.4),
+                  ),
+                ],
                 if (freight.paymentStatus != 'authorized') ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Confirma el pago para publicar esta solicitud a conductores compatibles.',
+                    style: TextStyle(color: AppTheme.slate600, height: 1.4),
+                  ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     onPressed: _actionLoading ? null : _payWithWebpay,
                     icon: const Icon(Icons.lock_outline_rounded),
-                    label: const Text('Pagar con Webpay'),
+                    label: const Text('Confirmar pago con Webpay'),
                   ),
                 ],
-                if (!freight.clientFeedbackSubmitted) ...[
+                if (freight.status == 'completed' &&
+                    !freight.clientFeedbackSubmitted) ...[
                   const SizedBox(height: 14),
                   FilledButton.icon(
                     onPressed: _actionLoading ? null : _submitStructuredRating,
                     icon: const Icon(Icons.star_outline_rounded),
                     label: const Text('Evaluar servicio'),
                   ),
-                ] else ...[
+                ] else if (freight.status == 'completed') ...[
                   const SizedBox(height: 12),
                   FreightInfoRow(
                     icon: Icons.star_rounded,

@@ -14,10 +14,11 @@ from app.core.security import (
     require_role,
     verify_password,
 )
-from app.database import SessionLocal, get_db
+from app.database import get_db
 from app.models.driver import Driver, DriverStatus
 from app.models.freight_driver_decline import FreightDriverDecline
 from app.models.freight import FreightCargoPhoto, FreightRequest, FreightStatus, TripStatusHistory
+from app.models.payment import Payment, PaymentStatus
 from app.models.pricing_quote import FreightPriceQuote
 from app.models.user import User, UserRole
 from app.schemas.freight import (
@@ -40,7 +41,6 @@ from app.services.freight_service import (
     can_transition,
     normalize_service_type,
 )
-from app.services.cloud_tasks_service import enqueue_freight_driver_notification_task
 from app.services.chat_connections import freight_chat_connections
 from app.services.chat_service import CHAT_WRITABLE_STATUSES
 from app.services.maps_service import RouteCalculationError
@@ -48,6 +48,7 @@ from app.services.pricing_estimate_service import calculate_pricing_estimate
 from app.services.pricing_history_service import record_pricing_snapshot
 from app.services.pricing_quote_service import consume_pricing_quote
 from app.services.pricing_service import PricingInputError
+from app.services.payout_service import ensure_driver_payout
 from app.services.storage_service import (
     create_freight_evidence_view_token,
     create_cargo_photo_view_token,
@@ -65,27 +66,6 @@ EVIDENCE_FIELDS = {
     "pickup": ("pickup_photo_ref", "pickup_photo_uploaded_at"),
     "delivery": ("delivery_photo_ref", "delivery_photo_uploaded_at"),
 }
-
-
-async def _notify_available_drivers(freight_id: int, title: str, body: str, data: dict) -> None:
-    from app.services.notification_service import send_notification_to_drivers
-
-    db = SessionLocal()
-    try:
-        freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
-        if not freight:
-            return
-        await send_notification_to_drivers(
-            db=db,
-            title=title,
-            body=body,
-            data=data,
-            freight=freight,
-        )
-    except Exception:
-        print("[notifications] Could not notify available drivers")
-    finally:
-        db.close()
 
 
 def _get_driver_for_user(db: Session, user: User) -> Driver | None:
@@ -112,6 +92,11 @@ def _require_freight_view_access(
             and freight.driver_id is None
         ):
             require_driver_can_operate(driver)
+            if (
+                not freight.payment
+                or freight.payment.status != PaymentStatus.authorized
+            ):
+                raise HTTPException(status_code=404, detail="Flete no disponible")
             was_declined = (
                 db.query(FreightDriverDecline.id)
                 .filter(
@@ -251,7 +236,6 @@ def _require_cargo_photo_view_access(
 async def create_freight(
     data: FreightCreate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("client"))
 ):
@@ -438,34 +422,8 @@ async def create_freight(
     db.commit()
     db.refresh(freight)
 
-    if settings.firebase_push_configured:
-        notification_title = "Nuevo flete disponible"
-        notification_body = (
-            f"{'URGENTE' if data.is_urgent else 'Programado'} - "
-            f"${prices['client_pays']:,.0f} CLP"
-        )
-        notification_data = {
-            "freight_id": str(freight.id),
-            "type": "new_freight",
-            "mode": prices["mode"],
-            "route": f"/app/driver/freights/{freight.id}",
-        }
-        if settings.NOTIFICATION_TASKS_ENABLED:
-            background_tasks.add_task(
-                enqueue_freight_driver_notification_task,
-                freight_id=freight.id,
-                title=notification_title,
-                body=notification_body,
-                data=notification_data,
-            )
-        else:
-            background_tasks.add_task(
-                _notify_available_drivers,
-                freight.id,
-                title=notification_title,
-                body=notification_body,
-                data=notification_data,
-            )
+    # The freight is intentionally private until the client confirms Webpay.
+    # Payment authorization publishes it and triggers the driver notification.
     return freight
 
 
@@ -519,7 +477,8 @@ def list_freights(
                 except HTTPException:
                     query = query.filter(False)
                     return query.order_by(FreightRequest.created_at.desc()).all()
-                query = query.filter(
+                query = query.join(Payment, Payment.freight_id == FreightRequest.id).filter(
+                    Payment.status == PaymentStatus.authorized,
                     FreightRequest.status == FreightStatus.pending,
                     FreightRequest.driver_id == None,
                     ~db.query(FreightDriverDecline.id)
@@ -952,6 +911,11 @@ def accept_freight(
     )
     if not freight_candidate:
         raise HTTPException(status_code=400, detail="Flete no disponible")
+    if (
+        not freight_candidate.payment
+        or freight_candidate.payment.status != PaymentStatus.authorized
+    ):
+        raise HTTPException(status_code=400, detail="El pago del cliente aun no esta confirmado")
     candidates = compatible_vehicles(driver, freight_candidate)
     if not candidates:
         raise HTTPException(status_code=403, detail="No tienes un vehiculo aprobado compatible")
@@ -1207,6 +1171,25 @@ def update_status(
             },
             request=request,
         )
+    payout = None
+    if data.status == FreightStatus.completed and freight.payment:
+        payout = ensure_driver_payout(db, freight.payment)
+        if payout:
+            record_audit_event(
+                db,
+                actor=current_user,
+                entity_type="driver_payout",
+                entity_id=payout.id,
+                event_type="driver_payout.created",
+                after_data={
+                    "payment_id": payout.payment_id,
+                    "freight_id": payout.freight_id,
+                    "driver_id": payout.driver_id,
+                    "amount": payout.amount,
+                    "status": payout.status.value,
+                },
+                request=request,
+            )
     db.commit()
     db.refresh(freight)
     background_tasks.add_task(

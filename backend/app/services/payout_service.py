@@ -1,11 +1,22 @@
 from sqlalchemy.orm import Session
 
 from app.models.driver_payout import DriverPayout, DriverPayoutStatus
+from app.models.freight import FreightStatus
 from app.models.payment import Payment, PaymentStatus
 
 
 def ensure_driver_payout(db: Session, payment: Payment) -> DriverPayout | None:
     if payment.status != PaymentStatus.authorized:
+        return None
+
+    freight = payment.freight
+    if (
+        not freight
+        or freight.status != FreightStatus.completed
+        or not freight.driver_id
+        or freight.driver_receives is None
+        or freight.driver_receives <= 0
+    ):
         return None
 
     existing = (
@@ -15,15 +26,6 @@ def ensure_driver_payout(db: Session, payment: Payment) -> DriverPayout | None:
     )
     if existing:
         return existing
-
-    freight = payment.freight
-    if (
-        not freight
-        or not freight.driver_id
-        or freight.driver_receives is None
-        or freight.driver_receives <= 0
-    ):
-        return None
 
     payout = DriverPayout(
         payment_id=payment.id,
