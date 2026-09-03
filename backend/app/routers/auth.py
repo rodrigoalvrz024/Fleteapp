@@ -3,6 +3,9 @@ import hashlib
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from google.auth import exceptions as google_auth_exceptions
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,6 +23,7 @@ from app.models.user import User, UserRole
 from app.models.user_consent import UserConsent
 from app.schemas.user import (
     LegalUpdateAcceptance,
+    GoogleLogin,
     MessageResponse,
     PasswordResetConfirm,
     PasswordResetRequest,
@@ -34,6 +38,7 @@ from app.services.audit_service import record_audit_event
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 email_service = EmailService()
 DUMMY_PASSWORD_HASH = hash_password("muvv-invalid-password")
+GOOGLE_TOKEN_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 
 
 def _legal_reacceptance_required(db: Session, user: User) -> bool:
@@ -64,6 +69,41 @@ def _is_expired(expires_at: datetime, now: datetime) -> bool:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return expires_at < now
+
+
+def _verified_google_email(id_token_value: str) -> str:
+    """Return a verified email only after checking Google's signed token."""
+
+    client_id = settings.GOOGLE_OAUTH_CLIENT_ID.strip()
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail="El acceso con Google aun no esta configurado",
+        )
+
+    try:
+        claims = google_id_token.verify_oauth2_token(
+            id_token_value,
+            google_requests.Request(),
+            client_id,
+        )
+    except (ValueError, google_auth_exceptions.GoogleAuthError):
+        raise HTTPException(
+            status_code=401,
+            detail="No se pudo verificar tu cuenta de Google",
+        )
+
+    if claims.get("iss") not in GOOGLE_TOKEN_ISSUERS:
+        raise HTTPException(status_code=401, detail="No se pudo verificar tu cuenta de Google")
+    if claims.get("aud") != client_id:
+        raise HTTPException(status_code=401, detail="No se pudo verificar tu cuenta de Google")
+    if claims.get("email_verified") is not True:
+        raise HTTPException(status_code=401, detail="Tu correo de Google debe estar verificado")
+
+    email = claims.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise HTTPException(status_code=401, detail="No se pudo verificar tu cuenta de Google")
+    return email.strip().lower()
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -234,6 +274,57 @@ def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
         event_type="auth.login_succeeded",
         request=request,
         metadata={"source": "password"},
+    )
+    db.commit()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role})
+    return TokenResponse(access_token=token, user=_user_response(db, user))
+
+
+@router.post("/google", response_model=TokenResponse)
+def login_with_google(
+    data: GoogleLogin,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Exchange a verified Google identity for the normal short-lived Muvv JWT."""
+
+    check_rate_limit(
+        request,
+        scope="auth-google-ip",
+        max_attempts=30,
+        window_seconds=15 * 60,
+    )
+    email = _verified_google_email(data.id_token)
+    check_rate_limit(
+        request,
+        scope="auth-google-account",
+        identifier=email,
+        max_attempts=8,
+        window_seconds=15 * 60,
+    )
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="No encontramos una cuenta Muvv para este correo. Crea tu cuenta primero.",
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Cuenta suspendida")
+
+    now = datetime.now(timezone.utc)
+    user.last_login_at = now
+    user.last_seen_at = now
+    user.last_seen_screen = "/auth/google"
+    record_audit_event(
+        db,
+        actor=user,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="auth.login_succeeded",
+        request=request,
+        metadata={"source": "google"},
     )
     db.commit()
 

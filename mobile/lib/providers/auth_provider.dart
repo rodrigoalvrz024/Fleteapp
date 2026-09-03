@@ -55,6 +55,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> loginWithGoogle(String idToken) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final data = await _service.loginWithGoogle(idToken);
+      final user = UserModel.fromJson(data['user']);
+      state = AuthState(user: user);
+      await _syncNotificationToken();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _parseError(e));
+      return false;
+    }
+  }
+
   Future<bool> register(
     String email,
     String phone,

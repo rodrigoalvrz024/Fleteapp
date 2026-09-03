@@ -55,9 +55,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     });
 
     await Future.wait([
-      // Keep the complete two-second mobile story visible. On Android this
+      // Keep the complete mobile story visible. On Android this
       // starts after the first rendered frame, not while Flutter is booting.
-      Future<void>.delayed(const Duration(milliseconds: 2000)),
+      Future<void>.delayed(const Duration(milliseconds: 2800)),
       authCheck.timeout(
         // Secure storage can take a little longer to become available on a
         // cold Android start. Do not discard a valid session just because

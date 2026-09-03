@@ -199,8 +199,15 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..forward();
+      duration: const Duration(milliseconds: 2800),
+    );
+
+    // On slower Android cold starts, the first Flutter frame can arrive
+    // after the controller would otherwise have completed. Start only once
+    // this composition is actually visible.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _controller.forward();
+    });
   }
 
   @override
@@ -221,11 +228,29 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
             animation: _controller,
             builder: (context, _) {
               final progress = _controller.value;
-              final markIn = _introStage(progress, 0, 0.27);
-              final markOut = 1 - _introStage(progress, 0.27, 0.36);
-              final copyIn = _introStage(progress, 0.27, 0.54);
-              final copyOut = 1 - _introStage(progress, 0.82, 0.93);
-              final complete = _introStage(progress, 0.91, 1);
+              final markIn = _introStage(progress, 0, 0.18);
+              final copyIn = _introStage(progress, 0.22, 0.4);
+              final identityMove = _introStage(progress, 0.58, 0.74);
+              final taglineOut = 1 - _introStage(progress, 0.58, 0.72);
+              final complete = _introStage(progress, 0.89, 0.99);
+              final brandGlow = _introStage(progress, 0.12, 0.26) *
+                  (1 - _introStage(progress, 0.6, 0.74));
+              final logoAlignment = Alignment(
+                _introLerp(0, -0.72, identityMove),
+                _introLerp(-0.12, -0.8, identityMove),
+              );
+              final nameAlignment = Alignment(
+                // Keep the final wordmark immediately after the icon instead
+                // of letting its glyphs overlap the icon's visual bounds.
+                _introLerp(0, -0.06, identityMove),
+                _introLerp(0.1, -0.78, identityMove),
+              );
+              final taglineAlignment = Alignment(
+                0,
+                _introLerp(0.21, -0.59, identityMove),
+              );
+              final identityScale = _introLerp(1, 0.58, identityMove);
+              final nameScale = _introLerp(1, 0.82, identityMove);
 
               return Stack(
                 fit: StackFit.expand,
@@ -234,61 +259,75 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
                     painter: _MuvvIntroScenePainter(progress: progress),
                   ),
                   Align(
-                    alignment: Alignment(0, compact ? -0.2 : -0.27),
+                    alignment: logoAlignment,
                     child: Opacity(
-                      opacity: markIn * markOut,
+                      opacity: markIn,
                       child: Transform.scale(
-                        scale: 0.78 + (0.22 * markIn),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Image.asset(
-                                'assets/branding/muvv-app-icon.png',
-                                width: compact ? 76 : 88,
-                                height: compact ? 76 : 88,
-                                fit: BoxFit.cover,
-                              ),
+                        scale: identityScale * (0.86 + (0.14 * markIn)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0x01020914),
+                            borderRadius: BorderRadius.circular(
+                              _introLerp(22, 14, identityMove),
                             ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Muvv',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 36,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1687FF).withValues(
+                                  alpha: 0.18 * brandGlow,
+                                ),
+                                blurRadius: 24 * brandGlow,
+                                spreadRadius: brandGlow,
                               ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(
+                              _introLerp(22, 14, identityMove),
                             ),
-                            const SizedBox(height: 8),
-                            const _IntroTagline(),
-                          ],
+                            child: Image.asset(
+                              'assets/branding/muvv-app-icon.png',
+                              width: compact ? 100 : 112,
+                              height: compact ? 100 : 112,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
                   Align(
-                    alignment: Alignment(0, compact ? -0.23 : -0.28),
+                    alignment: nameAlignment,
                     child: Opacity(
-                      opacity: copyIn * copyOut,
+                      opacity: copyIn,
                       child: Transform.translate(
-                        offset: Offset(0, 12 * (1 - copyIn)),
-                        child: const Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Muvv',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 34,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0,
-                              ),
+                        offset: Offset(
+                          0,
+                          (14 * (1 - copyIn)) + (18 * identityMove),
+                        ),
+                        child: Transform.scale(
+                          scale: nameScale * (0.95 + (0.05 * copyIn)),
+                          child: const Text(
+                            'Muvv',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 42,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0,
                             ),
-                            SizedBox(height: 8),
-                            _IntroTagline(),
-                          ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: taglineAlignment,
+                    child: Opacity(
+                      opacity: copyIn * taglineOut,
+                      child: Transform.translate(
+                        offset: Offset(0, 10 * (1 - copyIn)),
+                        child: Transform.scale(
+                          scale: _introLerp(1, 0.9, identityMove),
+                          child: const _IntroTagline(),
                         ),
                       ),
                     ),
@@ -298,7 +337,7 @@ class _MuvvIntroSequenceState extends State<MuvvIntroSequence>
                     child: Opacity(
                       opacity: complete,
                       child: Transform.scale(
-                        scale: 0.88 + (0.12 * complete),
+                        scale: _introLerp(0.88, 1, complete),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -397,6 +436,10 @@ double _introStage(double value, double start, double end) {
   return Curves.easeOutCubic.transform((value - start) / (end - start));
 }
 
+double _introLerp(double begin, double end, double progress) {
+  return begin + ((end - begin) * progress);
+}
+
 class _MuvvIntroScenePainter extends CustomPainter {
   final double progress;
 
@@ -404,7 +447,7 @@ class _MuvvIntroScenePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cityOpacity = _introStage(progress, 0.28, 0.5);
+    final cityOpacity = _introStage(progress, 0.5, 0.62);
     _paintCity(canvas, size, cityOpacity);
 
     final start = Offset(size.width * 0.03, size.height * 0.74);
@@ -420,7 +463,7 @@ class _MuvvIntroScenePainter extends CustomPainter {
       )
       ..lineTo(end.dx, end.dy);
     final metric = route.computeMetrics().first;
-    final routeProgress = _introStage(progress, 0.27, 0.54);
+    final routeProgress = _introStage(progress, 0.54, 0.74);
     final routeStroke = math.max(3.0, size.width * 0.017);
 
     canvas.drawPath(
@@ -440,17 +483,17 @@ class _MuvvIntroScenePainter extends CustomPainter {
         ..strokeWidth = routeStroke,
     );
 
-    final destinationVisibility = _introStage(progress, 0.43, 0.56);
+    final destinationVisibility = _introStage(progress, 0.68, 0.78);
     if (destinationVisibility > 0) {
       _paintDestination(canvas, end, size.width, destinationVisibility);
     }
 
-    final truckProgress = _introStage(progress, 0.54, 0.91);
-    final truckVisibility = _introStage(progress, 0.54, 0.61);
+    final truckProgress = _introStage(progress, 0.68, 0.88);
+    final truckVisibility = _introStage(progress, 0.66, 0.72);
     if (truckVisibility > 0) {
       final tangent =
           metric.getTangentForOffset(metric.length * truckProgress)!;
-      final tilt = math.sin(_introStage(progress, 0.77, 0.91) * math.pi) * 0.2;
+      final tilt = math.sin(_introStage(progress, 0.8, 0.88) * math.pi) * 0.2;
       canvas.save();
       canvas.translate(tangent.position.dx, tangent.position.dy);
       canvas.rotate(tangent.angle - tilt);
@@ -460,7 +503,7 @@ class _MuvvIntroScenePainter extends CustomPainter {
       _paintMotionMarks(canvas, tangent.position, size.width, truckProgress);
     }
 
-    final completed = _introStage(progress, 0.91, 1);
+    final completed = _introStage(progress, 0.84, 1);
     if (completed > 0) {
       _paintConfetti(canvas, size, completed);
     }

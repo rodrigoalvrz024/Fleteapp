@@ -41,6 +41,14 @@ class AuthService {
     return res.data;
   }
 
+  Future<Map<String, dynamic>> loginWithGoogle(String idToken) async {
+    final res = await _api.post(ApiConstants.googleLogin, {
+      'id_token': idToken,
+    });
+    await _api.saveToken(res.data['access_token']);
+    return res.data;
+  }
+
   Future<UserModel> getMe() async {
     final res = await _api.get(ApiConstants.me);
     return UserModel.fromJson(res.data);

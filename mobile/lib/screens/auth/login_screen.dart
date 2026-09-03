@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/google_auth_service.dart';
 import 'widgets/auth_visuals.dart';
 
 const _publicHomeUrl = String.fromEnvironment(
@@ -32,6 +33,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscure = true;
+  bool _isGoogleLoading = false;
 
   late AnimationController _btnCtrl;
   late Animation<double> _btnScale;
@@ -65,6 +67,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         .read(authProvider.notifier)
         .login(_emailCtrl.text.trim(), _passCtrl.text);
 
+    _completeLogin(ok);
+  }
+
+  Future<void> _loginWithGoogle() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _isGoogleLoading = true);
+
+    try {
+      final idToken = await GoogleAuthService().requestIdToken();
+      if (idToken == null) return;
+
+      final ok = await ref.read(authProvider.notifier).loginWithGoogle(idToken);
+      _completeLogin(ok);
+    } on GoogleAuthException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
+  void _completeLogin(bool ok) {
     if (!mounted) return;
     if (ok) {
       if (ref.read(authProvider).user?.legalReacceptanceRequired == true) {
@@ -139,8 +165,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 obscure: _obscure,
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onLogin: _login,
-                onGoogle: () => _showSocialAuthInfo('Google'),
+                onGoogle: _loginWithGoogle,
                 onApple: () => _showSocialAuthInfo('Apple'),
+                isGoogleLoading: _isGoogleLoading,
                 registerPath: _registerPath,
                 btnScale: _btnScale,
                 btnCtrl: _btnCtrl,
@@ -425,6 +452,7 @@ class _SketchMobileLogin extends StatelessWidget {
   final VoidCallback onLogin;
   final VoidCallback onGoogle;
   final VoidCallback onApple;
+  final bool isGoogleLoading;
   final String registerPath;
   final Animation<double> btnScale;
   final AnimationController btnCtrl;
@@ -439,6 +467,7 @@ class _SketchMobileLogin extends StatelessWidget {
     required this.onLogin,
     required this.onGoogle,
     required this.onApple,
+    required this.isGoogleLoading,
     required this.registerPath,
     required this.btnScale,
     required this.btnCtrl,
@@ -584,6 +613,8 @@ class _SketchMobileLogin extends StatelessWidget {
                           icon: const _GoogleGlyph(),
                           onPressed: onGoogle,
                           compact: compact,
+                          isLoading: isGoogleLoading,
+                          disabled: auth.isLoading || isGoogleLoading,
                         ),
                         SizedBox(height: compact ? 8 : 10),
                         _SocialSignInButton(
@@ -595,6 +626,7 @@ class _SketchMobileLogin extends StatelessWidget {
                           ),
                           onPressed: onApple,
                           compact: compact,
+                          disabled: auth.isLoading || isGoogleLoading,
                         ),
                         SizedBox(height: compact ? 18 : 34),
                         Wrap(
@@ -873,12 +905,16 @@ class _SocialSignInButton extends StatelessWidget {
   final Widget icon;
   final VoidCallback onPressed;
   final bool compact;
+  final bool isLoading;
+  final bool disabled;
 
   const _SocialSignInButton({
     required this.label,
     required this.icon,
     required this.onPressed,
     required this.compact,
+    this.isLoading = false,
+    this.disabled = false,
   });
 
   @override
@@ -886,7 +922,7 @@ class _SocialSignInButton extends StatelessWidget {
     return SizedBox(
       height: compact ? 48 : 52,
       child: OutlinedButton(
-        onPressed: onPressed,
+        onPressed: disabled ? null : onPressed,
         style: OutlinedButton.styleFrom(
           foregroundColor: AppTheme.midnight,
           backgroundColor: Colors.white.withValues(alpha: 0.8),
@@ -901,13 +937,19 @@ class _SocialSignInButton extends StatelessWidget {
             letterSpacing: 0,
           ),
         ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Align(alignment: Alignment.centerLeft, child: icon),
-            Text(label),
-          ],
-        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : Stack(
+                alignment: Alignment.center,
+                children: [
+                  Align(alignment: Alignment.centerLeft, child: icon),
+                  Text(label),
+                ],
+              ),
       ),
     );
   }

@@ -8,6 +8,7 @@ param(
   [string]$FirebaseProjectId = $(if ([string]::IsNullOrWhiteSpace($env:FIREBASE_PROJECT_ID)) { $ProjectId } else { $env:FIREBASE_PROJECT_ID }),
   [string]$FirebaseAuthDomain = $env:FIREBASE_AUTH_DOMAIN,
   [string]$FirebaseStorageBucket = $env:FIREBASE_STORAGE_BUCKET,
+  [string]$GoogleOAuthClientId = $env:GOOGLE_OAUTH_CLIENT_ID,
   [string]$ApiBaseUrl = $env:API_BASE_URL,
   [string]$PublicHomeUrl = $(if ([string]::IsNullOrWhiteSpace($env:PUBLIC_HOME_URL)) { $env:NEXT_PUBLIC_SITE_URL } else { $env:PUBLIC_HOME_URL })
 )
@@ -137,6 +138,7 @@ try {
     FIREBASE_PROJECT_ID = $FirebaseProjectId
     FIREBASE_AUTH_DOMAIN = $FirebaseAuthDomain
     FIREBASE_STORAGE_BUCKET = $FirebaseStorageBucket
+    GOOGLE_OAUTH_CLIENT_ID = $GoogleOAuthClientId
     API_BASE_URL = $ApiBaseUrl
     PUBLIC_HOME_URL = $PublicHomeUrl
   }

@@ -2,6 +2,7 @@ import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from unittest.mock import patch
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
@@ -22,6 +23,7 @@ from app.core.security import create_access_token, decode_token, require_role
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.user import User, UserRole
 from app.routers.freights import _require_freight_status_access
+from app.routers.auth import _verified_google_email
 from app.routers.analytics import _clean_event_metadata
 from app.routers.users import _redact_user_audit_data
 from app.schemas.freight import FreightCreate, FreightStatusUpdate
@@ -34,6 +36,39 @@ from app.services.storage_service import (
 
 
 class SecurityHardeningTests(unittest.TestCase):
+    def test_google_login_requires_configured_server_client_id(self):
+        original = settings.GOOGLE_OAUTH_CLIENT_ID
+        try:
+            settings.GOOGLE_OAUTH_CLIENT_ID = ""
+            with self.assertRaises(HTTPException) as error:
+                _verified_google_email("x" * 120)
+            self.assertEqual(error.exception.status_code, 503)
+        finally:
+            settings.GOOGLE_OAUTH_CLIENT_ID = original
+
+    @patch("app.routers.auth.google_id_token.verify_oauth2_token")
+    def test_google_login_accepts_only_verified_email_for_expected_audience(
+        self,
+        verify_google_token,
+    ):
+        original = settings.GOOGLE_OAUTH_CLIENT_ID
+        try:
+            settings.GOOGLE_OAUTH_CLIENT_ID = "muvv-server.apps.googleusercontent.com"
+            verify_google_token.return_value = {
+                "iss": "https://accounts.google.com",
+                "aud": settings.GOOGLE_OAUTH_CLIENT_ID,
+                "email": "Client@Example.com",
+                "email_verified": True,
+            }
+            self.assertEqual(_verified_google_email("x" * 120), "client@example.com")
+
+            verify_google_token.return_value["email_verified"] = False
+            with self.assertRaises(HTTPException) as error:
+                _verified_google_email("x" * 120)
+            self.assertEqual(error.exception.status_code, 401)
+        finally:
+            settings.GOOGLE_OAUTH_CLIENT_ID = original
+
     def test_user_audit_redacts_fcm_token(self):
         data = {
             "full_name": "Conductor Demo",

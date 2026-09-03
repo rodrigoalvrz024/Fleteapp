@@ -19,7 +19,7 @@ $env:NEXT_PUBLIC_APP_URL = "https://$($env:FIREBASE_APP_SITE_ID).web.app"
 $env:PUBLIC_HOME_URL = $env:NEXT_PUBLIC_SITE_URL
 
 # Backend recomendado en etapa sin ingresos: Render Free o local.
-$env:NEXT_PUBLIC_API_URL = 'https://YOUR_RENDER_BACKEND.onrender.com'
+$env:NEXT_PUBLIC_API_URL = 'https://YOUR_RAILWAY_BACKEND.up.railway.app'
 $env:API_BASE_URL = $env:NEXT_PUBLIC_API_URL
 
 # Firebase Web app config.
@@ -30,6 +30,10 @@ $env:FIREBASE_MESSAGING_SENDER_ID = ''
 $env:FIREBASE_PROJECT_ID = $env:PROJECT_ID
 $env:FIREBASE_AUTH_DOMAIN = "$($env:PROJECT_ID).firebaseapp.com"
 $env:FIREBASE_STORAGE_BUCKET = "$($env:PROJECT_ID).firebasestorage.app"
+
+# Google Sign-In. Es el Client ID del tipo "Aplicación web" de OAuth 2.0.
+# Es un identificador público; nunca pegues aqui un Client Secret.
+$env:GOOGLE_OAUTH_CLIENT_ID = ''
 
 # Google Maps.
 # Para gasto minimo, deja vacio y prueba flujos sin mapa hasta tener cuotas definidas.

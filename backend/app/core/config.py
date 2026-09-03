@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     TRANSBANK_ENVIRONMENT: str = "integration"
     ALLOW_SIMULATED_PAYMENTS: bool = False
     FIREBASE_CREDENTIALS_JSON: str = ""
+    # Public OAuth client identifier for the Google Sign-In backend audience.
+    # This is an identifier, never the OAuth client secret.
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_MAPS_KEY: str = ""
     FRONTEND_URL: str = "https://muvv-dev.web.app"
     RESEND_API_KEY: str = ""

@@ -66,6 +66,14 @@ class UserLogin(BaseModel):
         return str(value).lower()
 
 
+class GoogleLogin(BaseModel):
+    """A Google-issued ID token, verified by the API before use."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    id_token: str = Field(min_length=100, max_length=4096)
+
+
 class LegalUpdateAcceptance(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
