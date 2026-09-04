@@ -23,7 +23,12 @@ from app.core.security import create_access_token, decode_token, require_role
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.user import User, UserRole
 from app.routers.freights import _require_freight_status_access
-from app.routers.auth import _account_roles, _requested_account_roles, _verified_google_email
+from app.routers.auth import (
+    _account_roles,
+    _requested_account_roles,
+    _verified_google_email,
+    _verified_google_identity,
+)
 from app.routers.analytics import _clean_event_metadata
 from app.routers.users import _redact_user_audit_data
 from app.schemas.freight import FreightCreate, FreightStatusUpdate
@@ -80,8 +85,13 @@ class SecurityHardeningTests(unittest.TestCase):
                 "aud": settings.GOOGLE_OAUTH_CLIENT_ID,
                 "email": "Client@Example.com",
                 "email_verified": True,
+                "name": "  Cliente   Muvv  ",
             }
             self.assertEqual(_verified_google_email("x" * 120), "client@example.com")
+            self.assertEqual(
+                _verified_google_identity("x" * 120),
+                ("client@example.com", "Cliente Muvv"),
+            )
 
             verify_google_token.return_value["email_verified"] = False
             with self.assertRaises(HTTPException) as error:

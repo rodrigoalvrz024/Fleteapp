@@ -107,8 +107,8 @@ def _requires_driver_consent(role: UserRole, also_driver: bool) -> bool:
     return role == UserRole.driver or also_driver
 
 
-def _verified_google_email(id_token_value: str) -> str:
-    """Return a verified email only after checking Google's signed token."""
+def _verified_google_identity(id_token_value: str) -> tuple[str, str | None]:
+    """Return verified identity data from Google's signed ID token."""
 
     client_id = settings.GOOGLE_OAUTH_CLIENT_ID.strip()
     if not client_id:
@@ -139,7 +139,17 @@ def _verified_google_email(id_token_value: str) -> str:
     email = claims.get("email")
     if not isinstance(email, str) or not email.strip():
         raise HTTPException(status_code=401, detail="No se pudo verificar tu cuenta de Google")
-    return email.strip().lower()
+
+    raw_name = claims.get("name")
+    name = " ".join(raw_name.split()) if isinstance(raw_name, str) else ""
+    return email.strip().lower(), name if 2 <= len(name) <= 120 else None
+
+
+def _verified_google_email(id_token_value: str) -> str:
+    """Return a verified email only after checking Google's signed token."""
+
+    email, _ = _verified_google_identity(id_token_value)
+    return email
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -333,7 +343,7 @@ def register_with_google(
         max_attempts=8,
         window_seconds=60 * 60,
     )
-    email = _verified_google_email(data.id_token)
+    email, google_name = _verified_google_identity(data.id_token)
     check_rate_limit(
         request,
         scope="auth-google-register-email",
@@ -366,10 +376,17 @@ def register_with_google(
             detail="Ya existe una cuenta con estos datos. Inicia sesion con Google o con tu contrasena.",
         )
 
+    full_name = google_name or (data.full_name or "").strip()
+    if len(full_name) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Tu cuenta de Google no incluye un nombre. Agregalo para continuar.",
+        )
+
     user = User(
         email=email,
         phone=data.phone,
-        full_name=data.full_name,
+        full_name=full_name,
         # A random non-recoverable credential prevents password login until the
         # person explicitly establishes one through the reset-password flow.
         hashed_password=hash_password(secrets.token_urlsafe(48)),

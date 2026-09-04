@@ -82,7 +82,9 @@ class GoogleRegister(BaseModel):
 
     id_token: str = Field(min_length=100, max_length=4096)
     phone: str
-    full_name: str = Field(min_length=2, max_length=120)
+    # The API takes the display name from the verified Google ID token. This
+    # optional fallback only serves Google accounts that do not expose a name.
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     role: PublicUserRole = PublicUserRole.client
     also_driver: bool = False
     accepts_terms: bool = False

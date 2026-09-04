@@ -106,7 +106,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> registerWithGoogle({
     required String idToken,
     required String phone,
-    required String name,
     required String role,
     required bool alsoDriver,
     required bool acceptsTerms,
@@ -118,7 +117,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final data = await _service.registerWithGoogle(
         idToken: idToken,
         phone: phone,
-        fullName: name,
         role: role,
         alsoDriver: alsoDriver,
         acceptsTerms: acceptsTerms,
@@ -127,6 +125,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       state = AuthState(user: UserModel.fromJson(data['user']));
       await _syncNotificationToken();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _parseError(e));
+      return false;
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String fullName,
+    required String phone,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final user = await _service.updateProfile(
+        fullName: fullName,
+        phone: phone,
+      );
+      state = AuthState(user: user);
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _parseError(e));
@@ -185,7 +201,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             ? detail!
             : 'Revisa los datos ingresados.';
       }
-      if (status == 401) return 'Credenciales incorrectas';
+      if (status == 401) {
+        return detail?.isNotEmpty == true ? detail! : 'Credenciales incorrectas';
+      }
       if (status == 403) return detail ?? 'Cuenta suspendida';
       if (status == 422) return 'Revisa el formato de los datos.';
       if (status == 429) {

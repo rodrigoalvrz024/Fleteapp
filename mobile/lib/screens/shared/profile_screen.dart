@@ -70,13 +70,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  void _showEditProfile(BuildContext ctx, String name, String phone) =>
-      showModalBottomSheet(
-        context: ctx,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => _EditProfileSheet(name: name, phone: phone),
-      );
+  Future<void> _showEditProfile(
+    BuildContext ctx,
+    String name,
+    String phone,
+  ) async {
+    final updated = await showModalBottomSheet<bool>(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditProfileSheet(
+        name: name,
+        phone: phone,
+        onSave: _saveProfile,
+      ),
+    );
+    if (!mounted || updated != true) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      _snack('Perfil actualizado', AppTheme.success),
+    );
+  }
+
+  Future<String?> _saveProfile(String name, String phone) async {
+    final saved = await ref.read(authProvider.notifier).updateProfile(
+          fullName: name,
+          phone: phone,
+        );
+    if (saved) return null;
+    return ref.read(authProvider).error ?? 'No pudimos guardar los cambios.';
+  }
 
   void _showChangePassword(BuildContext ctx) => showModalBottomSheet(
         context: ctx,
@@ -1759,7 +1781,13 @@ class _SheetField extends StatelessWidget {
 
 class _EditProfileSheet extends StatefulWidget {
   final String name, phone;
-  const _EditProfileSheet({required this.name, required this.phone});
+  final Future<String?> Function(String name, String phone) onSave;
+
+  const _EditProfileSheet({
+    required this.name,
+    required this.phone,
+    required this.onSave,
+  });
   @override
   State<_EditProfileSheet> createState() => _EditProfileSheetState();
 }
@@ -1767,6 +1795,8 @@ class _EditProfileSheet extends StatefulWidget {
 class _EditProfileSheetState extends State<_EditProfileSheet> {
   late TextEditingController _nameCtrl;
   late TextEditingController _phoneCtrl;
+  bool _isSaving = false;
+  String? _error;
 
   @override
   void initState() {
@@ -1780,6 +1810,34 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim();
+    if (name.length < 2) {
+      setState(() => _error = 'Ingresa tu nombre completo.');
+      return;
+    }
+    if (phone.length < 9) {
+      setState(() => _error = 'Ingresa un telefono valido.');
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
+    final error = await widget.onSave(name, phone);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _isSaving = false;
+        _error = error;
+      });
+      return;
+    }
+    Navigator.pop(context, true);
   }
 
   @override
@@ -1798,20 +1856,16 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 controller: _phoneCtrl,
                 icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: const TextStyle(fontSize: 13, color: AppTheme.error),
+              ),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Perfil actualizado'),
-                    backgroundColor: AppTheme.success,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                );
-              },
+              onPressed: _isSaving ? null : _save,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primary,
                 minimumSize: const Size(double.infinity, 50),
@@ -1819,8 +1873,18 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                     borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
-              child: const Text('Guardar cambios',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Guardar cambios',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             ),
           ],
         ),

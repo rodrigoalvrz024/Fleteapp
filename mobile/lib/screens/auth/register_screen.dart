@@ -93,8 +93,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   Future<void> _registerWithGoogle() async {
     FocusScope.of(context).unfocus();
-    if (_nameCtrl.text.trim().length < 3 || _phoneCtrl.text.trim().length < 9) {
-      _showError('Completa tu nombre y telefono para crear la cuenta con Google.');
+    if (_phoneCtrl.text.trim().length < 9) {
+      _showError('Completa tu telefono para crear la cuenta con Google.');
       return;
     }
     if (!_acceptTerms || !_acceptPrivacy) {
@@ -113,7 +113,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       final ok = await ref.read(authProvider.notifier).registerWithGoogle(
             idToken: idToken,
             phone: _phoneCtrl.text.trim(),
-            name: _nameCtrl.text.trim(),
             role: _role,
             alsoDriver: _alsoDriver,
             acceptsTerms: _acceptTerms,

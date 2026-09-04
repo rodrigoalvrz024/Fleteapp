@@ -54,7 +54,6 @@ class AuthService {
   Future<Map<String, dynamic>> registerWithGoogle({
     required String idToken,
     required String phone,
-    required String fullName,
     required String role,
     required bool alsoDriver,
     required bool acceptsTerms,
@@ -64,7 +63,6 @@ class AuthService {
     final res = await _api.post(ApiConstants.googleRegister, {
       'id_token': idToken,
       'phone': phone,
-      'full_name': fullName,
       'role': role,
       'also_driver': alsoDriver,
       'accepts_terms': acceptsTerms,
@@ -84,6 +82,17 @@ class AuthService {
   Future<UserModel> getMe() async {
     final res = await _api.get(ApiConstants.me);
     return UserModel.fromJson(res.data);
+  }
+
+  Future<UserModel> updateProfile({
+    required String fullName,
+    required String phone,
+  }) async {
+    final res = await _api.put(ApiConstants.updateMe, {
+      'full_name': fullName,
+      'phone': phone,
+    });
+    return UserModel.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   Future<UserModel> acceptLegalUpdate() async {
