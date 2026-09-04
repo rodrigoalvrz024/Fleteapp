@@ -23,7 +23,7 @@ from app.core.security import create_access_token, decode_token, require_role
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.user import User, UserRole
 from app.routers.freights import _require_freight_status_access
-from app.routers.auth import _verified_google_email
+from app.routers.auth import _account_roles, _requested_account_roles, _verified_google_email
 from app.routers.analytics import _clean_event_metadata
 from app.routers.users import _redact_user_audit_data
 from app.schemas.freight import FreightCreate, FreightStatusUpdate
@@ -36,6 +36,27 @@ from app.services.storage_service import (
 
 
 class SecurityHardeningTests(unittest.TestCase):
+    def test_driver_identity_keeps_client_capability(self):
+        legacy_driver = User(id=77, role=UserRole.driver)
+
+        self.assertEqual(
+            _account_roles(legacy_driver),
+            [UserRole.client, UserRole.driver],
+        )
+        self.assertEqual(
+            _requested_account_roles(UserRole.driver, False),
+            ["client", "driver"],
+        )
+
+    def test_client_does_not_gain_driver_mode_without_explicit_request(self):
+        client = User(id=78, role=UserRole.client)
+
+        self.assertEqual(_account_roles(client), [UserRole.client])
+        self.assertEqual(
+            _requested_account_roles(UserRole.client, True),
+            ["client", "driver"],
+        )
+
     def test_google_login_requires_configured_server_client_id(self):
         original = settings.GOOGLE_OAUTH_CLIENT_ID
         try:

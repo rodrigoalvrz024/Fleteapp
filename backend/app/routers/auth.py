@@ -22,6 +22,8 @@ from app.models.password_reset import PasswordResetToken
 from app.models.user import User, UserRole
 from app.models.user_consent import UserConsent
 from app.schemas.user import (
+    ActiveRoleUpdate,
+    GoogleRegister,
     LegalUpdateAcceptance,
     GoogleLogin,
     MessageResponse,
@@ -61,7 +63,10 @@ def _legal_reacceptance_required(db: Session, user: User) -> bool:
 
 def _user_response(db: Session, user: User) -> UserResponse:
     return UserResponse.model_validate(user).model_copy(
-        update={"legal_reacceptance_required": _legal_reacceptance_required(db, user)}
+        update={
+            "roles": _account_roles(user),
+            "legal_reacceptance_required": _legal_reacceptance_required(db, user),
+        }
     )
 
 
@@ -69,6 +74,37 @@ def _is_expired(expires_at: datetime, now: datetime) -> bool:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return expires_at < now
+
+
+def _account_roles(user: User) -> list[UserRole]:
+    """Return all modes for an identity, including safe legacy fallbacks."""
+
+    raw_roles = getattr(user, "account_roles", None)
+    roles: list[UserRole] = []
+    if isinstance(raw_roles, list):
+        for value in raw_roles:
+            try:
+                role = UserRole(value)
+            except ValueError:
+                continue
+            if role not in roles:
+                roles.append(role)
+
+    if roles:
+        return roles
+    if user.role == UserRole.driver:
+        return [UserRole.client, UserRole.driver]
+    return [user.role]
+
+
+def _requested_account_roles(role: UserRole, also_driver: bool) -> list[str]:
+    if role == UserRole.driver or also_driver:
+        return [UserRole.client.value, UserRole.driver.value]
+    return [UserRole.client.value]
+
+
+def _requires_driver_consent(role: UserRole, also_driver: bool) -> bool:
+    return role == UserRole.driver or also_driver
 
 
 def _verified_google_email(id_token_value: str) -> str:
@@ -134,7 +170,8 @@ def register(
         raise HTTPException(status_code=400, detail="Debes aceptar los Términos y Condiciones")
     if not data.accepts_privacy:
         raise HTTPException(status_code=400, detail="Debes aceptar la Política de Privacidad")
-    if data.role.value == UserRole.driver.value and not data.accepts_driver_documents:
+    requested_role = UserRole(data.role.value)
+    if _requires_driver_consent(requested_role, data.also_driver) and not data.accepts_driver_documents:
         raise HTTPException(
             status_code=400,
             detail="Debes autorizar la revisión de documentos de conductor",
@@ -155,7 +192,8 @@ def register(
         phone=data.phone,
         full_name=data.full_name,
         hashed_password=hash_password(data.password),
-        role=UserRole(data.role.value),
+        role=requested_role,
+        account_roles=_requested_account_roles(requested_role, data.also_driver),
     )
     db.add(user)
     try:
@@ -209,7 +247,7 @@ def _record_registration_consents(
             user_agent=user_agent,
         ),
     ]
-    if data.role.value == UserRole.driver.value and data.accepts_driver_documents:
+    if _requires_driver_consent(UserRole(data.role.value), data.also_driver) and data.accepts_driver_documents:
         consents.append(
             UserConsent(
                 user_id=user.id,
@@ -281,6 +319,92 @@ def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
     return TokenResponse(access_token=token, user=_user_response(db, user))
 
 
+@router.post("/google/register", response_model=TokenResponse, status_code=201)
+def register_with_google(
+    data: GoogleRegister,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Create an account from a Google identity without collecting a password."""
+
+    check_rate_limit(
+        request,
+        scope="auth-google-register-ip",
+        max_attempts=8,
+        window_seconds=60 * 60,
+    )
+    email = _verified_google_email(data.id_token)
+    check_rate_limit(
+        request,
+        scope="auth-google-register-email",
+        identifier=email,
+        max_attempts=3,
+        window_seconds=60 * 60,
+    )
+    if settings.PILOT_MODE and email not in settings.pilot_allowed_emails:
+        raise HTTPException(
+            status_code=403,
+            detail="Este piloto funciona solo con invitacion. Solicita una invitacion al equipo Muvv.",
+        )
+    if not data.accepts_terms or not data.accepts_privacy:
+        raise HTTPException(status_code=400, detail="Debes aceptar los Terminos y la Politica de Privacidad")
+
+    requested_role = UserRole(data.role.value)
+    if _requires_driver_consent(requested_role, data.also_driver) and not data.accepts_driver_documents:
+        raise HTTPException(
+            status_code=400,
+            detail="Debes autorizar la revision de documentos de conductor",
+        )
+    existing_user = (
+        db.query(User)
+        .filter((User.email == email) | (User.phone == data.phone))
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya existe una cuenta con estos datos. Inicia sesion con Google o con tu contrasena.",
+        )
+
+    user = User(
+        email=email,
+        phone=data.phone,
+        full_name=data.full_name,
+        # A random non-recoverable credential prevents password login until the
+        # person explicitly establishes one through the reset-password flow.
+        hashed_password=hash_password(secrets.token_urlsafe(48)),
+        role=requested_role,
+        account_roles=_requested_account_roles(requested_role, data.also_driver),
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No fue posible crear la cuenta. Revisa tus datos o inicia sesion.",
+        )
+    db.refresh(user)
+
+    _record_registration_consents(db, user, data, request)
+    user.last_modified_by = user.id
+    record_audit_event(
+        db,
+        actor=user,
+        entity_type="user",
+        entity_id=user.id,
+        event_type="user.registered",
+        after_data={"roles": [role.value for role in _account_roles(user)]},
+        request=request,
+        metadata={"source": "google"},
+    )
+    db.commit()
+
+    token = create_access_token({"sub": str(user.id), "role": user.role})
+    return TokenResponse(access_token=token, user=_user_response(db, user))
+
+
 @router.post("/google", response_model=TokenResponse)
 def login_with_google(
     data: GoogleLogin,
@@ -330,6 +454,47 @@ def login_with_google(
 
     token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=_user_response(db, user))
+
+
+@router.post("/switch-role", response_model=TokenResponse)
+def switch_active_role(
+    data: ActiveRoleUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Switch the active app mode without creating another identity."""
+
+    check_rate_limit(
+        request,
+        scope="auth-switch-role",
+        identifier=str(current_user.id),
+        max_attempts=20,
+        window_seconds=60 * 60,
+    )
+    requested_role = UserRole(data.role.value)
+    if requested_role not in _account_roles(current_user):
+        raise HTTPException(status_code=403, detail="Este modo no esta habilitado para tu cuenta")
+    if current_user.role != requested_role:
+        previous_role = current_user.role
+        current_user.role = requested_role
+        current_user.last_seen_screen = (
+            "/app/driver" if requested_role == UserRole.driver else "/app/client"
+        )
+        record_audit_event(
+            db,
+            actor=current_user,
+            entity_type="user",
+            entity_id=current_user.id,
+            event_type="auth.active_role_changed",
+            before_data={"role": previous_role.value},
+            after_data={"role": requested_role.value},
+            request=request,
+        )
+        db.commit()
+
+    token = create_access_token({"sub": str(current_user.id), "role": current_user.role})
+    return TokenResponse(access_token=token, user=_user_response(db, current_user))
 
 
 @router.post("/accept-legal-update", response_model=UserResponse)

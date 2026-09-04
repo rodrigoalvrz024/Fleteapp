@@ -75,6 +75,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String name,
     String password,
     String role, {
+    required bool alsoDriver,
     required bool acceptsTerms,
     required bool acceptsPrivacy,
     required bool acceptsDriverDocuments,
@@ -87,6 +88,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         fullName: name,
         password: password,
         role: role,
+        alsoDriver: alsoDriver,
         acceptsTerms: acceptsTerms,
         acceptsPrivacy: acceptsPrivacy,
         acceptsDriverDocuments: acceptsDriverDocuments,
@@ -94,6 +96,49 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = UserModel.fromJson(data['user']);
       state = AuthState(user: user);
       await _syncNotificationToken();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _parseError(e));
+      return false;
+    }
+  }
+
+  Future<bool> registerWithGoogle({
+    required String idToken,
+    required String phone,
+    required String name,
+    required String role,
+    required bool alsoDriver,
+    required bool acceptsTerms,
+    required bool acceptsPrivacy,
+    required bool acceptsDriverDocuments,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final data = await _service.registerWithGoogle(
+        idToken: idToken,
+        phone: phone,
+        fullName: name,
+        role: role,
+        alsoDriver: alsoDriver,
+        acceptsTerms: acceptsTerms,
+        acceptsPrivacy: acceptsPrivacy,
+        acceptsDriverDocuments: acceptsDriverDocuments,
+      );
+      state = AuthState(user: UserModel.fromJson(data['user']));
+      await _syncNotificationToken();
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _parseError(e));
+      return false;
+    }
+  }
+
+  Future<bool> switchRole(String role) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final data = await _service.switchRole(role);
+      state = AuthState(user: UserModel.fromJson(data['user']));
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _parseError(e));

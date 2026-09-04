@@ -141,6 +141,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       );
 
+  Future<void> _switchMode(String role) async {
+    final ok = await ref.read(authProvider.notifier).switchRole(role);
+    if (!mounted) return;
+    if (!ok) {
+      final message = ref.read(authProvider).error ?? 'No pudimos cambiar de modo.';
+      ScaffoldMessenger.of(context).showSnackBar(_snack(message, AppTheme.error));
+      return;
+    }
+    context.go(role == 'driver' ? '/app/driver' : '/app/client');
+  }
+
   Future<void> _submitPrivacyRequest(
     BuildContext ctx,
     String requestType,
@@ -220,6 +231,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final email = user?.email ?? '';
     final phone = user?.phone ?? 'Sin teléfono';
     final role = user?.role ?? 'client';
+    final canSwitchMode = user?.hasRole('client') == true &&
+        user?.hasRole('driver') == true;
     _ensureDriverProfile(role);
     final initials =
         name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join();
@@ -319,6 +332,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: 24),
 
           // ── 1. Información personal ──────────────────
+          if (canSwitchMode) ...[
+            const _SectionTitle('Modo de uso'),
+            const SizedBox(height: 8),
+            _Card(children: [
+              _Item(
+                icon: role == 'driver'
+                    ? Icons.person_outline_rounded
+                    : Icons.local_shipping_outlined,
+                label: role == 'driver'
+                    ? 'Cambiar a cliente'
+                    : 'Cambiar a conductor',
+                value: role == 'driver'
+                    ? 'Pedir y gestionar fletes'
+                    : 'Gestionar solicitudes y viajes',
+                onTap: () => _switchMode(
+                  role == 'driver' ? 'client' : 'driver',
+                ),
+                trailing: const Icon(
+                  Icons.swap_horiz_rounded,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+          ],
+
           if (role == 'driver') ...[
             _DriverProfilePanel(
               driver: _driverProfile,

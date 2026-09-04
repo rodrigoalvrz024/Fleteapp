@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/google_auth_service.dart';
 import 'widgets/auth_visuals.dart';
 
 const _publicHomeUrl = String.fromEnvironment(
@@ -34,7 +35,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _phoneCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   String _role = 'client';
+  bool _alsoDriver = false;
   bool _obscure = true;
+  bool _isGoogleLoading = false;
   bool _acceptTerms = false;
   bool _acceptPrivacy = false;
   bool _acceptDriverDocuments = false;
@@ -61,7 +64,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       _showError('Debes aceptar los términos y la política de privacidad.');
       return;
     }
-    if (_role == 'driver' && !_acceptDriverDocuments) {
+    if (_requestsDriverMode && !_acceptDriverDocuments) {
       _showError('Debes autorizar la revisión de documentos de conductor.');
       return;
     }
@@ -74,15 +77,61 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           _nameCtrl.text.trim(),
           _passCtrl.text,
           _role,
+          alsoDriver: _alsoDriver,
           acceptsTerms: _acceptTerms,
           acceptsPrivacy: _acceptPrivacy,
-          acceptsDriverDocuments: _role == 'driver' && _acceptDriverDocuments,
+          acceptsDriverDocuments:
+              _requestsDriverMode && _acceptDriverDocuments,
         );
     if (!mounted) return;
     if (ok) {
       context.go(_destinationAfterRegister);
     }
   }
+
+  bool get _requestsDriverMode => _role == 'driver' || _alsoDriver;
+
+  Future<void> _registerWithGoogle() async {
+    FocusScope.of(context).unfocus();
+    if (_nameCtrl.text.trim().length < 3 || _phoneCtrl.text.trim().length < 9) {
+      _showError('Completa tu nombre y telefono para crear la cuenta con Google.');
+      return;
+    }
+    if (!_acceptTerms || !_acceptPrivacy) {
+      _showError('Debes aceptar los terminos y la politica de privacidad.');
+      return;
+    }
+    if (_requestsDriverMode && !_acceptDriverDocuments) {
+      _showError('Autoriza la revision de documentos para activar el modo conductor.');
+      return;
+    }
+
+    setState(() => _isGoogleLoading = true);
+    try {
+      final idToken = await GoogleAuthService().requestIdToken();
+      if (idToken == null) return;
+      final ok = await ref.read(authProvider.notifier).registerWithGoogle(
+            idToken: idToken,
+            phone: _phoneCtrl.text.trim(),
+            name: _nameCtrl.text.trim(),
+            role: _role,
+            alsoDriver: _alsoDriver,
+            acceptsTerms: _acceptTerms,
+            acceptsPrivacy: _acceptPrivacy,
+            acceptsDriverDocuments:
+                _requestsDriverMode && _acceptDriverDocuments,
+          );
+      if (mounted && ok) context.go(_destinationAfterRegister);
+    } on GoogleAuthException catch (error) {
+      if (mounted) _showError(error.message);
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
+  void _showAppleSetupInfo() => _showError(
+        'Apple se activa cuando configuremos la cuenta Apple Developer para iPhone.',
+      );
 
   String get _destinationAfterRegister {
     if (_role == 'driver') return '/app/driver/onboarding';
@@ -139,12 +188,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 phoneCtrl: _phoneCtrl,
                 passCtrl: _passCtrl,
                 role: _role,
+                alsoDriver: _alsoDriver,
                 obscure: _obscure,
                 acceptTerms: _acceptTerms,
                 acceptPrivacy: _acceptPrivacy,
                 acceptDriverDocuments: _acceptDriverDocuments,
+                isGoogleLoading: _isGoogleLoading,
                 loginPath: _loginPath,
                 onRoleChanged: _setRole,
+                onAlsoDriverChanged: (value) => setState(() => _alsoDriver = value),
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onAcceptTerms: (value) => setState(() => _acceptTerms = value),
                 onAcceptPrivacy: (value) => setState(
@@ -154,6 +206,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   () => _acceptDriverDocuments = value,
                 ),
                 onRegister: _register,
+                onGoogleRegister: _registerWithGoogle,
+                onAppleRegister: _showAppleSetupInfo,
               );
             }
 
@@ -273,7 +327,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   void _setRole(String role) {
     setState(() {
       _role = role;
-      if (role == 'client') _acceptDriverDocuments = false;
+      if (role == 'client' && !_alsoDriver) _acceptDriverDocuments = false;
     });
   }
 }
@@ -286,17 +340,22 @@ class _SketchMobileRegister extends StatelessWidget {
   final TextEditingController phoneCtrl;
   final TextEditingController passCtrl;
   final String role;
+  final bool alsoDriver;
   final bool obscure;
   final bool acceptTerms;
   final bool acceptPrivacy;
   final bool acceptDriverDocuments;
+  final bool isGoogleLoading;
   final String loginPath;
   final ValueChanged<String> onRoleChanged;
+  final ValueChanged<bool> onAlsoDriverChanged;
   final VoidCallback onToggleObscure;
   final ValueChanged<bool> onAcceptTerms;
   final ValueChanged<bool> onAcceptPrivacy;
   final ValueChanged<bool> onAcceptDriverDocuments;
   final VoidCallback onRegister;
+  final VoidCallback onGoogleRegister;
+  final VoidCallback onAppleRegister;
 
   const _SketchMobileRegister({
     required this.auth,
@@ -306,17 +365,22 @@ class _SketchMobileRegister extends StatelessWidget {
     required this.phoneCtrl,
     required this.passCtrl,
     required this.role,
+    required this.alsoDriver,
     required this.obscure,
     required this.acceptTerms,
     required this.acceptPrivacy,
     required this.acceptDriverDocuments,
+    required this.isGoogleLoading,
     required this.loginPath,
     required this.onRoleChanged,
+    required this.onAlsoDriverChanged,
     required this.onToggleObscure,
     required this.onAcceptTerms,
     required this.onAcceptPrivacy,
     required this.onAcceptDriverDocuments,
     required this.onRegister,
+    required this.onGoogleRegister,
+    required this.onAppleRegister,
   });
 
   @override
@@ -380,6 +444,15 @@ class _SketchMobileRegister extends StatelessWidget {
                           onChanged: onRoleChanged,
                           compact: compact,
                         ),
+                        if (role == 'client') ...[
+                          const SizedBox(height: 8),
+                          _DriverInterestRow(
+                            value: alsoDriver,
+                            enabled: !auth.isLoading && !isGoogleLoading,
+                            onChanged: onAlsoDriverChanged,
+                            compact: compact,
+                          ),
+                        ],
                         SizedBox(height: compact ? 14 : 24),
                         if (auth.error != null) ...[
                           _ErrorBanner(message: auth.error!),
@@ -463,7 +536,7 @@ class _SketchMobileRegister extends StatelessWidget {
                         ),
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 180),
-                          child: role == 'driver'
+                          child: (role == 'driver' || alsoDriver)
                               ? Padding(
                                   key: const ValueKey('driver-consent'),
                                   padding: EdgeInsets.only(
@@ -488,6 +561,21 @@ class _SketchMobileRegister extends StatelessWidget {
                           isLoading: auth.isLoading,
                           onRegister: onRegister,
                           compact: compact,
+                        ),
+                        SizedBox(height: compact ? 10 : 14),
+                        _RegisterSocialButton(
+                          label: 'Registrarte con Google',
+                          icon: const _GoogleRegisterGlyph(),
+                          loading: isGoogleLoading,
+                          enabled: !auth.isLoading && !isGoogleLoading,
+                          onPressed: onGoogleRegister,
+                        ),
+                        const SizedBox(height: 8),
+                        _RegisterSocialButton(
+                          label: 'Registrarte con Apple',
+                          icon: const Icon(Icons.apple, color: Colors.black),
+                          enabled: !auth.isLoading && !isGoogleLoading,
+                          onPressed: onAppleRegister,
                         ),
                         SizedBox(height: compact ? 14 : 20),
                         Wrap(
@@ -933,6 +1021,139 @@ class _SketchRegisterButton extends StatelessWidget {
             letterSpacing: 0,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DriverInterestRow extends StatelessWidget {
+  final bool value;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+  final bool compact;
+
+  const _DriverInterestRow({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+    required this.compact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? () => onChanged(!value) : null,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: compact ? 8 : 10,
+        ),
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withValues(alpha: value ? 0.08 : 0.035),
+          border: Border.all(
+            color: AppTheme.primary.withValues(alpha: value ? 0.32 : 0.14),
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Checkbox(
+              value: value,
+              onChanged: enabled
+                  ? (selected) => onChanged(selected ?? false)
+                  : null,
+              visualDensity: VisualDensity.compact,
+              activeColor: AppTheme.primary,
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.local_shipping_outlined,
+              color: AppTheme.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tambien quiero conducir con Muvv',
+                style: TextStyle(
+                  color: AppTheme.midnight,
+                  fontSize: compact ? 13 : 14,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RegisterSocialButton extends StatelessWidget {
+  final String label;
+  final Widget icon;
+  final bool loading;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  const _RegisterSocialButton({
+    required this.label,
+    required this.icon,
+    this.loading = false,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: OutlinedButton(
+        onPressed: enabled ? onPressed : null,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppTheme.midnight,
+          side: const BorderSide(color: Color(0xFFDCE3EF)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        child: loading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : Stack(
+                alignment: Alignment.center,
+                children: [
+                  Align(alignment: Alignment.centerLeft, child: icon),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _GoogleRegisterGlyph extends StatelessWidget {
+  const _GoogleRegisterGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'G',
+      style: TextStyle(
+        color: Color(0xFF4285F4),
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0,
       ),
     );
   }

@@ -34,6 +34,7 @@ class UserCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     password: str
     role: PublicUserRole = PublicUserRole.client
+    also_driver: bool = False
     accepts_terms: bool = False
     accepts_privacy: bool = False
     accepts_driver_documents: bool = False
@@ -72,6 +73,32 @@ class GoogleLogin(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     id_token: str = Field(min_length=100, max_length=4096)
+
+
+class GoogleRegister(BaseModel):
+    """Registration data collected after Google has verified the identity."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    id_token: str = Field(min_length=100, max_length=4096)
+    phone: str
+    full_name: str = Field(min_length=2, max_length=120)
+    role: PublicUserRole = PublicUserRole.client
+    also_driver: bool = False
+    accepts_terms: bool = False
+    accepts_privacy: bool = False
+    accepts_driver_documents: bool = False
+
+    @field_validator("phone")
+    @classmethod
+    def phone_format(cls, value: str) -> str:
+        return _normalize_phone(value)
+
+
+class ActiveRoleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    role: PublicUserRole
 
 
 class LegalUpdateAcceptance(BaseModel):
@@ -137,6 +164,7 @@ class UserResponse(BaseModel):
     phone: str
     full_name: str
     role: UserRole
+    roles: list[UserRole] = Field(default_factory=list)
     is_active: bool
     avatar_url: Optional[str]
     created_at: datetime

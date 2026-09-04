@@ -488,18 +488,21 @@ class _SketchMobileLogin extends StatelessWidget {
               // Phones need the complete sign-in path without a vertical scroll.
               // Keep scrolling only for unusually short screens or when the keyboard
               // consumes the available height.
-              final compact = constraints.maxHeight < 900;
+              final compact = constraints.maxHeight < 940;
               final veryCompact = constraints.maxHeight < 700;
+              final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
               final horizontalPadding =
                   constraints.maxWidth < 380 ? 24.0 : 32.0;
 
               return SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
+                physics: veryCompact || keyboardOpen
+                    ? const ClampingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  veryCompact ? 12 : (compact ? 18 : 46),
+                  veryCompact ? 12 : (compact ? 12 : 46),
                   horizontalPadding,
-                  veryCompact ? 14 : (compact ? 20 : 30),
+                  veryCompact ? 14 : (compact ? 12 : 30),
                 ),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -509,29 +512,29 @@ class _SketchMobileLogin extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _SketchMuvvBrand(compact: compact),
-                        SizedBox(height: compact ? 28 : 64),
+                        SizedBox(height: compact ? 20 : 64),
                         Text(
                           'Bienvenido de nuevo',
                           style: TextStyle(
                             color: AppTheme.midnight,
-                            fontSize: compact ? 28 : 32,
+                            fontSize: compact ? 25 : 32,
                             fontWeight: FontWeight.w800,
                             height: 1.12,
                             letterSpacing: 0,
                           ),
                         ),
-                        SizedBox(height: compact ? 6 : 10),
+                        SizedBox(height: compact ? 4 : 10),
                         Text(
                           'Ingresa para gestionar tus fletes\nde forma simple y segura.',
                           style: TextStyle(
                             color: const Color(0xFF6B7280),
-                            fontSize: compact ? 15 : 17,
+                            fontSize: compact ? 14 : 17,
                             fontWeight: FontWeight.w400,
                             height: 1.42,
                             letterSpacing: 0,
                           ),
                         ),
-                        SizedBox(height: compact ? 18 : 30),
+                        SizedBox(height: compact ? 12 : 30),
                         if (auth.error != null) ...[
                           _ErrorBanner(message: auth.error!),
                           const SizedBox(height: 14),
@@ -548,7 +551,7 @@ class _SketchMobileLogin extends StatelessWidget {
                               ? null
                               : 'Correo inválido',
                         ),
-                        SizedBox(height: compact ? 10 : 14),
+                        SizedBox(height: compact ? 8 : 14),
                         _SketchAuthField(
                           label: 'Contraseña',
                           controller: passCtrl,
@@ -597,7 +600,7 @@ class _SketchMobileLogin extends StatelessWidget {
                             child: const Text('¿Olvidaste tu contraseña?'),
                           ),
                         ),
-                        SizedBox(height: compact ? 8 : 12),
+                        SizedBox(height: compact ? 4 : 12),
                         _SketchLoginButton(
                           isLoading: auth.isLoading,
                           onLogin: onLogin,
@@ -605,9 +608,9 @@ class _SketchMobileLogin extends StatelessWidget {
                           btnCtrl: btnCtrl,
                           compact: compact,
                         ),
-                        SizedBox(height: compact ? 16 : 24),
+                        SizedBox(height: compact ? 10 : 24),
                         _SocialDivider(compact: compact),
-                        SizedBox(height: compact ? 10 : 16),
+                        SizedBox(height: compact ? 7 : 16),
                         _SocialSignInButton(
                           label: 'Continuar con Google',
                           icon: const _GoogleGlyph(),
@@ -616,7 +619,7 @@ class _SketchMobileLogin extends StatelessWidget {
                           isLoading: isGoogleLoading,
                           disabled: auth.isLoading || isGoogleLoading,
                         ),
-                        SizedBox(height: compact ? 8 : 10),
+                        SizedBox(height: compact ? 6 : 10),
                         _SocialSignInButton(
                           label: 'Continuar con Apple',
                           icon: Icon(
@@ -628,7 +631,7 @@ class _SketchMobileLogin extends StatelessWidget {
                           compact: compact,
                           disabled: auth.isLoading || isGoogleLoading,
                         ),
-                        SizedBox(height: compact ? 18 : 34),
+                        SizedBox(height: compact ? 12 : 34),
                         Wrap(
                           alignment: WrapAlignment.center,
                           crossAxisAlignment: WrapCrossAlignment.center,
@@ -658,7 +661,7 @@ class _SketchMobileLogin extends StatelessWidget {
                             ),
                           ],
                         ),
-                        SizedBox(height: compact ? 10 : 16),
+                        SizedBox(height: compact ? 6 : 16),
                         _LegalFooter(
                           onTerms: () => context.push('/legal/terms'),
                           onPrivacy: () => context.push('/legal/privacy'),

@@ -7,7 +7,7 @@ OAuth client secrets.
 
 ## 1. Configurar Google y Firebase
 
-1. Abre Firebase Console, proyecto `muvv-dev`, y entra a **Authentication**.
+1. Abre [Firebase Authentication de `muvv-dev`](https://console.firebase.google.com/project/muvv-dev/authentication/providers).
 2. Pulsa **Comenzar** si aun no se ha creado Authentication.
 3. En **Sign-in method**, habilita **Google**, elige el correo de soporte y
    guarda.
@@ -59,3 +59,13 @@ Antes de distribuir iOS, crea tambien el cliente OAuth de tipo iOS para el
 bundle `cl.muvv.app` y descarga `GoogleService-Info.plist`. El archivo se
 configura desde Xcode junto con el URL scheme `REVERSED_CLIENT_ID`. Apple exige
 ofrecer Sign in with Apple cuando Google sea una opcion principal de acceso.
+
+## Apple Sign In
+
+Apple no se puede activar de forma segura solo desde Firebase: requiere una
+cuenta Apple Developer, el identificador de la app `cl.muvv.app`, la capacidad
+**Sign in with Apple** y una configuracion firmada desde Xcode. La pantalla de
+registro ya deja el acceso visible, pero lo informa como pendiente hasta que
+esas credenciales existan; no se simula un inicio de sesion que no podriamos
+verificar en el backend. Cuando la cuenta Apple Developer este lista, se agrega
+la verificacion del token de Apple y se prueba en un iPhone real.

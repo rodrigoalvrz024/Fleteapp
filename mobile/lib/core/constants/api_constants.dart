@@ -12,6 +12,8 @@ class ApiConstants {
   static const String register = '/auth/register';
   static const String login = '/auth/login';
   static const String googleLogin = '/auth/google';
+  static const String googleRegister = '/auth/google/register';
+  static const String switchRole = '/auth/switch-role';
   static const String forgotPassword = '/auth/forgot-password';
   static const String resetPassword = '/auth/reset-password';
   static const String me = '/users/me';

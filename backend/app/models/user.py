@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import JSON, Column, Integer, String, Boolean, DateTime, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -17,7 +17,14 @@ class User(Base):
     phone = Column(String, unique=True, nullable=False)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
+    # ``role`` is the active operating mode. ``account_roles`` preserves all
+    # modes granted to the same identity, so a person never needs two accounts.
     role = Column(Enum(UserRole), default=UserRole.client, nullable=False)
+    account_roles = Column(
+        JSON,
+        nullable=False,
+        default=lambda: [UserRole.client.value],
+    )
     is_active = Column(Boolean, default=True)
     avatar_url = Column(String, nullable=True)
     fcm_token = Column(String, nullable=True)

@@ -11,6 +11,7 @@ class AuthService {
     required String fullName,
     required String password,
     required String role,
+    required bool alsoDriver,
     required bool acceptsTerms,
     required bool acceptsPrivacy,
     required bool acceptsDriverDocuments,
@@ -21,6 +22,7 @@ class AuthService {
       'full_name': fullName,
       'password': password,
       'role': role,
+      'also_driver': alsoDriver,
       'accepts_terms': acceptsTerms,
       'accepts_privacy': acceptsPrivacy,
       'accepts_driver_documents': acceptsDriverDocuments,
@@ -45,6 +47,36 @@ class AuthService {
     final res = await _api.post(ApiConstants.googleLogin, {
       'id_token': idToken,
     });
+    await _api.saveToken(res.data['access_token']);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> registerWithGoogle({
+    required String idToken,
+    required String phone,
+    required String fullName,
+    required String role,
+    required bool alsoDriver,
+    required bool acceptsTerms,
+    required bool acceptsPrivacy,
+    required bool acceptsDriverDocuments,
+  }) async {
+    final res = await _api.post(ApiConstants.googleRegister, {
+      'id_token': idToken,
+      'phone': phone,
+      'full_name': fullName,
+      'role': role,
+      'also_driver': alsoDriver,
+      'accepts_terms': acceptsTerms,
+      'accepts_privacy': acceptsPrivacy,
+      'accepts_driver_documents': acceptsDriverDocuments,
+    });
+    await _api.saveToken(res.data['access_token']);
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> switchRole(String role) async {
+    final res = await _api.post(ApiConstants.switchRole, {'role': role});
     await _api.saveToken(res.data['access_token']);
     return res.data;
   }

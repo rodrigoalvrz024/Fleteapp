@@ -3,6 +3,19 @@ from sqlalchemy import text
 
 STARTUP_MIGRATIONS = (
     """
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS account_roles JSONB NOT NULL DEFAULT '["client"]'::jsonb
+    """,
+    """
+    UPDATE users
+    SET account_roles = CASE
+        WHEN role::text = 'driver' THEN '["client", "driver"]'::jsonb
+        WHEN role::text = 'admin' THEN '["admin"]'::jsonb
+        ELSE '["client"]'::jsonb
+    END
+    WHERE role::text IN ('driver', 'admin')
+    """,
+    """
     ALTER TABLE freight_requests
     ADD COLUMN IF NOT EXISTS service_type VARCHAR(32)
     """,
