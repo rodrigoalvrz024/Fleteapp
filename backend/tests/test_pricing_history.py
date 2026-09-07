@@ -2,7 +2,7 @@ import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
@@ -11,9 +11,15 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from app.services.freight_service import estimate_price, normalize_service_type, recommend_vehicle_type
 from app.services.pricing_history_service import record_pricing_snapshot
+from app.services.pricing_service import PRICING_VERSION
 
 
 class PricingHistoryTests(unittest.TestCase):
+    def setUp(self):
+        policy = patch("app.services.pricing_service.settings.PRICING_CONFIG_JSON", "")
+        policy.start()
+        self.addCleanup(policy.stop)
+
     def _freight(self):
         started_at = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
         vehicle = SimpleNamespace(
@@ -77,7 +83,7 @@ class PricingHistoryTests(unittest.TestCase):
     def test_estimate_exposes_a_reproducible_breakdown(self):
         price = self._price()
 
-        self.assertEqual(price["pricing_version"], "v2")
+        self.assertEqual(price["pricing_version"], PRICING_VERSION)
         self.assertGreater(price["distance_charge"], 0)
         self.assertGreater(price["time_charge"], 0)
         self.assertEqual(price["helper_charge"], 10_000)
@@ -97,7 +103,7 @@ class PricingHistoryTests(unittest.TestCase):
 
         self.assertEqual(snapshot.freight_id, 22)
         self.assertEqual(snapshot.estimated_customer_price, 55_300.0)
-        self.assertEqual(snapshot.pricing_version, "v2")
+        self.assertEqual(snapshot.pricing_version, PRICING_VERSION)
         self.assertEqual(snapshot.service_type, "moving")
         self.assertEqual(snapshot.pickup_commune, "Las Condes")
         self.assertEqual(snapshot.dropoff_commune, "Providencia")
@@ -126,6 +132,19 @@ class PricingHistoryTests(unittest.TestCase):
         self.assertEqual(completed.actual_distance_km, 13.1)
         self.assertEqual(completed.actual_duration_minutes, 42.0)
 
+    def test_legacy_snapshot_keeps_its_version_without_repricing(self):
+        freight = self._freight()
+        db = MagicMock()
+
+        with patch("app.services.pricing_history_service.PRICING_VERSION", "future"):
+            snapshot = record_pricing_snapshot(
+                db, freight, snapshot_type="trip_completed"
+            )
+
+        self.assertEqual(snapshot.pricing_version, "v2")
+        self.assertEqual(snapshot.estimated_customer_price, 55_300.0)
+        self.assertEqual(freight.pricing_version, "v2")
+
     def test_original_snapshot_keeps_formula_when_policy_changes_later(self):
         freight = self._freight()
         db = MagicMock()
@@ -133,20 +152,18 @@ class PricingHistoryTests(unittest.TestCase):
         original = record_pricing_snapshot(
             db, freight, snapshot_type="customer_confirmed", pricing_components=original_price
         )
-        later = estimate_price(
-            12.4,
-            650,
-            helpers=2,
-            duration_minutes=31,
-            volume_m3=4.5,
-            service_type="moving",
-            extra_stops=1,
-        )
+        with patch(
+            "app.services.pricing_service.settings.PRICING_CONFIG_JSON",
+            '{"policy":{"helper_fee":12000}}',
+        ):
+            later = self._price()
 
         self.assertNotEqual(
             original.calculation_metadata["helper_charge"], later["helper_charge"]
         )
-        self.assertEqual(original.pricing_version, "v2")
+        self.assertEqual(original.calculation_metadata["helper_charge"], 10_000)
+        self.assertEqual(later["helper_charge"], 12_000)
+        self.assertEqual(original.pricing_version, PRICING_VERSION)
 
     def test_normalizes_service_types_and_recommends_a_vehicle(self):
         self.assertEqual(normalize_service_type("Paqueteria"), "package")

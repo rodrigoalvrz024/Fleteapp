@@ -80,9 +80,10 @@ una integracion de Google Cloud y no es necesaria para publicar el piloto.
 
 Cuando pruebes notificaciones entre dispositivos, guarda el contenido completo
 del JSON de una cuenta de servicio Firebase en `FIREBASE_CREDENTIALS_JSON` y
-cambia solo `ENABLE_DRIVER_PUSH_NOTIFICATIONS=true`. La aplicacion rechazara
-el despliegue si se habilita push sin una credencial JSON valida; asi evitamos
-creer que las alertas estan activas cuando no pueden enviarse.
+cambia solo `ENABLE_DRIVER_PUSH_NOTIFICATIONS=true`. Si la credencial no es
+valida, el backend omite el envio de push y puede seguir respondiendo a
+`/health`. Por eso hay que comprobar la recepcion en dispositivos reales;
+un despliegue sano no certifica que las notificaciones funcionen.
 
 ## 3. Primer despliegue y comprobacion
 
@@ -109,3 +110,16 @@ creer que las alertas estan activas cuando no pueden enviarse.
 - Revisa Usage una vez por semana y configura un limite/alerta mensual en
   Railway. Las alertas avisan, pero no sustituyen la revision humana.
 - Para el piloto real, deja `PILOT_MODE=true` y limita los correos invitados.
+
+## 5. Aprobacion de salida
+
+El plan vigente y sus bloqueadores estan en
+[`docs/mvp-deployment-plan.md`](../docs/mvp-deployment-plan.md).
+La prueba de dos dispositivos esta en
+[`docs/qa-end-to-end.md`](../docs/qa-end-to-end.md).
+No activar cobros reales ni abrir al publico solo porque `/health` responde 200.
+
+La comprobacion de acceso Supabase y el procedimiento para la migracion
+`f2a4b6c8d010` estan en
+[`docs/supabase-access-check.md`](../docs/supabase-access-check.md).
+No sustituye la prueba de permisos HTTP de cliente, conductor y administrador.
