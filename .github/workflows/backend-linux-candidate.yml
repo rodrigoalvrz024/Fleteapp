@@ -1,0 +1,67 @@
+name: Backend Linux candidate (no deploy)
+
+on:
+  push:
+    branches:
+      - codex/mvp-supabase-rls-review
+    paths:
+      - backend/**
+      - scripts/**
+      - .github/workflows/backend-linux-candidate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-linux-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image-and-unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout candidate without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build runtime image only
+        run: docker build --pull --tag muvv-backend:candidate backend
+
+      - name: Verify non-root image and dependency consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect muvv-backend:candidate --format '{{.Config.User}}')" = app
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 \
+            --entrypoint python muvv-backend:candidate -m pip check
+
+      - name: Test candidate without external connectivity or real credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+            --env APP_ENV=test \
+            --env RUN_STARTUP_MIGRATIONS=false \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" \
+            --env ACCESS_TOKEN_EXPIRE_MINUTES=1440 \
+            --env PYTHONPATH=/app \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/tests,dst=/workspace/backend/tests,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts,dst=/workspace/scripts,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/alembic,dst=/workspace/backend/alembic,readonly" \
+            --workdir /workspace/backend \
+            --entrypoint python muvv-backend:candidate -B -m unittest discover -s tests
+
+      - name: Record image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'Candidate commit: %s\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          docker image inspect muvv-backend:candidate --format 'Image: {{.Id}}' >> "$GITHUB_STEP_SUMMARY"
+          printf 'No image push, Railway deploy, external payment or production database access.\n' >> "$GITHUB_STEP_SUMMARY"

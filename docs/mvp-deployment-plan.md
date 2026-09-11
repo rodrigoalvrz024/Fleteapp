@@ -1,6 +1,6 @@
 # Muvv - Plan de despliegue MVP
 
-Actualizado: 2026-09-07.
+Actualizado: 2026-09-11.
 
 ## Decision actual
 
@@ -31,14 +31,33 @@ La lista de invitados no es una limitacion geografica.
 - [x] Pagos conserva menu inferior; Atrás de Android, flecha superior y regreso
   a Perfil comprobados fisicamente. Viajes, Ganancias y cambio de modo tambien.
 - [x] Splash sin modificaciones en esta pasada de navegacion y despliegue.
-- [x] Backend: 90 pruebas unitarias aprobadas el 2026-09-07. Incluyen historial
-  legado y 14 pruebas nuevas de verificacion de acceso y migracion RLS.
+- [x] Backend: 148 pruebas unitarias aprobadas el 2026-09-11. Incluyen historial
+  legado, verificacion de acceso, RLS, respaldo, compatibilidad JWT y Webpay REST.
   Esto no certifica permisos a traves de HTTP ni integraciones en produccion.
-- [x] Migracion RLS: 8 pruebas de integracion aprobadas en PostgreSQL 18.3 local
+- [x] Migracion RLS y verificador: 9 pruebas de integracion aprobadas en PostgreSQL 18.3 local
   con datos sinteticos. Backend conserva acceso y roles API quedan bloqueados,
   incluso con permisos de tabla reintroducidos. Cluster apagado y eliminado.
   No equivale a desplegar ni a probar todos los endpoints de la app.
-- [x] Railway: consulta de solo lectura el 2026-09-06 devuelve HTTP 200,
+- [x] 39 pruebas HTTP/WebSocket aprobadas sobre PostgreSQL local y las 20 tablas
+  creadas por la historia Alembic completa hasta `f6b8c0d2e411`. Roles, IDs ajenos, chat, fotos, ubicacion,
+  evaluaciones y campos criticos comprobados. Integraciones externas simuladas;
+  evidencia y limites: `docs/http-permissions-regression.md`.
+- [x] Historia de migraciones: 8/8 comprobaciones desde vacio y 8/8 desde
+  esquema previo simulado. Corregido faltante de seis tablas y 36 columnas,
+  conservando filas y estados financieros sinteticos. Total local 212 casos;
+  evidencia, alcance de candidata y pendientes: `docs/backend-release-candidate.md`.
+- [x] Dependencias candidatas probadas en entorno aislado: 14 paquetes iniciales
+  afectados actualizados o retirados. SDK Transbank y Marshmallow retirados;
+  adaptador REST probado localmente. Auditoria final: 87 paquetes, cero avisos
+  conocidos y cero omitidos. No desplegado. Evidencia:
+  `docs/backend-dependency-audit.md`.
+- [x] Webpay externo de integracion (2026-09-11): creacion, checkout completado
+  manualmente por Rodrigo, retorno del navegador y commit del adaptador REST.
+  AUTHORIZED, codigo 0, CLP 1.000 ficticios y orden coincidentes; un commit.
+  Rechazo FAILED/codigo -1 verificado con un commit; cancelacion con cero commits.
+  No se uso DB de Muvv, Flutter, dinero real ni credenciales productivas.
+  Evidencia y repeticion: `docs/webpay-integration-check.md`.
+- [x] Railway: consulta de solo lectura el 2026-09-07 devuelve HTTP 200,
   `status=healthy`, `pilot_mode=true`.
 - [x] HTTP sin sesion: `/users/me`, `/drivers/me`, `/admin/metrics` y `/payouts`
   responden 401. Preflight CORS de `https://muvv-dev.web.app` responde 200 con
@@ -58,39 +77,95 @@ P0 | Parcial | Desarrollo + Rodrigo
 - [ ] Confirmar servicio Railway siempre disponible y configuracion real de
   recursos, reinicios, logs y limites de gasto; no darlo por hecho por usar Railway.
 - [ ] Verificar `/health` desde dos redes y tras un reinicio controlado.
-- [ ] Registrar commit desplegado, dominio y respuesta saludable de API y DB.
+- [x] Registrar commit desplegado, dominio y respuesta saludable de API y DB.
 
 Cierre: evidencia reciente del entorno real y disponibilidad tras reinicio.
-La consulta de salud desde el PC ya paso el 2026-09-06; no demuestra continuidad
+La consulta de salud desde el PC paso el 2026-09-07; no demuestra continuidad
 ni corrige por si misma la causa del timeout observado en la prueba anterior.
+Railway activo: `590e8fec432f094619355dad89dcb068c4bd649f`, `main`, una replica
+US West y reinicio Always. No se reinicio ni modifico el servicio. Conexion DB
+del contenedor confirmada; ver `docs/supabase-access-check.md`.
 
 ### MVP-02 - Migraciones, respaldo y recuperacion
 
-P0 | Por verificar | Desarrollo + Rodrigo
+P0 | Parcial: restauracion local y copia externa verificadas | Desarrollo + Rodrigo
 
 - [ ] Comparar `alembic current` y `alembic heads` en el servicio correcto.
-- [ ] Confirmar `alembic upgrade head` en pre-deploy y migraciones de inicio desactivadas.
-- [ ] Crear respaldo protegido y probar restauracion en una base separada.
+- [x] Confirmar `alembic upgrade head` en pre-deploy y migraciones de inicio desactivadas.
+- [x] Crear respaldo protegido y probar restauracion en una base separada.
+- [x] Guardar segunda copia fuera del PC y preparar recuperacion portable de la clave.
+- [ ] Ensayar recuperacion en otro computador y acceso a la contrasena sin el PC original.
+  Rodrigo solicita dejar este ensayo para el cierre final (2026-09-09).
 - [ ] Documentar recuperacion del backend y compatibilidad de esquema sin
   ejecutar downgrades destructivos sobre produccion.
 
 Cierre: restauracion y recuperacion ensayadas; nunca pegar DATABASE_URL en Notion.
-Consulta de metadatos del 2026-09-07: la conexion local de Supabase informa
-`e1f0a2b3c4d5`, igual a la cabeza anterior. Se preparo la nueva migracion
-`f2a4b6c8d010`; NO esta aplicada. Falta cotejar la conexion del contenedor Railway,
-y validar respaldo/recuperacion. La migracion aislada paso 8/8 pruebas en
-PostgreSQL 18.3 local; falta regresion con el esquema completo y la candidata.
+Consultas del 2026-09-07: conexion local y contenedor Railway coinciden con el
+proyecto Supabase esperado, revision `e1f0a2b3c4d5`, rol `postgres` propietario.
+Se preparo la nueva migracion `f2a4b6c8d010`; NO esta aplicada. Supabase Free no
+incluye respaldos administrados. Tras autorizacion se genero una copia cifrada
+fuera de Git, incluyendo los 13 archivos privados. Recuperacion local verificada:
+21 tablas public y 13 archivos coincidentes, instancia apagada y temporales
+eliminados. Referencia: `docs/private-backup-recovery.md`. No se contrato otro
+plan ni se modifico produccion. Exportacion de clave portable implementada y
+probada contra el respaldo real con contrasena efimera, sin usar DPAPI durante
+la restauracion. Paquete definitivo creado por Rodrigo con su contrasena:
+7.785.867 bytes, huella y contenido cifrado comprobados. Copia externa en Google
+Drive verificada el 2026-09-09: ZIP con acceso Restringido, solo propietario,
+descargado por Rodrigo y comparado byte por byte y por SHA-256 con el original.
+No se extrajeron datos privados ni se modifico el ZIP. Falta ensayar otro equipo
+y comprobar la recuperacion independiente de la contrasena.
+Tras un FileNotFoundError informado por Rodrigo, se encontro y valido la clave
+DPAPI original; copia protegida alternativa fuera de AppData y `--key-file`
+comprobados. No se genero ni sustituyo la clave del respaldo. La exportacion
+personal y la verificacion de descarga ya terminaron; evidencia en el informe
+local `portable-report.json`. La instantanea no incluye datos posteriores al respaldo.
+No se ensayo una restauracion completa de Supabase en otro proyecto.
+La migracion y verificador pasaron 9/9 pruebas locales; ademas, 39 pruebas
+HTTP/WebSocket pasaron sobre las 20 tablas de modelos y la candidata.
+La historia completa ya paso desde vacio y esquema previo sintetico hasta
+`f6b8c0d2e411`; esta revision nueva completa estructuras antiguamente creadas
+por el arranque. Ninguna de las dos revisiones candidatas esta desplegada.
+No sustituye recorrer la historia Alembic sobre el respaldo real ni verificar
+la release desplegada. Se reforzo el
+verificador tras comprobar que el pooler ignoraba opciones de arranque: ahora
+confirma la transaccion de solo lectura y usa limites SET LOCAL.
 
 ### MVP-03 - Seguridad final del entorno desplegado
 
 P0 | Parcial | Desarrollo + revision independiente
 
+- [x] Regresion local por HTTP/WebSocket con PostgreSQL y usuarios sinteticos:
+  39/39 con dependencias candidatas; incluye servidor Uvicorn en loopback.
 - [ ] Probar HTTP con cliente A, cliente B, conductor y admin: cambiar IDs no
   permite leer ni alterar fletes, fotos, ubicacion, chat o liquidaciones ajenas.
+  Repeticion pendiente en la candidata desplegada; no todos los endpoints estan cubiertos localmente.
 - [ ] Verificar JWT expirado, rutas sin token, CORS, limites de intentos y logs.
-- [ ] Auditar dependencias y secretos en archivos rastreados e historial Git;
-  corregir hallazgos criticos/altos y repetir pruebas.
+- [x] Auditar dependencias Python instaladas y probar parches en entorno local.
+  Auditoria final sin avisos conocidos; no equivale a auditar todo el sistema.
+- [x] Retirar dependencia vulnerable de Transbank: SDK y Marshmallow eliminados,
+  operaciones existentes reemplazadas por API REST oficial con contrato probado.
+- [x] Caso aprobado con checkout/retorno y commit contra Transbank Integracion,
+  completado el 2026-09-11. Monto y orden comprobados, sin dinero real.
+- [x] Rechazo y cancelacion en el checkout externo, verificados el 2026-09-11.
+- [x] Corregir en candidata la cancelacion por orden sin token y proteger
+  estados financieros terminales; siete regresiones HTTP nuevas aprobadas.
+- [ ] Desplegar y revalidar esa correccion: el hallazgo alto del callback
+  NO queda cerrado en produccion con el cambio local.
+- [ ] Probar flujo completo desde Flutter y persistencia en el backend desplegado.
+  Las pruebas HTTP locales usan respuestas sinteticas del proveedor.
+- [ ] Auditar imagen Linux final, secretos en archivos rastreados e historial
+  Git; corregir hallazgos criticos/altos y repetir pruebas.
+  Escaneo local de secretos realizado el 2026-09-11: coincidencias actuales
+  corresponden a pruebas/ejemplos; claves Google historicas pendientes de
+  validacion en GCP. Exclusiones Git/Docker reforzadas. Workflow Linux sin
+  deploy preparado, aun no ejecutado. Ver `docs/source-secret-audit.md`.
 - [ ] Revisar acceso de admin a chat con motivo, trazabilidad y minimo privilegio.
+  Regresion local aprobada; falta verificacion en el servicio candidato.
+- [x] Investigar ResourceWarning: no se reproducen tras actualizar Starlette.
+  TestClient y Uvicorn local verificados, con asercion de cierre de recursos.
+- [ ] Repetir mediciones de memoria/latencia bajo carga sostenida y en Railway.
+  No afirmar una fuga ni estabilidad prolongada en produccion sin evidencia.
 - [ ] Aplicar y revalidar `f2a4b6c8d010` tras autorizacion: RLS en tablas recientes
   de chat, fotos, rechazos y evaluaciones. No hay permisos publicos efectivos
   en la consulta actual; falta esta capa adicional de proteccion.
@@ -102,7 +177,7 @@ cubren parte de estas reglas, no una auditoria completa.
 
 P0 | Parcial | Desarrollo + Rodrigo
 
-- [ ] Confirmar bucket privado `muvv-private` en el mismo proyecto Supabase
+- [x] Confirmar bucket privado `muvv-private` en el mismo proyecto Supabase
   que usa Railway, sin politicas de lectura publica.
 - [ ] Probar carga, descarga autorizada, expiracion de enlaces y acceso denegado
   para otro usuario. Validar MIME, contenido, extension, tamano y metadatos.
@@ -111,7 +186,7 @@ P0 | Parcial | Desarrollo + Rodrigo
 
 Cierre: cliente y conductor autorizados ven las fotos; terceros no.
 Metadatos comprobados el 2026-09-07: bucket privado, limite 8 MiB y sin politicas
-en `storage.objects`. Falta confirmar coincidencia con Railway y probar cargas,
+en `storage.objects`. Coincidencia con Railway confirmada. Falta probar cargas,
 descargas y enlaces; no se cambio el bucket ni su lista MIME.
 
 ### MVP-05 - Conductores y vehiculos reales
@@ -136,6 +211,8 @@ P0 | Pendiente de validacion comercial y tecnica | Rodrigo + Desarrollo
   pendiente de liquidar. No presentar un registro interno como custodia bancaria.
 - [ ] Probar sandbox: exito, rechazo, abandono, callback duplicado, timeout,
   reintento y conciliacion. Confirmar importe siempre calculado por backend.
+  Adaptador y checkout externos: exito/rechazo/cancelacion verificados. Falta
+  completar el conjunto con Flutter, persistencia e incertidumbre financiera.
 - [ ] Habilitar credenciales productivas solo despues de aprobacion y evidencia.
 
 Codigo actual: integracion Webpay Plus create/commit y estado interno
@@ -273,11 +350,12 @@ P1/P2 segun flujo | Parcial | Desarrollo + Producto
 
 ### MVP-18 - Seguimiento en Notion
 
-P1 | Verificado | Rodrigo + Desarrollo
+P1 | Plan publicado; ultima actualizacion pendiente | Rodrigo + Desarrollo
 
 - [x] Acceder a Notion con sesion iniciada y crear borrador privado.
 - [x] Publicar este plan sin credenciales ni datos de usuarios y verificar que se guardo.
 - [x] Organizar por prioridad y estado, con responsable, evidencia y proxima accion.
+- [ ] Reflejar el cierre de la copia externa y las pruebas del 2026-09-09 en Notion.
 
 Plan guardado el 2026-09-07 y verificado tras recargar la pagina: 18 bloques,
 prioridad, estado, responsable propuesto, criterios de cierre y casillas.
@@ -285,15 +363,20 @@ prioridad, estado, responsable propuesto, criterios de cierre y casillas.
 La pagina es privada y no contiene credenciales ni datos de usuarios.
 Este archivo conserva la copia del repositorio. No hay sincronizacion automatica
 con Git, integracion persistente ni monitor recurrente configurado.
+El 2026-09-09 la conexion al editor agoto su tiempo de respuesta antes de editar.
+No se confirmo una actualizacion remota; los avances mas recientes estan en este
+archivo y en `docs/private-backup-recovery.md`.
 
 ## Orden de trabajo inmediato
 
-1. Completar verificacion de conexion Railway y respaldo; autorizar y desplegar
-   la migracion RLS ya probada localmente y revalidar acceso/almacenamiento (01-04).
+1. Conexion Railway, restauracion local, copia externa y regresion HTTP local
+   verificadas. Revisar los cambios candidatos, dependencias y avisos de recursos;
+   tras autorizacion de despliegue, revalidar acceso/almacenamiento en produccion (01-04).
 2. Cerrar el flujo de dinero y cancelaciones con el proveedor (06-08).
 3. Probar notificaciones, ubicacion y servicio completo en dos telefonos (09-11).
 4. Aprobar soporte, seguridad, version candidata y costos (03, 12-15).
-5. Decidir GO/NO-GO del piloto; despues completar la salida iOS (16).
+5. Ensayar la recuperacion en otro computador, diferida al cierre por Rodrigo,
+   y decidir GO/NO-GO del piloto; despues completar la salida iOS (16).
 
 ## Acta GO / NO-GO
 

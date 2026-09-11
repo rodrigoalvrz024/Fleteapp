@@ -5,7 +5,21 @@ __pycache__/
 .pytest_cache/
 
 .env
+.env.*
+**/.env
+**/.env.*
 firebase-credentials.json
+**/*credentials*.json
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.fernet
+**/*.dpapi
+**/recovery-key.json
+**/muvv-recovery-*.zip
 *.log
 uvicorn.out.log
 uvicorn.err.log
