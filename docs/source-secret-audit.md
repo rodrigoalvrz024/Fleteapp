@@ -109,7 +109,18 @@ La ultima cifra incluye el workflow y la guia; el script incorpora archivos
 nuevos de .github ademas de backend/scripts/docs. Repetir al cambiar el conjunto
 publicable. Esta actualizacion de referencias de evidencia es posterior al escaneo.
 
-## Prueba Linux preparada, aun no ejecutada
+## Reescaneo tras los commits
+
+Historial en `fccc08448ca399c8d95d59cf1cdebd5c3bf3b356`, 2026-09-11
+15:48:00 UTC: 12 coincidencias en el informe local ignorado
+`.local-tools/secret-audit/scan-aec4937962064683b1c1193aa4f70326`.
+Conserva las nueve anteriores y agrega tres ya revisadas en el arbol actual:
+clave publica de Transbank Integracion y dos secretos sinteticos de pruebas.
+No se detectaron credenciales privadas nuevas. Las ocho coincidencias Google
+historicas siguen abiertas a comprobacion de vigencia/restricciones en GCP.
+El escaner conserva salida 1 por coincidencias; no se presenta como cero hallazgos.
+
+## Prueba Linux aprobada
 
 `.github/workflows/backend-linux-candidate.yml` se activa solo al subir cambios
 de backend/scripts a `codex/mvp-supabase-rls-review`. No corre en main ni despliega.
@@ -119,8 +130,11 @@ Construye Docker, comprueba usuario no-root, pip check y unitarias con red
 desactivada, filesystem de solo lectura y datos ficticios. No publica imagenes.
 
 Commit/push a la rama de seguridad y corrida Linux autorizados el 2026-09-11.
-Pendientes: resultado de corrida real, auditoria de paquetes del SO
-de la imagen, migraciones con respaldo representativo y prueba movil completa.
+[Corrida 34618327432](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34618327432)
+aprobada para `fccc08448ca399c8d95d59cf1cdebd5c3bf3b356` a las 15:49:18 UTC:
+build, comprobacion no-root, pip check y unitarias. No hubo deploy ni merge.
+Pendientes: auditoria de vulnerabilidades Python/SO de la imagen,
+migraciones con respaldo representativo y prueba movil completa.
 Las pruebas unitarias montan tests y scripts del mismo commit: no subir tests
 de respaldo sin sus helpers, aunque formen un commit separado.
 

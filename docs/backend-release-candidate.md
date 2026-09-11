@@ -1,7 +1,7 @@
 # Muvv - Candidata del backend
 
-Actualizado: 2026-09-11. Estado: verificada localmente; commit/push a la rama
-de seguridad y validacion Linux autorizados. Sin merge ni deploy autorizado.
+Actualizado: 2026-09-11. Estado: commits publicados en la rama de seguridad;
+build Docker y unitarias Linux aprobados. Sin merge ni deploy autorizado.
 No autoriza cobros reales ni apertura publica. Splash, APK y diseno sin cambios.
 
 ## Hallazgo al ensayar una instalacion limpia
@@ -73,6 +73,27 @@ Los clusters y servidores temporales se apagaron y eliminaron al terminar.
 No ejecutar los modulos de integracion directamente ni pasar una DATABASE_URL
 existente. El ejecutor construye su entorno limpio y se niega a reutilizar bases.
 
+## Publicacion y validacion Linux
+
+Rama `codex/mvp-supabase-rls-review`, subida autorizada el 2026-09-11:
+
+- `fd99ab6`: helpers de respaldo cifrado, pruebas y guia; sin respaldos ni claves.
+- `4535946`: seguridad del backend, migracion aditiva y regresiones.
+- `fccc084`: CI Linux sin deploy, exclusiones de secretos y guias de auditoria.
+
+[Ejecucion Linux 34618327432](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34618327432)
+terminada con success el 2026-09-11 a las 15:49:18 UTC. SHA probado:
+`fccc08448ca399c8d95d59cf1cdebd5c3bf3b356`.
+Build de `backend/Dockerfile`, usuario app no-root, pip check y descubrimiento
+completo de unitarias aprobados. Los tests corrieron sin red, con filesystem
+de solo lectura y credenciales ficticias. No se publico la imagen ni hubo deploy.
+Las 148 unitarias tambien se repitieron localmente antes de los commits.
+
+La corrida Linux no ejecuta los ensayos PostgreSQL ni escanea vulnerabilidades
+del SO: estos no deben darse por aprobados por el resultado del job.
+`main` consultado despues de la corrida sigue en
+`590e8fec432f094619355dad89dcb068c4bd649f`. Mobile/web/Splash quedaron fuera.
+
 ## Alcance para revision y publicacion
 
 Separar los cambios visuales de mobile/web, Firebase, marketing y archivos
@@ -96,16 +117,14 @@ separado y registrar el numero de pruebas del commit final, no solo del workspac
    como fixtures/clave publica de integracion/ejemplo vacio. Ocho coincidencias
    historicas de Google requieren verificar vigencia y restricciones en GCP;
    no se considera cerrado ese riesgo. Ver `docs/source-secret-audit.md`.
-2. Construir la imagen Linux desde `backend/Dockerfile`, auditar paquetes Python
-   y del SO y repetir pruebas. Docker no esta disponible en esta sesion; no se
-   instalo ni se lanzo una compilacion remota que pueda generar gastos.
-   Workflow preparado en `.github/workflows/backend-linux-candidate.yml`, solo
-   para la rama de seguridad y sin deploy. Sintaxis Bash/YAML y permisos
-   revisados localmente; push autorizado, resultado de ejecucion aun pendiente.
+2. Build Linux y unitarias completados en la corrida vinculada arriba.
+   Pendiente auditar vulnerabilidades de paquetes Python y del SO en la imagen
+   final y repetir integracion con PostgreSQL representativo. El pip check
+   aprobado verifica compatibilidad de dependencias, no vulnerabilidades.
 3. Ensayar sobre una restauracion aislada representativa del esquema real;
    comparar datos, permisos, enums, locks y tiempos. Recuperacion en OTRO PC
    sigue aplazada para el cierre final por decision de Rodrigo.
-4. Commit/push de la candidata revisada autorizado a la rama de seguridad.
+4. Commit/push de la candidata revisada completado en la rama de seguridad.
    El despliegue requiere otra autorizacion. Desplegar primero para pruebas
    con DB/Storage separados, sin clonar secretos productivos
    ni enviar notificaciones a usuarios reales. Mantener Transbank integration.

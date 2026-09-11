@@ -159,7 +159,11 @@ P0 | Parcial | Desarrollo + revision independiente
   Escaneo local de secretos realizado el 2026-09-11: coincidencias actuales
   corresponden a pruebas/ejemplos; claves Google historicas pendientes de
   validacion en GCP. Exclusiones Git/Docker reforzadas. Workflow Linux sin
-  deploy preparado, aun no ejecutado. Ver `docs/source-secret-audit.md`.
+  deploy aprobado para `fccc084` (corrida 34618327432): build, no-root, pip check
+  y unitarias. Falta escaneo de vulnerabilidades de la imagen, no cubierto por
+  pip check. Ver `docs/source-secret-audit.md`.
+- [x] Commit/push del backend y CI a `codex/mvp-supabase-rls-review`, separado
+  de mobile/web/Splash. `main` intacto; sin autorizacion de merge ni deploy.
 - [ ] Revisar acceso de admin a chat con motivo, trazabilidad y minimo privilegio.
   Regresion local aprobada; falta verificacion en el servicio candidato.
 - [x] Investigar ResourceWarning: no se reproducen tras actualizar Starlette.

@@ -158,8 +158,9 @@ reproduccion, avisos de AnyIO y pruebas aun pendientes sobre la candidata real.
    Clave portable exportada y copia externa/descarga verificadas; falta ensayo
    en otro equipo y acceso independiente a la contrasena, diferidos al cierre
    por Rodrigo el 2026-09-09.
-   Commit/push de los ajustes posteriores a `87e8248` y validacion Linux
-   autorizados el 2026-09-11 en la misma rama; no se autoriza fusion ni despliegue.
+   Commit/push de los ajustes posteriores a `87e8248` completado el 2026-09-11
+   en la misma rama. Build y unitarias Linux aprobados para `fccc084`; ver
+   `docs/backend-release-candidate.md`. No se autoriza fusion ni despliegue.
 4. Desplegar con el pre-deploy existente `alembic upgrade head`. Mantener
    `RUN_STARTUP_MIGRATIONS=false`; no ejecutar migraciones simultaneas manuales.
 5. En el contenedor actualizado, comparar `alembic current` y `alembic heads`:
