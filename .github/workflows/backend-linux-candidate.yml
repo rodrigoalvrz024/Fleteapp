@@ -65,3 +65,20 @@ jobs:
           printf 'Candidate commit: %s\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           docker image inspect muvv-backend:candidate --format 'Image: {{.Id}}' >> "$GITHUB_STEP_SUMMARY"
           printf 'No image push, Railway deploy, external payment or production database access.\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Scan OS and Python packages in the tested image
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-image-audit.XXXXXX")"
+          curl --fail --silent --show-error --location --retry 3 \
+            --proto '=https' --proto-redir '=https' \
+            https://github.com/anchore/grype/releases/download/v0.118.0/grype_0.118.0_linux_amd64.tar.gz \
+            --output "$audit_dir/grype.tar.gz"
+          printf '%s  %s\n' '1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2' "$audit_dir/grype.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$audit_dir/grype.tar.gz" --directory "$audit_dir" grype
+          image_id="$(docker image inspect muvv-backend:candidate --format '{{.Id}}')"
+          "$audit_dir/grype" "docker:${image_id}" \
+            --config scripts/grype-candidate.yaml --output json > "$audit_dir/report.json"
+          python3 scripts/report-image-audit.py "$audit_dir/report.json" \
+            --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation

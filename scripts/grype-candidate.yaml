@@ -1,0 +1,13 @@
+check-for-app-update: false
+only-fixed: false
+only-notfixed: false
+ignore: []
+exclude: []
+external-sources:
+  enable: false
+db:
+  auto-update: true
+  require-update-check: true
+  validate-age: true
+  validate-by-hash-on-start: true
+  max-allowed-built-age: 120h
