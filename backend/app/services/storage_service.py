@@ -11,7 +11,8 @@ from uuid import uuid4
 import httpx
 from fastapi import HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 from app.core.config import settings
 
@@ -474,8 +475,9 @@ def decode_driver_document_view_token(token: str) -> dict:
             token,
             _view_token_key(DOCUMENT_VIEW_PURPOSE),
             algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Documento no disponible",
@@ -517,8 +519,9 @@ def decode_freight_evidence_view_token(token: str) -> dict:
             token,
             _view_token_key(FREIGHT_EVIDENCE_VIEW_PURPOSE),
             algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evidencia no disponible",
@@ -560,8 +563,9 @@ def decode_cargo_photo_view_token(token: str) -> dict:
             token,
             _view_token_key(CARGO_PHOTO_VIEW_PURPOSE),
             algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Foto no disponible",
@@ -603,8 +607,9 @@ def decode_chat_image_view_token(token: str) -> dict:
             token,
             _view_token_key(CHAT_IMAGE_VIEW_PURPOSE),
             algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Imagen no disponible",

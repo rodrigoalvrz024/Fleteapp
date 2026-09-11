@@ -38,6 +38,7 @@ class SupabaseVerifierTests(unittest.TestCase):
     def setUp(self):
         self.conn = MagicMock()
         self.cursor = self.conn.cursor.return_value.__enter__.return_value
+        self.cursor.fetchone.return_value = ("on",)
         self.rows = [(name, True) for name in verifier.TABLES]
         self.roles = [(name, False) for name in verifier.API_ROLES]
         self.cursor.fetchall.side_effect = [self.rows, [], [], self.roles]
@@ -59,10 +60,35 @@ class SupabaseVerifierTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("RLS disabled: none", output)
         self.assertEqual(connect.call_args.kwargs["connect_timeout"], 10)
-        self.assertIn("default_transaction_read_only=on", connect.call_args.kwargs["options"])
-        self.assertIn("statement_timeout=7000", connect.call_args.kwargs["options"])
+        self.conn.set_session.assert_called_once_with(readonly=True, autocommit=False)
+        setup_queries = [call.args[0] for call in self.cursor.execute.call_args_list[:3]]
+        self.assertEqual(setup_queries, [
+            "SET LOCAL statement_timeout = '7s'",
+            "SET LOCAL lock_timeout = '3s'",
+            "SHOW transaction_read_only",
+        ])
         self.conn.close.assert_called_once()
         self.conn.commit.assert_not_called()
+
+    def test_unconfirmed_read_only_transaction_stops_before_inspection(self):
+        for row in (("off",), None):
+            with self.subTest(row=row):
+                self.setUp()
+                self.cursor.fetchone.return_value = row
+                result, _, _ = self.run_main()
+                self.assertEqual(result, 2)
+                self.cursor.fetchall.assert_not_called()
+                self.assertEqual(self.cursor.execute.call_count, 3)
+                self.conn.close.assert_called_once()
+                self.conn.commit.assert_not_called()
+
+    def test_failure_to_start_read_only_transaction_is_redacted(self):
+        self.conn.set_session.side_effect = RuntimeError("private-connection-data")
+        result, output, _ = self.run_main()
+        self.assertEqual(result, 2)
+        self.assertNotIn("private-connection-data", output)
+        self.cursor.execute.assert_not_called()
+        self.conn.close.assert_called_once()
 
     def test_missing_table_fails(self):
         self.rows.pop()
@@ -83,7 +109,7 @@ class SupabaseVerifierTests(unittest.TestCase):
         result, output, _ = self.run_main()
         self.assertEqual(result, 1)
         self.assertIn("freight_chat_messages: anon SELECT", output)
-        query, params = self.cursor.execute.call_args_list[1].args
+        query, params = self.cursor.execute.call_args_list[4].args
         self.assertIn("has_table_privilege(r.oid, c.oid, p.privilege)", query)
         self.assertEqual(params, (verifier.TABLES, list(verifier.API_ROLES)))
 
@@ -94,7 +120,7 @@ class SupabaseVerifierTests(unittest.TestCase):
         result, output, _ = self.run_main()
         self.assertEqual(result, 1)
         self.assertIn("Effective anon/authenticated column_grants: 1", output)
-        query = self.cursor.execute.call_args_list[2].args[0]
+        query = self.cursor.execute.call_args_list[5].args[0]
         self.assertIn("has_any_column_privilege", query)
 
     def test_absent_api_roles_do_not_produce_false_success(self):

@@ -3,7 +3,8 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
@@ -66,8 +67,9 @@ def decode_token(token: str) -> dict:
             algorithms=[settings.ALGORITHM],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
+            options={"require": ["exp", "iat", "iss", "aud", "sub"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         raise _invalid_token()
     if payload.get("token_type") != "access":
         raise _invalid_token()

@@ -48,6 +48,17 @@ def _database_url() -> str:
     )
 
 
+def begin_read_only_inspection(conn) -> None:
+    # Transaction poolers may ignore connection startup options.
+    conn.set_session(readonly=True, autocommit=False)
+    with conn.cursor() as cursor:
+        cursor.execute("SET LOCAL statement_timeout = '7s'")
+        cursor.execute("SET LOCAL lock_timeout = '3s'")
+        cursor.execute("SHOW transaction_read_only")
+        if cursor.fetchone() != ("on",):
+            raise RuntimeError("Read-only transaction could not be confirmed.")
+
+
 def inspect_access(conn) -> dict:
     with conn.cursor() as cursor:
         cursor.execute(
@@ -130,8 +141,8 @@ def main() -> int:
         conn = psycopg2.connect(
             _database_url(),
             connect_timeout=10,
-            options="-c default_transaction_read_only=on -c statement_timeout=7000",
         )
+        begin_read_only_inspection(conn)
         result = inspect_access(conn)
     except Exception as error:
         # Connection exceptions can contain credentials or internal addresses.

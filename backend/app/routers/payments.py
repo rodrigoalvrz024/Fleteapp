@@ -1,4 +1,5 @@
 import html
+import re
 import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -71,7 +72,7 @@ def initiate_payment(
     buy_order = f"FLETE-{freight.id}-{uuid.uuid4().hex[:8].upper()}"
     amount = int(freight.final_price or freight.estimated_price)
 
-    # Modo sandbox Transbank — en producción usar el SDK oficial
+    # Simulation and the Webpay REST integration share the same payment record.
     payment = freight.payment or Payment(freight_id=freight.id)
     payment.amount = amount
     payment.method = data.method
@@ -168,32 +169,68 @@ async def _process_payment_callback(
     db: Session,
     background_tasks: BackgroundTasks,
 ):
-    form = await request.form() if request.method == "POST" else {}
-    callback_data = {**dict(request.query_params), **dict(form)}
-    if not token_ws:
-        token_ws = callback_data.get("token_ws")
-    if not token_ws:
-        aborted_buy_order = callback_data.get("TBK_ORDEN_COMPRA")
-        if aborted_buy_order:
-            payment = db.query(Payment).filter(Payment.buy_order == aborted_buy_order).first()
-            if payment:
-                payment.status = PaymentStatus.failed
-                db.commit()
-                return RedirectResponse(
-                    _frontend_payment_result(payment.freight_id, "cancelled"),
-                    status_code=303,
-                )
-    if not token_ws:
+    form = await request.form() if request.method == "POST" else None
+    callback_data = {}
+    for key, maximum in (("token_ws", 64), ("TBK_TOKEN", 64),
+                         ("TBK_ORDEN_COMPRA", 26), ("TBK_ID_SESION", 61)):
+        values = request.query_params.getlist(key) + (form.getlist(key) if form is not None else [])
+        if len(values) > 1 or (values and (not isinstance(values[0], str) or len(values[0]) > maximum)):
+            raise HTTPException(status_code=400, detail="Retorno de pago invalido")
+        callback_data[key] = values[0] if values else None
+
+    token_ws = callback_data["token_ws"]
+    aborted_token = callback_data["TBK_TOKEN"]
+    aborted_order = callback_data["TBK_ORDEN_COMPRA"]
+    for value in (token_ws, aborted_token):
+        if value and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value):
+            raise HTTPException(status_code=400, detail="Retorno de pago invalido")
+    if token_ws and aborted_token and token_ws != aborted_token:
+        raise HTTPException(status_code=400, detail="Retorno de pago invalido")
+
+    # Tokenless timeout fields come from the browser, not authenticated Webpay.
+    # Do not look up or change a payment based on a public order/session ID.
+    if not token_ws and not aborted_token:
+        if aborted_order and callback_data["TBK_ID_SESION"]:
+            return RedirectResponse(
+                f"{settings.FRONTEND_URL.rstrip('/')}/#/app/client/freights?payment=unconfirmed",
+                status_code=303,
+            )
         raise HTTPException(status_code=400, detail="Token requerido")
-    payment = db.query(Payment).filter(Payment.webpay_token == token_ws).first()
+
+    if aborted_token and not aborted_order:
+        raise HTTPException(status_code=400, detail="Retorno de pago invalido")
+    query = db.query(Payment).filter(Payment.webpay_token == (aborted_token or token_ws))
+    if aborted_token:
+        query = query.filter(Payment.buy_order == aborted_order)
+    # Serialize callbacks for this payment before checking its persisted state.
+    payment = query.with_for_update().first()
     if not payment:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
 
-    if payment.status == PaymentStatus.authorized:
+    if payment.status != PaymentStatus.pending:
         return RedirectResponse(
-            _frontend_payment_result(payment.freight_id, "success"),
+            _frontend_payment_result(
+                payment.freight_id, "success" if payment.status == PaymentStatus.authorized else "failed"
+            ),
             status_code=303,
         )
+
+    if aborted_token:
+        # Even a matching bearer token is not proof of a bank-side outcome.
+        # Keep pending until provider confirmation/reconciliation, including
+        # Webpay's error return containing BOTH token_ws and TBK_TOKEN.
+        result = "unconfirmed" if token_ws else "cancelled"
+        record_audit_event(
+            db,
+            entity_type="payment",
+            entity_id=payment.id,
+            event_type="payment.checkout_error" if token_ws else "payment.checkout_aborted",
+            before_data={"status": payment.status.value},
+            after_data={"status": payment.status.value, "financial_state_changed": False},
+            request=request,
+        )
+        db.commit()
+        return RedirectResponse(_frontend_payment_result(payment.freight_id, result), status_code=303)
 
     status_before = payment.status.value if hasattr(payment.status, "value") else str(payment.status)
     if token_ws.startswith("SANDBOX_TOKEN_"):
