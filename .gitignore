@@ -25,6 +25,12 @@ firebase-debug.log*
 firepit-log.txt
 .firebase/
 reports/
+# Private backups and recovery material must stay outside the repository.
+*.fernet
+*.dpapi
+muvv-recovery-*.zip
+recovery-key.json
+portable-report.json
 .dart-appdata/
 .local-tools/
 scripts/new-google-account.env.ps1
