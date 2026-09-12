@@ -31,7 +31,7 @@ Distribution, advisory namespace and matcher names are included for triage;
 raw match metadata and image environment/configuration are not copied.
 No raw backup, user data, real payment or private document is involved.
 
-## Local validation
+## Initial validation
 
 - 160 unit tests passed (148 previous and 12 new report-validation tests).
 - YAML, branch/permission scope, scan policy and all Bash blocks validated.
@@ -121,7 +121,7 @@ Vendor records checked on 2026-09-12 disagree with several scanner findings:
 | perl-base `5.40.1-6+deb13u1` | CVE-2026-57433 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-57433) |
 | perl-base `5.40.1-6+deb13u1` | CVE-2026-8376 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-8376) |
 | Python `3.11.16` | CVE-2026-3644 / CVE-2026-4224, High | [Python 3.11.16 release notes explicitly include both fixes](https://www.python.org/downloads/release/python-31116/) |
-| Python `3.11.16` | CVE-2026-7210, High | Release notes include the Python fix, but full mitigation also requires Expat >= 2.8.0; verify the linked runtime version |
+| Python `3.11.16` | CVE-2026-7210, High | Release notes include the Python fix; the diagnostic run confirmed linked Expat `2.8.3`, satisfying the vendor's >= 2.8.0 requirement |
 
 The seven Critical matches above are six distinct CVEs, not seven confirmed
 exploitable application flaws. They remain visible and blocking until the
@@ -130,12 +130,61 @@ scanner/vendor discrepancy has a reviewed resolution. The official
 requires both the interpreter patch and an adequate Expat version; the Python
 version number alone is not enough to close CVE-2026-7210.
 
-Other High findings cover util-linux, zlib, gzip, ACL, ncurses, PCRE2, SQLite
-and additional glibc/Perl advisories. Their reachability and patch status have
-not all been reviewed. A `wont-fix` label is not treated as an exception.
-The next diagnostic run records the actual Python/Expat/zlib versions inside
-the same offline, non-root image plus Grype distribution/namespace/matchers.
-Three additional reporter tests pass locally (174 unit tests total).
+The official Debian JSON registry was also checked for every Debian High/Critical
+CVE, using the trixie release and the corresponding source package. Eighteen
+CVE records (20 matches) have a vendor fixed version exactly equal to the
+installed package version. In addition to the Critical rows above, these are
+glibc CVE-2026-5928, gzip CVE-2026-41992, PCRE2 CVE-2026-86145/89161,
+SQLite CVE-2026-11822/11824 and Perl CVE-2026-42497/48959/48961/48962/57432/7017.
+Registry: https://security-tracker.debian.org/tracker/data/json
+
+Ten Debian CVEs (46 High matches) remain open in that registry:
+
+| Source package | Open CVEs | Review still needed |
+| --- | --- | --- |
+| glibc | [CVE-2026-5435](https://security-tracker.debian.org/tracker/CVE-2026-5435) | Deprecated DNS formatting functions; no trixie fix recorded |
+| perl | [CVE-2026-9538](https://security-tracker.debian.org/tracker/CVE-2026-9538) | Archive::Tar memory exhaustion; verify module presence and any reachable extraction |
+| util-linux | [CVE-2026-76642](https://security-tracker.debian.org/tracker/CVE-2026-76642), [CVE-2026-78408](https://security-tracker.debian.org/tracker/CVE-2026-78408), [CVE-2026-78409](https://security-tracker.debian.org/tracker/CVE-2026-78409), [CVE-2026-78410](https://security-tracker.debian.org/tracker/CVE-2026-78410) | Privileged mount/namespace operations; inspect installed tools, SUID/SGID, capabilities and deployment configuration |
+| acl | [CVE-2026-54369](https://security-tracker.debian.org/tracker/CVE-2026-54369), [CVE-2026-54370](https://security-tracker.debian.org/tracker/CVE-2026-54370) | Privileged ACL operations and attacker-controlled paths; trixie update pending |
+| ncurses | [CVE-2025-69720](https://security-tracker.debian.org/tracker/CVE-2025-69720) | infocmp CLI; verify installed component and input reachability |
+| zlib | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Tracker marks trixie vulnerable while description starts at upstream 1.3.1.2; installed runtime is 1.3.1. Reconcile with upstream before any disposition |
+
+These are not 46 independent flaws. Debian labels nine of these records as
+minor or postponed for a point release, but that does not automatically waive
+Muvv's review or establish non-exploitability. No direct references to the
+listed command-line tools, native APIs, subprocess calls or XML/archive APIs
+were found in `backend/app` during a source search; transitive dependencies,
+runtime tools and hosting behavior still need review. CI uses no-new-privileges
+and drops capabilities, but this has not been verified for Railway production.
+Do not add unstable Debian repositories or upgrade Python's major/minor series
+merely to remove scanner matches.
+
+## Diagnostic run result
+
+[Run 34720388243](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34720388243)
+tested `6ab5df3b55c303a2671ab8a564517caf605d1c4e`. Build, non-root, pip check,
+all 174 unit tests and runtime metadata collection passed. The scanner report
+is valid and still blocks approval with the same 189 matches (exit 1).
+Image: `sha256:2018fa6a2529d8cce6109dc9721c36abda4662ab9c808defab33662a97499865`.
+Scan time: 2026-09-12T21:37:21.253212764Z.
+
+- Runtime: Python `3.11.16`, Expat `2.8.3`, zlib `1.3.1`.
+- Detected distro: Debian `13.7`; 172 matches use
+  `debian:distro:debian:13` / `dpkg-matcher`.
+- The 17 Python binary matches use `nvd:cpe` / `stock-matcher`.
+- All 189 findings fit in the bounded public annotations, including provenance.
+- Among 69 High/Critical matches (31 CVEs), 20 Debian matches and three Python
+  matches have installed-patch evidence. The other 46 matches represent the ten
+  Debian CVEs above. All remain in the scanner gate, with no automatic waiver.
+
+The Python matches are consistent with overly broad NVD CPE ranges when
+compared with the release's documented backports. The Debian matching uses the
+expected release namespace, but the scanner's fixed-state data differs from
+the current vendor registry for the 18 resolved records. This is a data/triage
+discrepancy, not evidence that replacing the parser or weakening its checks
+would make the image ready. A future resolution needs exact image/package/CVE
+evidence and review; remaining components require remediation or an explicitly
+approved, scoped and expiring risk disposition before release.
 
 No ignore rule or severity threshold was relaxed. Production, database,
 mobile app and Splash remain unchanged.

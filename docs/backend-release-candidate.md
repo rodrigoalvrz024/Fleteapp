@@ -1,7 +1,8 @@
 # Muvv - Candidata del backend
 
-Actualizado: 2026-09-11. Estado: commits publicados en la rama de seguridad;
-build Docker y unitarias Linux aprobados. Sin merge ni deploy autorizado.
+Actualizado: 2026-09-12. Estado: commits publicados en la rama de seguridad;
+build Docker y unitarias Linux aprobados; auditoria de imagen aun bloqueada.
+Sin merge ni deploy autorizado.
 No autoriza cobros reales ni apertura publica. Splash, APK y diseno sin cambios.
 
 ## Hallazgo al ensayar una instalacion limpia
@@ -89,8 +90,8 @@ completo de unitarias aprobados. Los tests corrieron sin red, con filesystem
 de solo lectura y credenciales ficticias. No se publico la imagen ni hubo deploy.
 Las 148 unitarias tambien se repitieron localmente antes de los commits.
 
-La corrida Linux no ejecuta los ensayos PostgreSQL ni escanea vulnerabilidades
-del SO: estos no deben darse por aprobados por el resultado del job.
+Esa primera corrida Linux no ejecuto los ensayos PostgreSQL ni escaneo
+vulnerabilidades del SO: no deben darse por aprobados por ese resultado.
 `main` consultado despues de la corrida sigue en
 `590e8fec432f094619355dad89dcb068c4bd649f`. Mobile/web/Splash quedaron fuera.
 
@@ -118,13 +119,22 @@ separado y registrar el numero de pruebas del commit final, no solo del workspac
    historicas de Google requieren verificar vigencia y restricciones en GCP;
    no se considera cerrado ese riesgo. Ver `docs/source-secret-audit.md`.
 2. Build Linux y unitarias completados en la corrida vinculada arriba.
-   Pendiente auditar vulnerabilidades de paquetes Python y del SO en la imagen
+   Pendiente cerrar la auditoria de paquetes Python y del SO en la imagen
    final y repetir integracion con PostgreSQL representativo. El pip check
    aprobado verifica compatibilidad de dependencias, no vulnerabilidades.
-   Escaneo agregado en `33aa6ed`: corrida 34619555142 con build/unitarias
-   aprobados y paso de auditoria fallido (salida 2), sin informe valido.
-   Al 2026-09-12 falta el detalle del log autenticado para diagnosticarlo;
-   ver `docs/linux-image-security-audit.md`. No se da por cerrado este punto.
+   Escaneo agregado en `33aa6ed`; el error inicial del validador (salida 2)
+   quedo corregido en `78fde6b` / `b126de4`, conservando todos los hallazgos.
+   Imagen actualizada en `0e2520b`: corrida 34706140887 con build/no-root,
+   pip check y 171 unitarias aprobados; informe valido, bloqueo por hallazgos
+   (salida 1). Registra 189 coincidencias: 7 criticas y 62 altas, no CVE unicas.
+   Varias contradicen versiones que Debian/Python documentan como corregidas;
+   requieren contrastar procedencia y version, sin ignorarlas en bloque.
+   Detalle y fuentes en `docs/linux-image-security-audit.md`.
+   Diagnostico adicional en `6ab5df3`: corrida 34720388243 con build y 174
+   unitarias Linux aprobados, mismas 189 coincidencias y bloqueo activo.
+   Confirmados Python 3.11.16 / Expat 2.8.3. Se documentaron parches instalados
+   para 23 coincidencias; otras 46 altas corresponden a 10 CVE aun abiertas
+   en Debian y pendientes de revision. No se agregaron excepciones.
 3. Ensayar sobre una restauracion aislada representativa del esquema real;
    comparar datos, permisos, enums, locks y tiempos. Recuperacion en OTRO PC
    sigue aplazada para el cierre final por decision de Rodrigo.

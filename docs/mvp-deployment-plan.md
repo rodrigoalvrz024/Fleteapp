@@ -1,6 +1,6 @@
 # Muvv - Plan de despliegue MVP
 
-Actualizado: 2026-09-11.
+Actualizado: 2026-09-12.
 
 ## Decision actual
 
@@ -160,8 +160,13 @@ P0 | Parcial | Desarrollo + revision independiente
   corresponden a pruebas/ejemplos; claves Google historicas pendientes de
   validacion en GCP. Exclusiones Git/Docker reforzadas. Workflow Linux sin
   deploy aprobado para `fccc084` (corrida 34618327432): build, no-root, pip check
-  y unitarias. Falta escaneo de vulnerabilidades de la imagen, no cubierto por
-  pip check. Ver `docs/source-secret-audit.md`.
+  y unitarias. Escaneo Grype operativo tras corregir el validador: imagen
+  actualizada en `0e2520b`, diagnostico `6ab5df3` con 174 unitarias Linux
+  aprobadas y 189 coincidencias
+  de auditoria (7 criticas / 62 altas). El bloqueo de seguridad sigue activo;
+  revisar discrepancias con parches oficiales y hallazgos pendientes antes
+  del merge. Ver `docs/source-secret-audit.md` y
+  `docs/linux-image-security-audit.md`. No hubo deploy.
 - [x] Commit/push del backend y CI a `codex/mvp-supabase-rls-review`, separado
   de mobile/web/Splash. `main` intacto; sin autorizacion de merge ni deploy.
 - [ ] Revisar acceso de admin a chat con motivo, trazabilidad y minimo privilegio.
