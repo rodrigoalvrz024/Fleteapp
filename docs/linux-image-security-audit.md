@@ -24,7 +24,9 @@ matches remain visible for review. Counts are matches, not unique CVEs.
 Ignored matches, malformed output or scanner/database failure cannot pass.
 
 The complete normalized package/advisory report is printed in the job log.
-The job summary includes up to 200 matches and one annotation up to 40;
+The job summary includes up to 200 matches. Annotations are split into at most
+nine detail fragments plus metadata, each below 3000 bytes to avoid GitHub's
+message truncation; metadata states the total and the number actually included.
 image environment/configuration is not copied into these summaries.
 No raw backup, user data, real payment or private document is involved.
 
@@ -68,8 +70,32 @@ invalid types, safe CLI diagnostics and high-severity exit status. The official
 `TestJsonImgsPresenter.golden` fixture was exercised with only synthetic scanner
 version/database/timestamp metadata supplied: both matches were retained
 (one Critical, one Low) and the gate remained blocked as expected.
-Another candidate run is required to validate the real image report end to end.
-Production, database, mobile app and Splash remain unchanged.
+Run 34705763025 at `b126de4` successfully validated the real image report and
+exited 1 because the security gate correctly blocked actual scanner findings.
+Image: `sha256:599ba38e76e4e717b40f875cb73ea955e7e8ab0aa2f8304ea739b33212896df9`.
+Scan time 2026-09-12T16:38:14Z. Matches: Critical 7, High 64, Medium 56,
+Low 12, Negligible 45, Unknown 8; 192 total, not 192 unique vulnerabilities.
+No package/EOL alerts. The original single annotation was truncated by GitHub;
+the reporter now produces bounded JSON fragments and preserves the full log.
+
+## Candidate image remediation
+
+Official Debian records confirm fixes for glibc CVE-2026-5450 in
+`2.41-12+deb13u4` and Perl CVE-2026-12087 in `5.40.1-6+deb13u1`.
+The scanned image still contained `2.41-12+deb13u3` and `5.40.1-6`.
+The scan's `wont-fix` label is not proof that Debian has no patch; preserve
+scanner results and compare vendor records and the installed versions.
+
+The Dockerfile now stays on Python 3.11 / Debian trixie explicitly and applies
+available Debian updates during the build before dropping privileges. It also
+pins pip 26.2.1, setuptools 84.0.0 and wheel 0.48.0, matching the tested local
+toolchain. This replaces the old vendored jaraco.context 5.3.0 reported in the
+image; GHSA-58pv-8j8x-9vj2 affects versions 5.2.0 through 6.0.x and has a fix
+in 6.1.0. No application endpoints, data, roles or payment behavior changed.
+
+Rebuild, all tests and a fresh scan are required to measure residual findings.
+No ignore rule or severity threshold was relaxed. Production, database,
+mobile app and Splash remain unchanged.
 
 Fixture reference:
 https://github.com/anchore/grype/blob/v0.118.0/grype/presenter/json/testdata/snapshot/TestJsonImgsPresenter.golden
@@ -92,3 +118,6 @@ separate release gates. Historical Google API keys also remain under review.
 - [Configuration](https://oss.anchore.com/docs/reference/grype/configuration/)
 - [Vulnerability database](https://oss.anchore.com/docs/guides/vulnerability/database/)
 - [Understanding results](https://oss.anchore.com/docs/guides/vulnerability/interpreting-results/)
+- [Debian glibc advisory](https://security-tracker.debian.org/tracker/CVE-2026-5450)
+- [Debian Perl advisory](https://security-tracker.debian.org/tracker/CVE-2026-12087)
+- [jaraco.context advisory](https://github.com/advisories/GHSA-58pv-8j8x-9vj2)

@@ -93,6 +93,28 @@ def markdown(result):
     return "\n".join(lines) + "\n"
 
 
+def annotation_payloads(result):
+    # GitHub truncates long annotation messages; keep each JSON fragment intact.
+    columns = ("severity", "id", "package", "version", "type", "fix_state", "fix_versions")
+    batches, rows = [], []
+    for finding in result["findings"]:
+        row = [finding[column] for column in columns]
+        candidate = {"columns": columns, "rows": [*rows, row]}
+        if len(json.dumps(candidate, ensure_ascii=True).encode("ascii")) > 3000:
+            if rows:
+                batches.append({"columns": columns, "rows": rows})
+                rows = []
+            if len(batches) == 9 or len(json.dumps({"columns": columns, "rows": [row]})) > 3000:
+                break
+        rows.append(row)
+    if rows and len(batches) < 9:
+        batches.append({"columns": columns, "rows": rows})
+    summary = {key: value for key, value in result.items() if key != "findings"}
+    summary["total_findings"] = len(result["findings"])
+    summary["annotated_findings"] = sum(len(batch["rows"]) for batch in batches)
+    return [summary, *batches]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
@@ -115,10 +137,11 @@ def main():
             output.write(markdown(result))
     if args.github_annotation:
         # Only package/advisory metadata is published, never the image config/env.
-        compact = {**result, "findings": result["findings"][:40]}
-        message = json.dumps(compact, ensure_ascii=True).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-        level = "error" if result["blocked"] else "notice"
-        print(f"::{level} title=Image vulnerability audit::{message}")
+        for index, payload in enumerate(annotation_payloads(result)):
+            message = json.dumps(payload, ensure_ascii=True).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            level = "error" if result["blocked"] and index == 0 else "notice"
+            title = "Image vulnerability audit" if index == 0 else f"Image vulnerability details {index}"
+            print(f"::{level} title={title}::{message}")
     return 1 if result["blocked"] else 0
 
 

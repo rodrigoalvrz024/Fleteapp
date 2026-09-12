@@ -198,6 +198,30 @@ class ImageAuditReportTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn('"blocked": true', output)
 
+    def test_annotations_remain_valid_json_within_github_message_limit(self):
+        data = report()
+        data["matches"] = [match("High") for _ in range(192)]
+        result = reporter.inspect_report(data, IMAGE)
+        payloads = reporter.annotation_payloads(result)
+        self.assertLessEqual(len(payloads), 10)
+        for payload in payloads:
+            encoded = json.dumps(payload, ensure_ascii=True)
+            self.assertLessEqual(len(encoded.encode("ascii")), 3000)
+            self.assertEqual(json.loads(encoded), json.loads(json.dumps(payload)))
+        published = sum(len(payload["rows"]) for payload in payloads[1:])
+        self.assertEqual(payloads[0]["annotated_findings"], published)
+        self.assertEqual(payloads[0]["total_findings"], 192)
+        self.assertEqual(len(result["findings"]), 192)
+
+    def test_annotation_limits_do_not_modify_full_report(self):
+        data = report()
+        data["matches"] = [match("Medium") for _ in range(500)]
+        result = reporter.inspect_report(data, IMAGE)
+        payloads = reporter.annotation_payloads(result)
+        self.assertLess(payloads[0]["annotated_findings"], 500)
+        self.assertEqual(payloads[0]["total_findings"], 500)
+        self.assertEqual(len(result["findings"]), 500)
+
 
 if __name__ == "__main__":
     unittest.main()
