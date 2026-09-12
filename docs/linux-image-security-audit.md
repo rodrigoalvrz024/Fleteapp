@@ -27,7 +27,8 @@ The complete normalized package/advisory report is printed in the job log.
 The job summary includes up to 200 matches. Annotations are split into at most
 nine detail fragments plus metadata, each below 3000 bytes to avoid GitHub's
 message truncation; metadata states the total and the number actually included.
-image environment/configuration is not copied into these summaries.
+Distribution, advisory namespace and matcher names are included for triage;
+raw match metadata and image environment/configuration are not copied.
 No raw backup, user data, real payment or private document is involved.
 
 ## Local validation
@@ -93,7 +94,49 @@ toolchain. This replaces the old vendored jaraco.context 5.3.0 reported in the
 image; GHSA-58pv-8j8x-9vj2 affects versions 5.2.0 through 6.0.x and has a fix
 in 6.1.0. No application endpoints, data, roles or payment behavior changed.
 
-Rebuild, all tests and a fresh scan are required to measure residual findings.
+Run 34706140887 at `0e2520bf37e5bc0022fbecec9ab6defb6e096c21` rebuilt the image
+and passed non-root, pip consistency and all 171 unit tests. The valid scan
+still blocked approval (exit 1): Critical 7, High 62, Medium 55, Low 12,
+Negligible 45, Unknown 8; 189 matches, no package/EOL alerts. All 189 normalized
+findings were recovered from public annotations without authentication.
+Image: `sha256:f2c0b3af346aec9a28fd52ad03841d6253b0b04dd9129e92c31a73114425ad99`.
+Scan time: 2026-09-12T16:46:00.151128984Z.
+
+The report confirms glibc `2.41-12+deb13u4`, Perl `5.40.1-6+deb13u1` and
+Python `3.11.16` are installed. There are 172 Debian-package matches and 17
+binary matches, with no Python-package matches in this particular scan.
+The previous jaraco.context high-severity match is absent; this does not
+establish that all packages are safe or resolve the remaining image gate.
+
+## Residual finding triage
+
+Vendor records checked on 2026-09-12 disagree with several scanner findings:
+
+| Installed package | Scanner finding | Vendor evidence |
+| --- | --- | --- |
+| libc6 / libc-bin `2.41-12+deb13u4` | CVE-2026-5450, two Critical matches | [Debian marks this trixie version fixed](https://security-tracker.debian.org/tracker/CVE-2026-5450) |
+| perl-base `5.40.1-6+deb13u1` | CVE-2026-12087 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-12087) |
+| perl-base `5.40.1-6+deb13u1` | CVE-2026-13221 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-13221) |
+| perl-base `5.40.1-6+deb13u1` | CVE-2026-42496 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-42496) |
+| perl-base `5.40.1-6+deb13u1` | CVE-2026-57433 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-57433) |
+| perl-base `5.40.1-6+deb13u1` | CVE-2026-8376 | [Debian: fixed](https://security-tracker.debian.org/tracker/CVE-2026-8376) |
+| Python `3.11.16` | CVE-2026-3644 / CVE-2026-4224, High | [Python 3.11.16 release notes explicitly include both fixes](https://www.python.org/downloads/release/python-31116/) |
+| Python `3.11.16` | CVE-2026-7210, High | Release notes include the Python fix, but full mitigation also requires Expat >= 2.8.0; verify the linked runtime version |
+
+The seven Critical matches above are six distinct CVEs, not seven confirmed
+exploitable application flaws. They remain visible and blocking until the
+scanner/vendor discrepancy has a reviewed resolution. The official
+[Python advisory](https://github.com/psf/advisory-database/blob/main/advisories/python/PSF-2026-23.json)
+requires both the interpreter patch and an adequate Expat version; the Python
+version number alone is not enough to close CVE-2026-7210.
+
+Other High findings cover util-linux, zlib, gzip, ACL, ncurses, PCRE2, SQLite
+and additional glibc/Perl advisories. Their reachability and patch status have
+not all been reviewed. A `wont-fix` label is not treated as an exception.
+The next diagnostic run records the actual Python/Expat/zlib versions inside
+the same offline, non-root image plus Grype distribution/namespace/matchers.
+Three additional reporter tests pass locally (174 unit tests total).
+
 No ignore rule or severity threshold was relaxed. Production, database,
 mobile app and Splash remain unchanged.
 

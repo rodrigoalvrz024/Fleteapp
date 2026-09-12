@@ -36,6 +36,9 @@ def inspect_report(report, image_id):
         raise ReportValidationError("Missing complete matches array")
     if report.get("ignoredMatches"):
         raise ReportValidationError("Ignored matches require explicit review; scan not approved")
+    distro = report.get("distro") or {}
+    if not isinstance(distro, dict):
+        raise ReportValidationError("Invalid field: distro")
     findings = []
     for match in matches:
         vulnerability, package = match["vulnerability"], match["artifact"]
@@ -48,6 +51,10 @@ def inspect_report(report, image_id):
         fix_state = text(fix["state"], "vulnerability.fix.state", allow_empty=True) or "unknown"
         if fix_state not in ("fixed", "not-fixed", "wont-fix", "unknown"):
             raise ReportValidationError("Unknown fix state schema")
+        details = match.get("matchDetails") or []
+        if not isinstance(details, list):
+            raise ReportValidationError("Invalid field: matchDetails")
+        matchers = sorted({text(detail["matcher"], "matchDetails.matcher") for detail in details})
         findings.append({
             "severity": severity,
             "id": text(vulnerability["id"], "vulnerability.id"),
@@ -58,6 +65,8 @@ def inspect_report(report, image_id):
             "fix_versions": [text(version, "vulnerability.fix.versions") for version in fix["versions"]],
             # Grype's official JSON fixtures allow an empty reference URL.
             "source": text(vulnerability["dataSource"], "vulnerability.dataSource", allow_empty=True),
+            "namespace": text(vulnerability.get("namespace", ""), "vulnerability.namespace", allow_empty=True),
+            "matchers": matchers,
         })
     findings.sort(key=lambda row: (SEVERITIES.index(row["severity"]), row["package"], row["id"]))
     counts = Counter(row["severity"] for row in findings)
@@ -65,6 +74,8 @@ def inspect_report(report, image_id):
         "image_id": image_id,
         "scanner": descriptor["version"],
         "scan_time": text(descriptor["timestamp"], "descriptor.timestamp"),
+        "distro": {key: text(distro.get(key, ""), f"distro.{key}", allow_empty=True)
+                   for key in ("name", "version")},
         "counts": {severity: counts[severity] for severity in SEVERITIES},
         "blocked": bool(counts["Critical"] or counts["High"] or report.get("alertsByPackage")),
         "package_alerts": len(report.get("alertsByPackage") or []),
@@ -78,6 +89,8 @@ def markdown(result):
 
     lines = ["## Image vulnerability audit", "", f"Image: `{result['image_id']}`",
              f"Grype: {result['scanner']}; scan time: {result['scan_time']}", "",
+             "Detected distribution: " + cell(result["distro"]["name"] or "unknown")
+             + " " + cell(result["distro"]["version"]), "",
              "Matches (not unique CVEs): " + ", ".join(f"{key}={value}" for key, value in result["counts"].items()),
              f"Package/EOL alerts: {result['package_alerts']}",
              "Gate: " + ("BLOCKED" if result["blocked"] else "No high/critical matches"), "",
@@ -95,7 +108,8 @@ def markdown(result):
 
 def annotation_payloads(result):
     # GitHub truncates long annotation messages; keep each JSON fragment intact.
-    columns = ("severity", "id", "package", "version", "type", "fix_state", "fix_versions")
+    columns = ("severity", "id", "package", "version", "type", "fix_state", "fix_versions",
+               "namespace", "matchers")
     batches, rows = [], []
     for finding in result["findings"]:
         row = [finding[column] for column in columns]

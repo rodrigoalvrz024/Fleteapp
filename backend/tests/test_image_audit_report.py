@@ -114,6 +114,42 @@ class ImageAuditReportTests(unittest.TestCase):
         self.assertNotIn("\n::error::", output)
         self.assertIn("&#124;", output)
 
+    def test_match_provenance_preserved_without_raw_metadata(self):
+        data = report()
+        data["distro"] = {"name": "debian", "version": "13", "extra": "do-not-print"}
+        item = match()
+        item["vulnerability"]["namespace"] = "debian:distro:debian:13"
+        item["matchDetails"] = [{"matcher": "dpkg-matcher", "searchedBy": {"extra": "do-not-print"}}]
+        data["matches"] = [item]
+        result = reporter.inspect_report(data, IMAGE)
+        self.assertEqual(result["distro"], {"name": "debian", "version": "13"})
+        self.assertEqual(result["findings"][0]["namespace"], "debian:distro:debian:13")
+        self.assertEqual(result["findings"][0]["matchers"], ["dpkg-matcher"])
+        self.assertTrue(result["blocked"])
+        self.assertNotIn("do-not-print", json.dumps(reporter.annotation_payloads(result)))
+
+    def test_missing_optional_provenance_does_not_drop_match(self):
+        data = report()
+        data["matches"] = [match()]
+        result = reporter.inspect_report(data, IMAGE)
+        self.assertEqual(result["findings"][0]["namespace"], "")
+        self.assertEqual(result["findings"][0]["matchers"], [])
+        self.assertTrue(result["blocked"])
+
+    def test_malformed_provenance_is_rejected(self):
+        for field, value in (("distro", "debian"), ("matchDetails", "dpkg-matcher"),
+                             ("namespace", {"unexpected": "value"})):
+            data = report()
+            data["matches"] = [match()]
+            if field == "distro":
+                data[field] = value
+            elif field == "namespace":
+                data["matches"][0]["vulnerability"][field] = value
+            else:
+                data["matches"][0][field] = value
+            with self.assertRaises(reporter.ReportValidationError):
+                reporter.inspect_report(data, IMAGE)
+
     def test_empty_reference_url_preserves_official_match_shape_and_gate(self):
         for severity in ("High", "Medium"):
             data = report()
