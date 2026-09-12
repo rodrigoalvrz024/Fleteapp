@@ -1,6 +1,6 @@
 # Linux candidate image vulnerability audit
 
-Prepared 2026-09-11. Scope: `codex/mvp-supabase-rls-review` only, no deployment.
+Updated 2026-09-12. Scope: `codex/mvp-supabase-rls-review` only, no deployment.
 The earlier run 34618327432 built and tested the image but did not scan CVEs.
 
 ## Method
@@ -32,7 +32,38 @@ No raw backup, user data, real payment or private document is involved.
 
 - 160 unit tests passed (148 previous and 12 new report-validation tests).
 - YAML, branch/permission scope, scan policy and all Bash blocks validated.
-- Real Linux scan result: pending the next candidate workflow run.
+- Linux build, non-root check, pip check and unit-test step passed in run
+  34619555142 for commit `33aa6ed54b5a39fb256b40ccc19535840c0932ac`.
+- The scan step failed with exit code 2. No normalized findings annotation was
+  produced. This is an incomplete audit, not evidence of zero vulnerabilities
+  and not enough evidence to identify a particular vulnerability.
+
+## Initial run diagnosis
+
+[Run 34619555142, job 103329823424](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34619555142/job/103329823424)
+remains failed as of 2026-09-12. The unauthenticated logs API returns 403 and
+the browser requires sign-in to view logs. An attempted authenticated lookup
+through the stored Git credential helper was rejected by the approval reviewer
+before the command ran; no credential was extracted or saved.
+
+The owner supplied the log on 2026-09-12. The download checksum passed and
+Grype exited successfully; the failure came from our Python report validator.
+The original generic error did not identify which field it rejected.
+
+Official Grype 0.118.0 `TestJsonImgsPresenter.golden` fixtures allow an empty
+`vulnerability.dataSource`. That optional reference URL was incorrectly treated
+as mandatory by our validator. It now accepts an empty string without dropping
+the finding or changing severity/fix handling. Invalid types still fail.
+Static validation reasons are now emitted as GitHub annotations, without raw
+report contents, source config/environment or stored credentials.
+
+Seven regressions cover empty optional URLs, mandatory fields, invalid types,
+safe CLI diagnostics and high-severity exit status. This is a reproduced schema
+incompatibility; a fresh CI run must confirm the original report has no other
+incompatibilities. Production, database, mobile app and Splash remain unchanged.
+
+Fixture reference:
+https://github.com/anchore/grype/blob/v0.118.0/grype/presenter/json/testdata/snapshot/TestJsonImgsPresenter.golden
 
 ## Limitations
 

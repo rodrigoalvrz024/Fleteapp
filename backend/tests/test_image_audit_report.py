@@ -1,7 +1,12 @@
 import copy
+from contextlib import redirect_stdout
 import importlib.util
+import io
+import json
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 path = Path(__file__).resolve().parents[2] / "scripts" / "report-image-audit.py"
@@ -108,6 +113,73 @@ class ImageAuditReportTests(unittest.TestCase):
         self.assertNotIn("<script>", output)
         self.assertNotIn("\n::error::", output)
         self.assertIn("&#124;", output)
+
+    def test_empty_reference_url_preserves_official_match_shape_and_gate(self):
+        for severity in ("High", "Medium"):
+            data = report()
+            item = match(severity)
+            item["vulnerability"]["dataSource"] = ""
+            data["matches"] = [item]
+            result = reporter.inspect_report(data, IMAGE)
+            self.assertEqual(result["counts"][severity], 1)
+            self.assertEqual(result["blocked"], severity == "High")
+            self.assertEqual(result["findings"][0]["source"], "")
+
+    def test_empty_required_fields_still_fail(self):
+        for section, field in (("vulnerability", "id"), ("artifact", "name"),
+                               ("artifact", "version"), ("artifact", "type")):
+            data = report()
+            item = match()
+            item[section][field] = " "
+            data["matches"] = [item]
+            with self.assertRaises(reporter.ReportValidationError):
+                reporter.inspect_report(data, IMAGE)
+
+    def test_non_string_url_is_not_accepted(self):
+        data = report()
+        data["matches"] = [match()]
+        data["matches"][0]["vulnerability"]["dataSource"] = None
+        with self.assertRaisesRegex(reporter.ReportValidationError, "vulnerability.dataSource"):
+            reporter.inspect_report(data, IMAGE)
+
+    def invoke_cli(self, contents):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / "report.json"
+            file.write_text(contents, encoding="utf-8")
+            output = io.StringIO()
+            with patch("sys.argv", ["report-image-audit.py", str(file), "--image-id", IMAGE,
+                                    "--github-annotation"]), redirect_stdout(output):
+                code = reporter.main()
+        return code, output.getvalue()
+
+    def test_cli_invalid_json_fails_without_printing_content(self):
+        code, output = self.invoke_cli('{"private": "do-not-print"')
+        self.assertEqual(code, 2)
+        self.assertIn("Reason: JSONDecodeError", output)
+        self.assertIn("::error title=Image audit validation::", output)
+        self.assertNotIn("do-not-print", output)
+
+    def test_cli_reports_static_reason_without_scanner_value(self):
+        data = report()
+        data["descriptor"]["version"] = "do-not-print"
+        code, output = self.invoke_cli(json.dumps(data))
+        self.assertEqual(code, 2)
+        self.assertIn("Reason: Unexpected scanner version", output)
+        self.assertNotIn("do-not-print", output)
+
+    def test_cli_missing_field_is_not_a_clean_report(self):
+        code, output = self.invoke_cli('{"private": "do-not-print"}')
+        self.assertEqual(code, 2)
+        self.assertIn("Reason: KeyError", output)
+        self.assertNotIn("do-not-print", output)
+
+    def test_cli_high_without_reference_still_returns_one(self):
+        data = report()
+        data["matches"] = [match("High")]
+        data["matches"][0]["vulnerability"]["dataSource"] = ""
+        code, output = self.invoke_cli(json.dumps(data))
+        self.assertEqual(code, 1)
+        self.assertIn('"blocked": true', output)
 
 
 if __name__ == "__main__":

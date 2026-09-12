@@ -10,53 +10,58 @@ import re
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Negligible", "Unknown")
 
 
-def text(value):
-    if not isinstance(value, str) or not value or len(value) > 1000:
-        raise ValueError("Invalid report string")
+class ReportValidationError(ValueError):
+    """Messages contain static field names only, never values from a report."""
+
+
+def text(value, field="text", allow_empty=False):
+    if not isinstance(value, str) or (not value.strip() and not allow_empty) or len(value) > 1000:
+        raise ReportValidationError(f"Invalid field: {field}")
     return " ".join(value.split())
 
 
 def inspect_report(report, image_id):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
-        raise ValueError("Expected an immutable Docker image ID")
+        raise ReportValidationError("Expected an immutable Docker image ID")
     descriptor = report["descriptor"]
     if descriptor["name"] != "grype" or descriptor["version"] != "0.118.0":
-        raise ValueError("Unexpected scanner version")
+        raise ReportValidationError("Unexpected scanner version")
     if not descriptor.get("db") or not descriptor.get("timestamp"):
-        raise ValueError("Missing database or scan metadata")
+        raise ReportValidationError("Missing database or scan metadata")
     source = report["source"]
     if source["type"] != "image" or source["target"]["imageID"] != image_id:
-        raise ValueError("Report does not match the tested image")
+        raise ReportValidationError("Report does not match the tested image")
     matches = report["matches"]
     if not isinstance(matches, list):
-        raise ValueError("Missing complete matches array")
+        raise ReportValidationError("Missing complete matches array")
     if report.get("ignoredMatches"):
-        raise ValueError("Ignored matches require explicit review; scan not approved")
+        raise ReportValidationError("Ignored matches require explicit review; scan not approved")
     findings = []
     for match in matches:
         vulnerability, package = match["vulnerability"], match["artifact"]
         severity = vulnerability["severity"]
         if severity not in SEVERITIES:
-            raise ValueError("Unknown severity schema")
+            raise ReportValidationError("Unknown severity schema")
         fix = vulnerability["fix"]
         if not isinstance(fix["versions"], list):
-            raise ValueError("Missing fix versions")
+            raise ReportValidationError("Missing fix versions")
         findings.append({
             "severity": severity,
-            "id": text(vulnerability["id"]),
-            "package": text(package["name"]),
-            "version": text(package["version"]),
-            "type": text(package["type"]),
-            "fix_state": text(fix["state"]),
-            "fix_versions": [text(version) for version in fix["versions"]],
-            "source": text(vulnerability["dataSource"]),
+            "id": text(vulnerability["id"], "vulnerability.id"),
+            "package": text(package["name"], "artifact.name"),
+            "version": text(package["version"], "artifact.version"),
+            "type": text(package["type"], "artifact.type"),
+            "fix_state": text(fix["state"], "vulnerability.fix.state"),
+            "fix_versions": [text(version, "vulnerability.fix.versions") for version in fix["versions"]],
+            # Grype's official JSON fixtures allow an empty reference URL.
+            "source": text(vulnerability["dataSource"], "vulnerability.dataSource", allow_empty=True),
         })
     findings.sort(key=lambda row: (SEVERITIES.index(row["severity"]), row["package"], row["id"]))
     counts = Counter(row["severity"] for row in findings)
     return {
         "image_id": image_id,
         "scanner": descriptor["version"],
-        "scan_time": text(descriptor["timestamp"]),
+        "scan_time": text(descriptor["timestamp"], "descriptor.timestamp"),
         "counts": {severity: counts[severity] for severity in SEVERITIES},
         "blocked": bool(counts["Critical"] or counts["High"] or report.get("alertsByPackage")),
         "package_alerts": len(report.get("alertsByPackage") or []),
@@ -94,8 +99,12 @@ def main():
     args = parser.parse_args()
     try:
         result = inspect_report(json.loads(args.report.read_text(encoding="utf-8")), args.image_id)
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        print("Image audit incomplete or invalid; not approved.")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        reason = str(error) if isinstance(error, ReportValidationError) else type(error).__name__
+        message = f"Image audit incomplete or invalid; not approved. Reason: {reason}"
+        print(message)
+        if args.github_annotation:
+            print(f"::error title=Image audit validation::{message}")
         return 2
     print(json.dumps(result, indent=2, ensure_ascii=True))
     if args.summary:

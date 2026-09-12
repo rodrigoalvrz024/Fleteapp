@@ -121,6 +121,10 @@ separado y registrar el numero de pruebas del commit final, no solo del workspac
    Pendiente auditar vulnerabilidades de paquetes Python y del SO en la imagen
    final y repetir integracion con PostgreSQL representativo. El pip check
    aprobado verifica compatibilidad de dependencias, no vulnerabilidades.
+   Escaneo agregado en `33aa6ed`: corrida 34619555142 con build/unitarias
+   aprobados y paso de auditoria fallido (salida 2), sin informe valido.
+   Al 2026-09-12 falta el detalle del log autenticado para diagnosticarlo;
+   ver `docs/linux-image-security-audit.md`. No se da por cerrado este punto.
 3. Ensayar sobre una restauracion aislada representativa del esquema real;
    comparar datos, permisos, enums, locks y tiempos. Recuperacion en OTRO PC
    sigue aplazada para el cierre final por decision de Rodrigo.
