@@ -57,10 +57,19 @@ the finding or changing severity/fix handling. Invalid types still fail.
 Static validation reasons are now emitted as GitHub annotations, without raw
 report contents, source config/environment or stored credentials.
 
-Seven regressions cover empty optional URLs, mandatory fields, invalid types,
-safe CLI diagnostics and high-severity exit status. This is a reproduced schema
-incompatibility; a fresh CI run must confirm the original report has no other
-incompatibilities. Production, database, mobile app and Splash remain unchanged.
+Run 34705538623 at `78fde6b` confirmed the exact rejection via a safe annotation:
+`Invalid field: vulnerability.fix.state`. The official image fixture also has
+an empty fix state. Empty strings are now normalized to `unknown`; unknown
+types or unrecognized states still fail. Severity and advisory identity remain
+mandatory, so the match is retained and a high/critical finding still blocks CI.
+
+Nine added regressions cover empty optional URLs/fix state, mandatory fields,
+invalid types, safe CLI diagnostics and high-severity exit status. The official
+`TestJsonImgsPresenter.golden` fixture was exercised with only synthetic scanner
+version/database/timestamp metadata supplied: both matches were retained
+(one Critical, one Low) and the gate remained blocked as expected.
+Another candidate run is required to validate the real image report end to end.
+Production, database, mobile app and Splash remain unchanged.
 
 Fixture reference:
 https://github.com/anchore/grype/blob/v0.118.0/grype/presenter/json/testdata/snapshot/TestJsonImgsPresenter.golden

@@ -45,13 +45,16 @@ def inspect_report(report, image_id):
         fix = vulnerability["fix"]
         if not isinstance(fix["versions"], list):
             raise ReportValidationError("Missing fix versions")
+        fix_state = text(fix["state"], "vulnerability.fix.state", allow_empty=True) or "unknown"
+        if fix_state not in ("fixed", "not-fixed", "wont-fix", "unknown"):
+            raise ReportValidationError("Unknown fix state schema")
         findings.append({
             "severity": severity,
             "id": text(vulnerability["id"], "vulnerability.id"),
             "package": text(package["name"], "artifact.name"),
             "version": text(package["version"], "artifact.version"),
             "type": text(package["type"], "artifact.type"),
-            "fix_state": text(fix["state"], "vulnerability.fix.state"),
+            "fix_state": fix_state,
             "fix_versions": [text(version, "vulnerability.fix.versions") for version in fix["versions"]],
             # Grype's official JSON fixtures allow an empty reference URL.
             "source": text(vulnerability["dataSource"], "vulnerability.dataSource", allow_empty=True),

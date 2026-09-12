@@ -142,6 +142,23 @@ class ImageAuditReportTests(unittest.TestCase):
         with self.assertRaisesRegex(reporter.ReportValidationError, "vulnerability.dataSource"):
             reporter.inspect_report(data, IMAGE)
 
+    def test_empty_fix_state_is_unknown_without_dropping_high_finding(self):
+        data = report()
+        data["matches"] = [match("High")]
+        data["matches"][0]["vulnerability"]["fix"]["state"] = ""
+        result = reporter.inspect_report(data, IMAGE)
+        self.assertEqual(result["findings"][0]["fix_state"], "unknown")
+        self.assertEqual(result["counts"]["High"], 1)
+        self.assertTrue(result["blocked"])
+
+    def test_invalid_fix_state_is_rejected(self):
+        for state in (None, "safe", 0):
+            data = report()
+            data["matches"] = [match()]
+            data["matches"][0]["vulnerability"]["fix"]["state"] = state
+            with self.assertRaises(reporter.ReportValidationError):
+                reporter.inspect_report(data, IMAGE)
+
     def invoke_cli(self, contents):
         with tempfile.TemporaryDirectory() as directory:
             file = Path(directory) / "report.json"
