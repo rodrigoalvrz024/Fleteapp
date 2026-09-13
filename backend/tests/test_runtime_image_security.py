@@ -3,6 +3,7 @@ from pathlib import Path
 import stat
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, patch
 
 
 path = Path(__file__).resolve().parents[2] / "scripts" / "verify-runtime-image.py"
@@ -49,3 +50,41 @@ class RuntimeImageSecurityTests(unittest.TestCase):
         for status in ("CapEff:0", "CapEff:bad-value\nCapPrm:0\nNoNewPrivs:1"):
             with self.assertRaises((KeyError, ValueError)):
                 checker.process_security(status)
+
+    def test_restricted_tool_is_unreadable_and_unexecutable_by_app(self):
+        path = Mock()
+        path.lstat.return_value = SimpleNamespace(st_mode=stat.S_IFREG | 0o700, st_uid=0)
+        with patch.object(checker.os, "access", return_value=False):
+            self.assertFalse(checker.inspect_restricted_command(path)["blocked"])
+        for access in ((True, False), (False, True)):
+            with patch.object(checker.os, "access", side_effect=access):
+                self.assertTrue(checker.inspect_restricted_command(path)["blocked"])
+
+    def test_restricted_tool_rejects_wrong_owner_permissions_and_symlink(self):
+        for uid, mode in ((100, stat.S_IFREG | 0o700), (0, stat.S_IFREG | 0o750),
+                          (0, stat.S_IFLNK | 0o777)):
+            path = Mock()
+            path.lstat.return_value = SimpleNamespace(st_mode=mode, st_uid=uid)
+            with patch.object(checker.os, "access", return_value=False):
+                self.assertTrue(checker.inspect_restricted_command(path)["blocked"])
+
+    def test_missing_restricted_tool_is_allowed_but_inspection_failure_is_not(self):
+        path = Mock()
+        path.lstat.side_effect = FileNotFoundError()
+        self.assertEqual(checker.inspect_restricted_command(path), {"present": False, "blocked": False})
+        path.lstat.side_effect = PermissionError()
+        with self.assertRaises(PermissionError):
+            checker.inspect_restricted_command(path)
+
+    def test_perl_probe_uses_fixed_command_and_clean_environment(self):
+        for answer, expected in (("present\n", True), ("absent\n", False)):
+            with patch.object(checker.subprocess, "run", return_value=SimpleNamespace(stdout=answer)) as run:
+                self.assertEqual(checker.perl_archive_tar_readable(), expected)
+                self.assertEqual(run.call_args.args[0][:2], ["/usr/bin/perl", "-e"])
+                self.assertEqual(run.call_args.kwargs["env"], {"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+                self.assertNotIn("shell", run.call_args.kwargs)
+
+    def test_unknown_component_probe_output_is_not_absence(self):
+        with patch.object(checker.subprocess, "run", return_value=SimpleNamespace(stdout="unexpected")):
+            with self.assertRaises(RuntimeError):
+                checker.perl_archive_tar_readable()

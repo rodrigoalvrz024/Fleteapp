@@ -61,6 +61,26 @@ warning remains, without test failures; a future test-tooling update is separate
 from the image permission changes.
 ## Linux results
 
+The follow-up dated 2026-09-13 makes `/usr/bin/infocmp` and `/usr/bin/nsenter`
+root-only (0700). Both belong to retained essential packages but are unnecessary
+for the API. Read access is removed as well as execution, so the application
+user cannot bypass the restriction by copying the executable elsewhere.
+Verification rejects a non-root owner, symlink, group/other access, or effective
+read/execute access. This does not restrict the application's business roles;
+the container user is distinct from client, driver and administrator accounts.
+
+The verifier also queries Perl's configured include paths for a readable
+`Archive/Tar.pm` without loading the module. It uses a fixed command and a clean
+environment, accepts only explicit present/absent output, and treats failures
+as incomplete inspection. Absence concerns the normal interpreter include path,
+not every arbitrary file in the image or every possible future configuration.
+This is evidence for triage, not an automatic CVE waiver.
+
+Sources: [infocmp advisory](https://security-tracker.debian.org/tracker/CVE-2025-69720),
+[nsenter advisory](https://security-tracker.debian.org/tracker/CVE-2026-78408),
+[Archive::Tar advisory](https://security-tracker.debian.org/tracker/CVE-2026-9538).
+The follow-up requires a new Linux verification; the result below predates it.
+
 [Run 34733438698](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34733438698)
 tested commit `fa4b68397bb6fc82c6e2c52fa64da7286942ed90`. Build, non-root/pip
 checks, all 183 unit tests, permission verification and startup/shutdown passed.

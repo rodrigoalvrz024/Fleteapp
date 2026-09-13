@@ -7,12 +7,14 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
 import sys
 
 
 REMOVED_COMMANDS = ("mount", "umount", "swapon", "swapoff", "losetup")
 PROTECTED_ROOTS = (Path("/app"), Path("/usr/local"))
 SCAN_ROOTS = (Path("/usr"), Path("/app"))
+RESTRICTED_COMMANDS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
 
 
 def file_violations(metadata, *, protected, writable, capability):
@@ -47,6 +49,33 @@ def process_security(status):
             "no_new_privileges": int(fields["NoNewPrivs"].strip())}
 
 
+def inspect_restricted_command(path):
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return {"present": False, "blocked": False}
+    readable = os.access(path, os.R_OK)
+    executable = os.access(path, os.X_OK)
+    restricted = (stat.S_ISREG(metadata.st_mode) and metadata.st_uid == 0
+                  and not metadata.st_mode & 0o077)
+    return {"present": True, "readable_by_app": readable, "executable_by_app": executable,
+            "blocked": not restricted or readable or executable}
+
+
+def perl_archive_tar_readable():
+    # Query the minimal interpreter's configured include paths without loading the module.
+    result = subprocess.run(
+        ["/usr/bin/perl", "-e", 'for my $d (@INC) { if (-r "$d/Archive/Tar.pm") '
+         '{ print "present\\n"; exit 0; } } print "absent\\n";'],
+        env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        check=True, capture_output=True, text=True, timeout=10,
+    )
+    answer = result.stdout.strip()
+    if answer not in ("present", "absent"):
+        raise RuntimeError("Invalid component probe output")
+    return answer == "present"
+
+
 def inspect_runtime():
     if sys.platform != "linux":
         raise RuntimeError("Runtime verification requires the Linux candidate container")
@@ -61,6 +90,11 @@ def inspect_runtime():
     for command in REMOVED_COMMANDS:
         if shutil.which(command):
             violations.append({"reason": "unneeded_mount_command", "path": command})
+    restricted_commands = {path.name: inspect_restricted_command(path) for path in RESTRICTED_COMMANDS}
+    for command, evidence in restricted_commands.items():
+        if evidence["blocked"]:
+            violations.append({"reason": "unneeded_system_tool_accessible", "path": command})
+    archive_tar_readable = perl_archive_tar_readable()
 
     inspected = 0
 
@@ -81,6 +115,8 @@ def inspect_runtime():
                 violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
                 inspected += 1
     return {"uid": os.geteuid(), "gid": os.getegid(), **process,
+            "restricted_commands": restricted_commands,
+            "perl_archive_tar_readable": archive_tar_readable,
             "inspected_entries": inspected, "blocked": bool(violations),
             "violation_counts": dict(Counter(item["reason"] for item in violations)),
             "violations": violations}
@@ -92,7 +128,7 @@ def main():
     args = parser.parse_args()
     try:
         result = inspect_runtime()
-    except (OSError, ValueError, KeyError, RuntimeError) as error:
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         # Never print exception payloads or process/environment contents.
         print(f"Runtime image verification incomplete: {type(error).__name__}")
         return 2
