@@ -1,7 +1,32 @@
 # Linux candidate image vulnerability audit
 
-Updated 2026-09-12. Scope: `codex/mvp-supabase-rls-review` only, no deployment.
+Updated 2026-09-13. Scope: `codex/mvp-supabase-rls-review` only, no deployment.
 The earlier run 34618327432 built and tested the image but did not scan CVEs.
+
+## Latest result
+
+[Run 34763412239](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34763412239)
+tested `ce1286b0112a3a06d1896c718afd180bff809091`. The report is valid; CI
+remains blocked by 45 High matches, not by a parser failure. There are zero
+Critical matches in this scan. Counts are 155 total: High 45, Medium 49, Low 9,
+Negligible 44, Unknown 8; no package/EOL alerts and no exclusions.
+Image: `sha256:004367efe34ef572a66d1c147cf76f1db1126f35ac43d938bf4ea4b2b0b140db`.
+Scan time: `2026-09-13T14:43:49.505211826Z`. All findings fit in the annotations.
+
+The 45 High matches represent 13 CVEs: three Python records with previously
+documented backport evidence, plus the ten open Debian records below, across
+42 package matches. The 20 Debian High/Critical matches whose installed fixes
+were documented in the earlier triage no longer appear. Overall, 28 earlier
+matches are absent and no new matches appear in the normalized comparison.
+This is not attributed to chmod: the image is rebuilt and advisory data is
+refreshed on each run. No blanket exception or risk acceptance was added.
+
+Build, dependency consistency, all 188 unit tests, runtime permissions and real
+startup/shutdown passed. `infocmp` and `nsenter` are root-only, with no effective
+read/execute access for the app user. Perl's normal include paths have no
+readable `Archive/Tar.pm`. These are scoped runtime observations, not proof of
+global CVE absence or of Railway's runtime configuration. See
+`runtime-image-hardening.md` for the complete evidence and limits.
 
 ## Method
 
@@ -110,7 +135,9 @@ establish that all packages are safe or resolve the remaining image gate.
 
 ## Residual finding triage
 
-Vendor records checked on 2026-09-12 disagree with several scanner findings:
+Vendor records checked on 2026-09-12 disagreed with several scanner findings.
+This section preserves the earlier triage; the latest result above identifies
+which matches are no longer reported.
 
 | Installed package | Scanner finding | Vendor evidence |
 | --- | --- | --- |

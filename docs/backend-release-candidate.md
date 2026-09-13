@@ -141,6 +141,14 @@ separado y registrar el numero de pruebas del commit final, no solo del workspac
    183 coincidencias (7 criticas / 58 altas). Las 10 CVE Debian abiertas siguen
    presentes en 42 coincidencias. Ensayo local repetido: 9 RLS, 8 migraciones
    y 39 HTTP/WebSocket aprobados. Ver `docs/runtime-image-hardening.md`.
+   Seguimiento `ce1286b`: corrida 34763412239 con 188 unitarias Linux,
+   permisos y arranque/cierre aprobados. infocmp y nsenter no son legibles ni
+   ejecutables por app; Archive::Tar no es legible en el include path de Perl.
+   Informe valido del 2026-09-13: 155 coincidencias, cero criticas y 45 altas
+   (13 CVE distintas). Las 20 coincidencias Debian altas/criticas con parches
+   previamente documentados ya no aparecen; no se agregaron exclusiones.
+   El bloqueo sigue activo. Se repitieron localmente las 56 comprobaciones
+   PostgreSQL/RLS/migraciones/HTTP con exito y se elimino el cluster temporal.
 3. Ensayar sobre una restauracion aislada representativa del esquema real;
    comparar datos, permisos, enums, locks y tiempos. Recuperacion en OTRO PC
    sigue aplazada para el cierre final por decision de Rodrigo.

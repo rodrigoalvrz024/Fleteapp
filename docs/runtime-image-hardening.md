@@ -1,6 +1,6 @@
 # Candidate runtime image hardening
 
-Updated 2026-09-12. Security branch only; no merge, Railway deployment, mobile
+Updated 2026-09-13. Security branch only; no merge, Railway deployment, mobile
 build or production data access is part of this change.
 
 ## Changes
@@ -51,8 +51,9 @@ missing/invalid credentials on client/driver/admin routes, Alembic head access,
 and graceful shutdown. It does not claim database health, successful login or
 payment processing without a real isolated database.
 
-Nine local policy regressions were added; all 183 unit tests pass locally.
-The isolated PostgreSQL rehearsal also passed 9 RLS checks, 8 migration checks
+Fourteen local policy regressions were added across the two hardening passes;
+all 188 unit tests pass locally. The isolated PostgreSQL rehearsal was repeated
+on 2026-09-13 and passed 9 RLS checks, 8 migration checks
 and 39 HTTP/WebSocket checks, including authenticated role boundaries, private
 photos/chat, vehicle matching, backend-owned pricing and payment callbacks.
 It used temporary local data and synthetic provider responses, not production.
@@ -79,7 +80,37 @@ This is evidence for triage, not an automatic CVE waiver.
 Sources: [infocmp advisory](https://security-tracker.debian.org/tracker/CVE-2025-69720),
 [nsenter advisory](https://security-tracker.debian.org/tracker/CVE-2026-78408),
 [Archive::Tar advisory](https://security-tracker.debian.org/tracker/CVE-2026-9538).
-The follow-up requires a new Linux verification; the result below predates it.
+
+### Follow-up verification
+
+[Run 34763412239](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34763412239)
+tested `ce1286b0112a3a06d1896c718afd180bff809091`. Build, non-root/pip checks,
+the 188-test unit suite, runtime permissions and real startup/shutdown passed.
+The verifier inspected 15,511 entries as UID 100 / GID 101 with no violations.
+Both restricted commands were present, unreadable and unexecutable by `app`.
+No readable `Archive/Tar.pm` was found on Perl's configured include paths.
+Process capabilities were zero and no-new-privileges was enabled by CI.
+The six unauthenticated-route checks passed; Python ran as PID 1 and stopped
+cleanly on SIGTERM. No production database or hosting setting was changed.
+
+The scan at `2026-09-13T14:43:49.505211826Z` used image
+`sha256:004367efe34ef572a66d1c147cf76f1db1126f35ac43d938bf4ea4b2b0b140db`.
+Its valid report contains 155 matches: Critical 0, High 45, Medium 49, Low 9,
+Negligible 44, Unknown 8, with no package/EOL alerts. All 155 matches were
+recovered from the public annotations. The job still exits 1 at the unchanged
+vulnerability gate; no match was ignored or automatically waived.
+
+Compared with the earlier scan below, 28 matches are absent and no new matches
+appear when comparing severity, CVE, package, version, type and namespace.
+The 20 Debian High/Critical matches with previously documented installed-patch
+evidence are among those absent. Do not attribute this scanner reduction to
+the tool permission change: rebuilding and refreshing advisory data also occur.
+The remaining 45 High matches represent 13 CVEs: three Python records with
+documented backports and ten open Debian records (42 package matches).
+Python 3.11.16, Expat 2.8.3 and zlib 1.3.1 remain unchanged. Component evidence
+narrows the review but does not automatically close those advisories.
+
+### Earlier verification
 
 [Run 34733438698](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34733438698)
 tested commit `fa4b68397bb6fc82c6e2c52fa64da7286942ed90`. Build, non-root/pip

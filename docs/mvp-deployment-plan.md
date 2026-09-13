@@ -161,9 +161,11 @@ P0 | Parcial | Desarrollo + revision independiente
   validacion en GCP. Exclusiones Git/Docker reforzadas. Workflow Linux sin
   deploy aprobado para `fccc084` (corrida 34618327432): build, no-root, pip check
   y unitarias. Escaneo Grype operativo tras corregir el validador: imagen
-  actualizada en `0e2520b`, endurecida en `fa4b683`: 183 unitarias Linux,
-  permisos y arranque/cierre real aprobados. Quedan 183 coincidencias
-  de auditoria (7 criticas / 58 altas). El bloqueo de seguridad sigue activo;
+  actualizada en `0e2520b`, endurecida en `fa4b683` / `ce1286b`: 188 unitarias
+  Linux, permisos y arranque/cierre real aprobados en corrida 34763412239.
+  infocmp/nsenter restringidos al usuario root; el backend no los utiliza.
+  Quedan 155 coincidencias de auditoria (0 criticas / 45 altas, que representan
+  13 CVE distintas). No hay excepciones; el bloqueo de seguridad sigue activo;
   revisar discrepancias con parches oficiales y hallazgos pendientes antes
   del merge. Ver `docs/source-secret-audit.md` y
   `docs/linux-image-security-audit.md` y `docs/runtime-image-hardening.md`.
