@@ -194,6 +194,11 @@ https://github.com/anchore/grype/blob/v0.118.0/grype/presenter/json/testdata/sna
 
 ## Limitations
 
+A scoped runtime-hardening candidate removes the unused mount package, clears
+SUID/SGID bits and protects installed code. Its separate verification and
+limitations are documented in `runtime-image-hardening.md`; those controls do
+not suppress or resolve package CVEs by themselves.
+
 A successful scan is a dated check against known advisories, not proof that
 the application is vulnerability-free or ready for production. Grype findings
 need source-specific triage, including installed versions and available fixes.

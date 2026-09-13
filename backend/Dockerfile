@@ -8,6 +8,7 @@ WORKDIR /app
 # Apply Debian security updates even when the Python base tag is not rebuilt yet.
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
+    && apt-get purge -y --no-auto-remove mount \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -16,10 +17,14 @@ RUN pip install --no-cache-dir --upgrade pip==26.2.1 setuptools==84.0.0 wheel==0
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
-COPY --chown=app:app app ./app
-COPY --chown=app:app alembic ./alembic
-COPY --chown=app:app alembic.ini .
+COPY --chown=root:root app ./app
+COPY --chown=root:root alembic ./alembic
+COPY --chown=root:root alembic.ini .
+
+# The API never changes OS identities or edits its installed code.
+RUN chmod -R go-w /app /usr/local \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 
 USER app
 
-CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

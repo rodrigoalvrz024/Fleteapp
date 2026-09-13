@@ -58,6 +58,68 @@ jobs:
             --workdir /workspace/backend \
             --entrypoint python muvv-backend:candidate -B -m unittest discover -s tests
 
+      - name: Verify runtime permissions without a read-only filesystem masking them
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-runtime-image.py,dst=/runtime-check.py,readonly" \
+            --entrypoint python muvv-backend:candidate -B /runtime-check.py --github-annotation
+
+      - name: Smoke test the real startup command and protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          container="$(docker run --detach --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+            --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false --env PORT=18080 \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" --env ACCESS_TOKEN_EXPIRE_MINUTES=1440 \
+            muvv-backend:candidate)"
+          trap 'docker rm --force "$container" > /dev/null 2>&1 || true' EXIT
+          docker exec --interactive "$container" python -B - <<'PY'
+          import json
+          from pathlib import Path
+          import time
+          import urllib.error
+          import urllib.request
+
+          base = 'http://127.0.0.1:18080'
+          for attempt in range(100):
+              try:
+                  with urllib.request.urlopen(base + '/', timeout=1) as response:
+                      assert response.status == 200
+                      assert json.load(response)['status'] == 'ok'
+                  break
+              except (urllib.error.URLError, TimeoutError):
+                  time.sleep(0.1)
+          else:
+              raise SystemExit('Candidate startup did not become ready')
+          assert Path('/proc/1/comm').read_text().strip() == 'python', 'Server is not PID 1'
+          for route in ('/users/me', '/drivers/me', '/admin/users'):
+              for headers in ({}, {'Authorization': 'Bearer invalid-test-token'}):
+                  try:
+                      urllib.request.urlopen(urllib.request.Request(base + route, headers=headers), timeout=2)
+                  except urllib.error.HTTPError as error:
+                      assert error.code == 401, (route, error.code)
+                  else:
+                      raise AssertionError('Protected route accepted unauthenticated access')
+          print('::notice title=Runtime startup checks::Real CMD, PID 1 and six unauthenticated-route checks passed')
+          PY
+          docker exec "$container" python -B -m alembic heads
+          docker stop --time 10 "$container" > /dev/null
+          exit_code="$(docker inspect "$container" --format '{{.State.ExitCode}}')"
+          case "$exit_code" in
+            0|143) ;;
+            *) exit 1 ;;
+          esac
+          shutdown_log="$(docker logs "$container" 2>&1)"
+          [[ "$shutdown_log" == *"Application shutdown complete."* ]]
+          printf '::notice title=Runtime shutdown check::Server stopped cleanly on SIGTERM\n'
+
       - name: Record image identity
         shell: bash
         run: |
