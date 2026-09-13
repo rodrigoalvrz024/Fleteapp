@@ -135,6 +135,12 @@ separado y registrar el numero de pruebas del commit final, no solo del workspac
    Confirmados Python 3.11.16 / Expat 2.8.3. Se documentaron parches instalados
    para 23 coincidencias; otras 46 altas corresponden a 10 CVE aun abiertas
    en Debian y pendientes de revision. No se agregaron excepciones.
+   Endurecimiento `fa4b683`: corrida 34733438698 con 183 unitarias Linux,
+   permisos del contenedor y arranque/cierre real aprobados. Codigo protegido
+   contra escritura, sin SUID/SGID y sin paquete mount. Auditoria aun bloqueada:
+   183 coincidencias (7 criticas / 58 altas). Las 10 CVE Debian abiertas siguen
+   presentes en 42 coincidencias. Ensayo local repetido: 9 RLS, 8 migraciones
+   y 39 HTTP/WebSocket aprobados. Ver `docs/runtime-image-hardening.md`.
 3. Ensayar sobre una restauracion aislada representativa del esquema real;
    comparar datos, permisos, enums, locks y tiempos. Recuperacion en OTRO PC
    sigue aplazada para el cierre final por decision de Rodrigo.

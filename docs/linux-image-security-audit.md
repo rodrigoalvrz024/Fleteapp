@@ -199,6 +199,13 @@ SUID/SGID bits and protects installed code. Its separate verification and
 limitations are documented in `runtime-image-hardening.md`; those controls do
 not suppress or resolve package CVEs by themselves.
 
+The hardening was verified in run 34733438698 at `fa4b683`: all 183 unit tests,
+image permissions, real startup and shutdown passed. Removing `mount` reduced
+matches from 189 to 183 (Critical 7, High 58, Medium 54, Low 12, Negligible 44,
+Unknown 8). The scan remains valid and blocked, with no exclusions. The ten
+open Debian CVEs still map to 42 matches, down from 46; this does not close those
+CVEs. See the linked hardening guide for the exact image ID and runtime evidence.
+
 A successful scan is a dated check against known advisories, not proof that
 the application is vulnerability-free or ready for production. Grype findings
 need source-specific triage, including installed versions and available fixes.

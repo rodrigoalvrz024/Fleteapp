@@ -161,12 +161,14 @@ P0 | Parcial | Desarrollo + revision independiente
   validacion en GCP. Exclusiones Git/Docker reforzadas. Workflow Linux sin
   deploy aprobado para `fccc084` (corrida 34618327432): build, no-root, pip check
   y unitarias. Escaneo Grype operativo tras corregir el validador: imagen
-  actualizada en `0e2520b`, diagnostico `6ab5df3` con 174 unitarias Linux
-  aprobadas y 189 coincidencias
-  de auditoria (7 criticas / 62 altas). El bloqueo de seguridad sigue activo;
+  actualizada en `0e2520b`, endurecida en `fa4b683`: 183 unitarias Linux,
+  permisos y arranque/cierre real aprobados. Quedan 183 coincidencias
+  de auditoria (7 criticas / 58 altas). El bloqueo de seguridad sigue activo;
   revisar discrepancias con parches oficiales y hallazgos pendientes antes
   del merge. Ver `docs/source-secret-audit.md` y
-  `docs/linux-image-security-audit.md`. No hubo deploy.
+  `docs/linux-image-security-audit.md` y `docs/runtime-image-hardening.md`.
+  Ensayo PostgreSQL local repetido: 9 RLS, 8 migraciones y 39 HTTP/WebSocket
+  aprobados. No hubo deploy.
 - [x] Commit/push del backend y CI a `codex/mvp-supabase-rls-review`, separado
   de mobile/web/Splash. `main` intacto; sin autorizacion de merge ni deploy.
 - [ ] Revisar acceso de admin a chat con motivo, trazabilidad y minimo privilegio.

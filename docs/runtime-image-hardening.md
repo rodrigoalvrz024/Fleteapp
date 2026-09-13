@@ -59,8 +59,31 @@ It used temporary local data and synthetic provider responses, not production.
 The disposable cluster was stopped and removed. A TestClient/httpx deprecation
 warning remains, without test failures; a future test-tooling update is separate
 from the image permission changes.
-Linux image build, runtime checks and a new vulnerability scan are required
-before this hardening is considered verified in the container.
+## Linux results
+
+[Run 34733438698](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34733438698)
+tested commit `fa4b68397bb6fc82c6e2c52fa64da7286942ed90`. Build, non-root/pip
+checks, all 183 unit tests, permission verification and startup/shutdown passed.
+The checker inspected 15,511 entries as UID 100 / GID 101 with zero violations,
+zero effective/permitted capabilities and no-new-privileges enabled. The real
+startup command ran Python as PID 1, all six missing/invalid-token checks
+returned 401, and Alembic heads was readable. Uvicorn completed its shutdown
+sequence on SIGTERM; exit 143 is allowed because Uvicorn re-raises the captured
+signal after graceful shutdown, while exit 137 or missing shutdown completion
+fails the check.
+
+The scan at 2026-09-13T02:37:55.605023824Z used image
+`sha256:fc098922f01c5b5d3964fec5dc9a3194445dd4be3b57c19bb13d0e1964c0a06a`.
+Grype produced a valid report with 183 matches: Critical 7, High 58, Medium 54,
+Low 12, Negligible 44, Unknown 8. No package/EOL alerts; all matches were retained
+in public annotations. Six matches against the removed `mount` package are
+gone (four High, one Medium, one Negligible), not six globally resolved CVEs.
+The job ends with exit 1 because the vulnerability gate remains blocked.
+
+Python `3.11.16`, Expat `2.8.3` and zlib `1.3.1` remain unchanged. The earlier
+vendor analysis still applies: 23 High/Critical matches have installed-patch
+evidence, while the ten Debian CVEs marked open still have 42 matches across
+remaining packages. Runtime mitigation is not a blanket CVE exception.
 
 ## Remaining gates
 
