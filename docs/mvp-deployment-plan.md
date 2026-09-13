@@ -163,12 +163,15 @@ P0 | Parcial | Desarrollo + revision independiente
   y unitarias. Escaneo Grype operativo tras corregir el validador: imagen
   actualizada en `0e2520b`, endurecida en `fa4b683` / `ce1286b`: 188 unitarias
   Linux, permisos y arranque/cierre real aprobados en corrida 34763412239.
+  Seguimiento `87aea19` / corrida 34767762044: 197 unitarias y regresiones
+  especificas de cookies/recursion XML aprobadas; mismos hallazgos del escaner.
   infocmp/nsenter restringidos al usuario root; el backend no los utiliza.
   Quedan 155 coincidencias de auditoria (0 criticas / 45 altas, que representan
   13 CVE distintas). No hay excepciones; el bloqueo de seguridad sigue activo;
   revisar discrepancias con parches oficiales y hallazgos pendientes antes
   del merge. Ver `docs/source-secret-audit.md` y
-  `docs/linux-image-security-audit.md` y `docs/runtime-image-hardening.md`.
+  `docs/linux-image-security-audit.md`, `docs/runtime-image-hardening.md` y
+  `docs/residual-image-review.md` (matriz por CVE y evidencia de los backports).
   Ensayo PostgreSQL local repetido: 9 RLS, 8 migraciones y 39 HTTP/WebSocket
   aprobados. No hubo deploy.
 - [x] Commit/push del backend y CI a `codex/mvp-supabase-rls-review`, separado

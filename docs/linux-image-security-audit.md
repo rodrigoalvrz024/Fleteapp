@@ -5,24 +5,29 @@ The earlier run 34618327432 built and tested the image but did not scan CVEs.
 
 ## Latest result
 
-[Run 34763412239](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34763412239)
-tested `ce1286b0112a3a06d1896c718afd180bff809091`. The report is valid; CI
+[Run 34767762044](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34767762044)
+tested `87aea1930eed0f4b359d2e2de8ab0323a63a447a`. The report is valid; CI
 remains blocked by 45 High matches, not by a parser failure. There are zero
 Critical matches in this scan. Counts are 155 total: High 45, Medium 49, Low 9,
 Negligible 44, Unknown 8; no package/EOL alerts and no exclusions.
-Image: `sha256:004367efe34ef572a66d1c147cf76f1db1126f35ac43d938bf4ea4b2b0b140db`.
-Scan time: `2026-09-13T14:43:49.505211826Z`. All findings fit in the annotations.
+Image: `sha256:aa9c46cfd3d768eea3ffcfc4d6de9292e771f81c56797ec4136e10965575acad`.
+Scan time: `2026-09-13T16:11:54.923744933Z`. All findings fit in the annotations.
 
 The 45 High matches represent 13 CVEs: three Python records with previously
 documented backport evidence, plus the ten open Debian records below, across
 42 package matches. The 20 Debian High/Critical matches whose installed fixes
 were documented in the earlier triage no longer appear. Overall, 28 earlier
-matches are absent and no new matches appear in the normalized comparison.
+matches are absent relative to run 34733438698. The new report has no changed
+matches relative to run 34763412239 in the normalized comparison.
 This is not attributed to chmod: the image is rebuilt and advisory data is
 refreshed on each run. No blanket exception or risk acceptance was added.
 
-Build, dependency consistency, all 188 unit tests, runtime permissions and real
-startup/shutdown passed. `infocmp` and `nsenter` are root-only, with no effective
+Build, dependency consistency, all 197 unit tests, runtime permissions and real
+startup/shutdown passed. Bounded cookie and XML recursion regressions also
+verified the installed behavior for CVE-2026-3644 and CVE-2026-4224. They do not
+measure XML hash entropy or automatically waive findings. The full 13-CVE
+review matrix and sources are in `residual-image-review.md`.
+`infocmp` and `nsenter` are root-only, with no effective
 read/execute access for the app user. Perl's normal include paths have no
 readable `Archive/Tar.pm`. These are scoped runtime observations, not proof of
 global CVE absence or of Railway's runtime configuration. See

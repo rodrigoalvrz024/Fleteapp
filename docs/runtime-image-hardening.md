@@ -52,7 +52,8 @@ and graceful shutdown. It does not claim database health, successful login or
 payment processing without a real isolated database.
 
 Fourteen local policy regressions were added across the two hardening passes;
-all 188 unit tests pass locally. The isolated PostgreSQL rehearsal was repeated
+all 197 unit tests pass locally, including nine added backport-verifier tests.
+The isolated PostgreSQL rehearsal was repeated
 on 2026-09-13 and passed 9 RLS checks, 8 migration checks
 and 39 HTTP/WebSocket checks, including authenticated role boundaries, private
 photos/chat, vehicle matching, backend-owned pricing and payment callbacks.
@@ -137,6 +138,13 @@ evidence, while the ten Debian CVEs marked open still have 42 matches across
 remaining packages. Runtime mitigation is not a blanket CVE exception.
 
 ## Remaining gates
+
+Run 34767762044 (`87aea19`) repeated the image checks successfully with all
+197 unit tests and bounded CPython cookie/XML regressions. The scanner still
+reports the same 155 matches and blocks approval. Exact image identity,
+backport evidence and remaining component review are in
+`residual-image-review.md`; no application runtime code was changed by those
+additional tests.
 
 Removing privileged helpers and protecting code reduces attack paths; it does
 not patch every library advisory. The Grype high/critical gate is unchanged,

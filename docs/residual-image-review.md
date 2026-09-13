@@ -20,8 +20,8 @@ Los enlaces identifican la fuente primaria, consultada el 2026-09-13.
 
 | CVE | Coincidencias | Evidencia y siguiente comprobacion |
 | --- | ---: | --- |
-| [CVE-2026-3644](https://github.com/python/cpython/commit/dae4b1a21f8df4570e30986affd61bbe4ade4cef) | 1 | Backport oficial 3.11 en cookies. Version instalada 3.11.16; agregar regresion de update, union, estado y salida JavaScript. |
-| [CVE-2026-4224](https://github.com/python/cpython/commit/642865ddf4b232da1f3b1f7abcfa3254c4bfe785) | 1 | Backport oficial 3.11 del limite de recursion C. Verificar rechazo de un modelo XML anidado con entrada pequena. |
+| [CVE-2026-3644](https://github.com/python/cpython/commit/dae4b1a21f8df4570e30986affd61bbe4ade4cef) | 1 | Backport oficial 3.11 en cookies. Version instalada 3.11.16; regresiones de update, union, estado y salida JavaScript aprobadas en Linux. |
+| [CVE-2026-4224](https://github.com/python/cpython/commit/642865ddf4b232da1f3b1f7abcfa3254c4bfe785) | 1 | Backport oficial 3.11 del limite de recursion C. Linux rechaza el modelo anidado con RecursionError, sin crash. |
 | [CVE-2026-7210](https://github.com/python/cpython/commit/cbaecf9f16da611a646d507c1cbca265c588fc56) | 1 | Backport oficial 3.11 y Expat 2.8.3 instalado. La version de Expat sola no prueba el uso de entropia de 16 bytes; conservar procedencia del interprete y ambos requisitos. |
 | [CVE-2025-69720](https://security-tracker.debian.org/tracker/CVE-2025-69720) | 4 | Afecta infocmp. El ejecutable existe pero app no puede leerlo ni ejecutarlo. El operador root sigue pudiendo utilizarlo; no declararlo eliminado. |
 | [CVE-2026-9538](https://security-tracker.debian.org/tracker/CVE-2026-9538) | 1 | Archive::Tar no es legible en las rutas normales de Perl. No demuestra ausencia en cualquier ruta alternativa o futura imagen. |
@@ -55,7 +55,22 @@ Control negativo local: Python 3.11.9 / Expat 2.6.0 falla las siete vias de
 cookies y el limite XML, pero conserva la cookie valida. El verificador retorna
 1, correctamente. Esto no describe la version del contenedor candidato.
 Las 197 unitarias, incluidas nueve del nuevo verificador, pasaron localmente.
-El resultado positivo en Linux debe registrarse despues de su ejecucion.
+
+La [corrida 34767762044](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34767762044)
+probo `87aea1930eed0f4b359d2e2de8ab0323a63a447a`, imagen
+`sha256:aa9c46cfd3d768eea3ffcfc4d6de9292e771f81c56797ec4136e10965575acad`.
+Las 197 unitarias Linux y las regresiones nuevas pasaron. Las siete vias de
+cookies rechazaron los 33 caracteres; se mantuvo la cookie valida. El guard de
+recursion XML respondio correctamente. CPython 3.11.16 y Expat 2.8.3 cumplieron
+los requisitos de version. Esto no agrega una prueba dinamica de entropia XML.
+Tambien pasaron permisos del contenedor, arranque/PID 1, seis rechazos de acceso
+sin credenciales validas y cierre con SIGTERM.
+
+El escaneo a `2026-09-13T16:11:54.923744933Z` sigue bloqueado (salida 1):
+Critical 0, High 45, Medium 49, Low 9, Negligible 44, Unknown 8. No hay alertas
+de paquetes/EOL. Se recuperaron las 155 coincidencias de anotaciones publicas;
+no hay diferencias de CVE/paquete/version/severidad/procedencia con la corrida
+base. No se desplego esta imagen ni se aceptaron excepciones.
 
 ## Discrepancia de zlib
 

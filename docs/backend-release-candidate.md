@@ -149,6 +149,10 @@ separado y registrar el numero de pruebas del commit final, no solo del workspac
    previamente documentados ya no aparecen; no se agregaron exclusiones.
    El bloqueo sigue activo. Se repitieron localmente las 56 comprobaciones
    PostgreSQL/RLS/migraciones/HTTP con exito y se elimino el cluster temporal.
+   Regresiones de backports `87aea19`: corrida 34767762044, 197 unitarias
+   Linux y pruebas especificas de cookies/recursion XML aprobadas. No hubo
+   cambios en las 155 coincidencias ni excepciones. Matriz de los 13 CVE,
+   fuentes y condiciones pendientes en `docs/residual-image-review.md`.
 3. Ensayar sobre una restauracion aislada representativa del esquema real;
    comparar datos, permisos, enums, locks y tiempos. Recuperacion en OTRO PC
    sigue aplazada para el cierre final por decision de Rodrigo.
