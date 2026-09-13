@@ -58,6 +58,16 @@ jobs:
             --workdir /workspace/backend \
             --entrypoint python muvv-backend:candidate -B -m unittest discover -s tests
 
+      - name: Verify bounded Python backport behavior without external connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 30s docker run --rm \
+            --network none --read-only --cap-drop ALL --memory 256m --cpus 1 \
+            --security-opt no-new-privileges --pids-limit 32 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-python-backports.py,dst=/python-backport-check.py,readonly" \
+            --entrypoint python muvv-backend:candidate -I -B /python-backport-check.py --github-annotation
+
       - name: Verify runtime permissions without a read-only filesystem masking them
         shell: bash
         run: |
