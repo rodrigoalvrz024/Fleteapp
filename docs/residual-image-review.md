@@ -157,3 +157,39 @@ No hay parche estable trixie registrado para los diez avisos Debian de esta
 matriz a la fecha de consulta. No se borraron registros de paquetes, no se
 cambio a repositorios inestables y no se redujo el umbral de severidad.
 Produccion, pagos, base de datos, APK y Splash permanecen intactos.
+
+## Hallazgo adicional: biblioteca TLS incluida por PostgreSQL
+
+La [corrida 34856294598](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34856294598)
+valido `562996462e0d010f5ccdbfb5353b306f29327fda`, imagen
+`sha256:11d49818c9c2ce4fc4f4ef8fb1a01f5f4d15f788f24780f12601d39f3ca6b681`.
+Se inspeccionaron 785 ELF. Pasaron 223 unitarias locales/Linux, arranque,
+permisos y conservacion de evidencia con upload-artifact v7.0.1, sin el aviso
+Node 20. El inventario mostro `psycopg2_binary.libs/libcrypto-7d0e8add.so.1.1`:
+actualizar las bibliotecas Debian no reemplaza esa copia incluida en el wheel.
+No se asigna un CVE concreto basandose solo en el nombre de la biblioteca.
+
+Se actualiza unicamente `psycopg2-binary` de 2.9.9 a 2.9.13, manteniendo el
+driver SQLAlchemy/psycopg2 y sus interfaces. La version publicada admite
+Python >= 3.10 y conserva wheels CPython 3.11 Windows y manylinux x86_64.
+Las [notas oficiales](https://www.psycopg.org/docs/news.html) tambien registran
+correcciones del procesamiento de datos malformados; no se agregan servicios
+ni se ejecutan migraciones externas.
+
+Wheel Linux verificado contra [metadatos PyPI](https://pypi.org/pypi/psycopg2-binary/2.9.13/json):
+`psycopg2_binary-2.9.13-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl`,
+SHA-256 `930e7e58b33a4f9c39e7532d7a40147925cf3372baed4229cbebe0cf3ba9ce6b`.
+Contiene `libcrypto-fb8d5b21.so.3`, `libssl-8bd944e8.so.3` y
+`libpq-a17e3caa.so.5.17`. Esto acredita la familia OpenSSL 3 de esas bibliotecas,
+no una ausencia general de vulnerabilidades. El control de imagen rechaza
+los nombres conocidos libssl/libcrypto (incluidos sufijos de wheel) con
+SONAME 1.0.0, 1.0.2 o 1.1. No detecta versiones embebidas estaticamente,
+renombradas o escondidas en otros formatos; Grype permanece obligatorio.
+
+Verificacion local con el conector nuevo: 224 unitarias, pip check y 56 pruebas
+PostgreSQL (9 RLS, 8 migraciones y 39 HTTP/WebSocket) aprobadas. Se preservan
+permisos cliente/conductor/admin, documentos privados, precios y estados de
+pago. El cluster temporal fue detenido y eliminado. No prueba la conexion
+TLS real de Supabase/PgBouncer ni la concurrencia del hosting: quedan para el
+entorno aislado antes de promover a produccion. La corrida Linux del cambio
+del conector debe acreditar la imagen final y repetir el escaneo completo.

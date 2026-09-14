@@ -158,7 +158,7 @@ jobs:
           runtime_info="$(docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges --pids-limit 256 \
             --entrypoint python muvv-backend:candidate -c \
-            'import json, pyexpat, sys, zlib; print(json.dumps({"python": sys.version.split()[0], "expat": pyexpat.EXPAT_VERSION, "zlib": zlib.ZLIB_RUNTIME_VERSION}))')"
+            'import json, psycopg2, psycopg2.extensions, pyexpat, sys, zlib; print(json.dumps({"python": sys.version.split()[0], "expat": pyexpat.EXPAT_VERSION, "zlib": zlib.ZLIB_RUNTIME_VERSION, "psycopg2": psycopg2.__version__.split()[0], "libpq": psycopg2.extensions.libpq_version()}))')"
           printf '::notice title=Image runtime versions::%s\n' "$runtime_info"
           printf 'Runtime versions: %s\n' "$runtime_info" >> "$GITHUB_STEP_SUMMARY"
           printf 'No image push, Railway deploy, external payment or production database access.\n' >> "$GITHUB_STEP_SUMMARY"

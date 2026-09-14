@@ -13,6 +13,12 @@ spec.loader.exec_module(checker)
 
 
 class RuntimeImageSecurityTests(unittest.TestCase):
+    def test_legacy_openssl_names_include_bundled_wheel_libraries(self):
+        for name in ("libssl.so.1.1", "libcrypto-7d0e8add.so.1.1", "libssl-hash.so.1.0.0", "libcrypto.so.1.0.2"):
+            self.assertTrue(checker.is_legacy_openssl_library(name))
+        for name in ("libssl.so.3", "libcrypto-fb8d5b21.so.3", "libcrypto.so", "other.so.1.1", "libcryptographer.so.1.1"):
+            self.assertFalse(checker.is_legacy_openssl_library(name))
+
     def inspect(self, mode=stat.S_IFREG | 0o644, uid=0, **kwargs):
         options = {"protected": True, "writable": False, "capability": False, **kwargs}
         return checker.file_violations(SimpleNamespace(st_mode=mode, st_uid=uid), **options)

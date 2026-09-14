@@ -17,6 +17,12 @@ SCAN_ROOTS = (Path("/usr"), Path("/app"))
 RESTRICTED_COMMANDS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
 
 
+def is_legacy_openssl_library(name):
+    stem, separator, version = name.partition(".so.")
+    return bool(separator and version in ("1.0.0", "1.0.2", "1.1")
+                and (stem in ("libssl", "libcrypto") or stem.startswith(("libssl-", "libcrypto-"))))
+
+
 def file_violations(metadata, *, protected, writable, capability):
     reasons = []
     if stat.S_ISREG(metadata.st_mode) and metadata.st_mode & (stat.S_ISUID | stat.S_ISGID):
@@ -112,6 +118,8 @@ def inspect_runtime():
                 reasons = file_violations(metadata, protected=protected,
                                           writable=protected and os.access(path, os.W_OK),
                                           capability=capability)
+                if (stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)) and is_legacy_openssl_library(path.name):
+                    reasons.append("legacy_openssl_library")
                 violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
                 inspected += 1
     return {"uid": os.geteuid(), "gid": os.getegid(), **process,
