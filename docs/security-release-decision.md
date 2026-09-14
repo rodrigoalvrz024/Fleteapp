@@ -30,7 +30,7 @@ actualizar paquetes desde Debian inestable.
 | Grupo | CVE / coincidencias altas | Propuesta, todavia no aplicada a CI | Que falta para cerrarlo |
 | --- | --- | --- | --- |
 | Cookies y recursion XML de Python | 2 / 2 | Revisar como corregidos en la version instalada, no como riesgo aceptado. | Confirmar correspondencia exacta entre imagen, CPython 3.11.16 y pruebas aprobadas; revision independiente. |
-| Hash XML de Python | 1 / 1 | Evidencia de backport y version compatible; conservar revision pendiente. | Acreditar la configuracion de compilacion y la ruta de 16 bytes, no solamente la version de Expat cargada. |
+| Hash XML de Python | 1 / 1 | Backport, compilacion y ruta de 16 bytes observada en ambos parsers; candidato a cierre justificado, no exclusion aplicada. | Revisar el alcance de la evidencia de ejecucion y su correspondencia con la imagen; no mide calidad estadistica de entropia. |
 | Herramientas del sistema: ncurses, Perl y util-linux | 6 / 37 | Mitigados o sin componente accesible en rutas comprobadas; NO llamarlos parcheados. | Revisar presencia real del componente, operacion privilegiada y hosting. Root de una consola no queda protegido por el guard de la API. |
 | glibc y ACL | 3 / 4 | Menor exposicion observada, sin demostrar inalcanzabilidad completa. | Revisar uso dinamico/transitivo y comandos de operadores sobre rutas controladas por usuarios. |
 | zlib | 1 / 1 | Posible discrepancia de versiones, no declarar falso positivo aun. | Vincular fuente exacta con biblioteca y resolver la discrepancia con el aviso del proveedor. |
@@ -169,8 +169,36 @@ observar la funcion o cualquier observacion incompleta bloquea esta prueba;
 no se considera una demostracion de vulnerabilidad por si solo.
 
 Esto no mide calidad aleatoria, resistencia estadistica ni todos los usos XML.
-Tampoco aplica exclusiones al escaner. Se prepararon 97 pruebas locales;
-la observacion de hardware requiere validacion Linux en CI.
+Tampoco aplica exclusiones al escaner. Pasaron 97 pruebas locales y la
+observacion de hardware fue validada en Linux como se detalla a continuacion.
+
+### Resultado de ejecucion real (2026-09-14)
+
+Codigo: `558d76c80ecec6e98d8c0f8c746b566eb9106c3a`.
+[Corrida 34865212086](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34865212086).
+Imagen: `sha256:2c459466540585c6b811e20f29eaa2b348017a99c2efc4915e082fc2a8fb971c`.
+Artefacto: `xml-call-evidence`, retencion de 14 dias; resumen publico en
+la anotacion `XML execution trace (not approval)`.
+
+| Procesador | Llamadas funcion 16 bytes | Llamadas heredada | Lecturas correctas | Salida |
+| --- | --- | --- | --- | --- |
+| pyexpat | 3 | 0 | 3 | 0 |
+| _elementtree | 3 | 0 | 3 | 0 |
+
+Ambos resultados se obtuvieron mediante breakpoints de hardware en
+contenedores separados de la misma imagen, sin agregar paquetes al runtime.
+Los hashes de los dos modulos coinciden antes y despues y con los publicados
+en la evidencia anterior. No se leyeron valores de salt ni argumentos.
+Se observaron las rutas que faltaban, en el alcance sintetico descrito;
+esto no es una auditoria de todas las formas de XML ni una prueba estadistica
+de aleatoriedad. Los campos de las sondas anteriores que dicen no probar
+ejecucion conservan ese significado: es esta sonda separada la que la observa.
+
+El resto de pruebas, arranque, permisos e inventario pasaron. La corrida
+sigue fallando unicamente por el escaner: 45 High, 49 Medium, 0 Critical,
+155 coincidencias totales. No se cambio la politica ni se aprobo produccion.
+El siguiente frente son los componentes del sistema pendientes (glibc, ACL,
+util-linux, ncurses, Perl y zlib), no repetir la misma comprobacion XML.
 
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
