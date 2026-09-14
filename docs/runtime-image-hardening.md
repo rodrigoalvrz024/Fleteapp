@@ -139,6 +139,33 @@ remaining packages. Runtime mitigation is not a blanket CVE exception.
 
 ## Remaining gates
 
+### Self-enforced startup guard (2026-09-14)
+
+The candidate Docker CMD now uses `python -m app.server`. Before importing
+Uvicorn or the application it requires Linux, non-root real/effective/saved
+user and group identities, no root supplementary group, zero inheritable,
+permitted, effective and ambient capabilities, and a single initial thread.
+It sets `PR_SET_NO_NEW_PRIVS` using the platform C ABI and verifies the flag
+both with prctl and `/proc/self/status`. An unsupported or unsafe environment
+stops startup with a fixed message that includes no configuration values.
+New threads inherit this flag. The server remains PID 1 and uses the same
+host, port default and Uvicorn options as before. Local development can still
+invoke Uvicorn directly; this guard belongs to the Linux container entrypoint.
+
+Fourteen new unit tests passed; the complete local suite has 211 passing tests.
+CI now runs the real CMD without Docker's `--cap-drop` or `no-new-privileges`
+flags, checking the server PID's own status, protected routes and SIGTERM.
+It separately tests that the real CMD rejects UID 0 before loading the app.
+The existing restricted permission-scan job retains its isolation flags.
+Linux execution of this change is pending; do not assume local mocks prove it.
+
+This guard does not patch the vulnerable libraries, restrict separately
+started operator/SSH processes, configure host mounts or prevent all kernel
+exploits. A hosting start-command override could bypass it and must be checked
+before deployment. No scanner exceptions, production changes or paid services
+are authorized by this change.
+Source: [Linux no_new_privs](https://docs.kernel.org/userspace-api/no_new_privs.html).
+
 Run 34767762044 (`87aea19`) repeated the image checks successfully with all
 197 unit tests and bounded CPython cookie/XML regressions. The scanner still
 reports the same 155 matches and blocks approval. Exact image identity,
