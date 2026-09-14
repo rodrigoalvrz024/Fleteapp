@@ -125,12 +125,28 @@ de leer la estructura completa. No escribe memoria, llama punteros Expat,
 lee entropia ni publica direcciones de memoria. Una version futura requiere
 revision del control en lugar de interpretar un layout desconocido.
 Se agregan los nombres privados `PyExpat_XML_*` al inventario estatico.
-Las 91 pruebas locales pasan; falta ejecutar este control en Linux.
+Las 91 pruebas locales pasan. El control se ejecuto en Linux en la corrida
+de `9947485` indicada a continuacion.
 
 Referencia de layout: [Include/pyexpat.h de CPython 3.11.16](https://github.com/python/cpython/blob/v3.11.16/Include/pyexpat.h).
 La disponibilidad en C API es evidencia mas precisa que la version de la
 biblioteca, pero no es un registro de llamadas ni una medida de entropia;
 `hash_salt_call_path_proven` sigue siendo falso y no habilita excepciones.
+
+Resultado Linux de `9947485`: [corrida 34863470989](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34863470989).
+Pasaron pruebas, arranque, permisos, backports e inventario. La C API valida
+tiene 224 bytes, identifica cabeceras Expat 2.8.3 y contiene un puntero no nulo
+para `SetHashSalt16Bytes`. Esto resuelve la duda de version de compilacion y
+disponibilidad en la interfaz, no demuestra ejecucion ni calidad de entropia.
+Las huellas de los dos modulos coinciden con las de la corrida anterior:
+
+- `pyexpat`: `27e28ee2600c7d6347130227616e4fd5ae1c59800ad01fa12e1f23c6f41f34e3`.
+- `_elementtree`: `03bb0f3a57760a0afe252ffbb41acd6492552a2115ada2e42a277075ce7f49c5`.
+
+Imagen nueva: `sha256:3836d4b73c8ebd96696edf33db585f05c313514190603b47ddebee2019cd4ac6`.
+El inventario sigue sin imports XML observables, incluso con los alias:
+no usarlo como prueba de ausencia. El escaner termina bloqueado con 45 High,
+49 Medium y 0 Critical. No se aplicaron excepciones ni cambios en Railway.
 
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
