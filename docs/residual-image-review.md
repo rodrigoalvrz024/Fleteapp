@@ -85,6 +85,14 @@ sigue abierta y Debian aun no registra una correccion para trixie.
 
 ## Criterios para cerrar la revision
 
+Actualizacion del 2026-09-14: `a357949` agrega el arranque `app.server`, que
+rechaza identidades root/capacidades y activa no_new_privs antes de importar
+la API. La [corrida 34805978535](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34805978535)
+comprueba esa proteccion sin los flags equivalentes de Docker, y tambien que
+el CMD real rechaza UID 0. La imagen exacta y los resultados estan en
+`runtime-image-hardening.md`. El escaner conserva 0 Critical y 45 High; esto
+mejora la mitigacion, no cierra los avisos ni acredita el entorno Railway real.
+
 1. Registrar la imagen exacta y los resultados positivos de las regresiones;
    confirmar que el escaner mantiene todos sus hallazgos.
 2. Revisar las rutas nativas pendientes (glibc, ACL y zlib) y el uso privilegiado

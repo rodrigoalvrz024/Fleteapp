@@ -157,7 +157,28 @@ CI now runs the real CMD without Docker's `--cap-drop` or `no-new-privileges`
 flags, checking the server PID's own status, protected routes and SIGTERM.
 It separately tests that the real CMD rejects UID 0 before loading the app.
 The existing restricted permission-scan job retains its isolation flags.
-Linux execution of this change is pending; do not assume local mocks prove it.
+
+[Run 34805978535](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34805978535)
+tested commit `a3579491950a063164ab995298804951234afeb0`. Build, unit tests,
+Python backport probes and permission checks passed. The real CMD enabled
+no_new_privs without Docker supplying that flag or cap-drop, ran as Python
+PID 1 with no root identity or process capabilities, rejected all six missing
+or invalid-token requests, and stopped gracefully on SIGTERM. The separate
+root test also passed: the actual container refused to start under UID 0.
+
+The final image is
+`sha256:c8d9a87dd3dc48da6f2e7ef22dd7b5042aa378ba5a1c88a3302a12274611979e`.
+Its scan at `2026-09-14T04:27:27.292901799Z` still blocks approval (exit 1):
+0 Critical, 45 High, 49 Medium, 9 Low, 44 Negligible and 8 Unknown matches,
+155 total and no package/EOL alerts. These counts do not constitute a patch
+or a waiver. Python 3.11.16, Expat 2.8.3 and zlib 1.3.1 remain installed.
+
+The 56 local PostgreSQL checks also passed again (9 access, 8 migration,
+39 HTTP/WebSocket). They used a disposable cluster and synthetic payments;
+the cluster was stopped and removed. This does not validate real Railway
+privileges or external providers. Read-only inspection of Railway showed
+production still tracking `main`, with no custom start command displayed.
+No production setting was edited and no deploy was performed.
 
 This guard does not patch the vulnerable libraries, restrict separately
 started operator/SSH processes, configure host mounts or prevent all kernel
