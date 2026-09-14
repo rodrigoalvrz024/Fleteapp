@@ -7,6 +7,8 @@ on:
     paths:
       - backend/Dockerfile.hardened
       - .github/workflows/backend-hardened-trial.yml
+      - scripts/inspect-hardened-findings.py
+      - backend/tests/test_hardened_finding_evidence.py
 
 permissions:
   contents: read
@@ -113,6 +115,11 @@ jobs:
           image_id="$(docker image inspect muvv-backend:hardened-trial --format '{{.Id}}')"
           "$audit_dir/grype" "docker:${image_id}" --config scripts/grype-candidate.yaml \
             --output json > "$audit_dir/report.json"
+          python3 scripts/inspect-hardened-findings.py "$audit_dir/report.json" --image-id "$image_id"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --memory 256m --cpus 1 --pids-limit 32 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/inspect-hardened-findings.py,dst=/evidence.py,readonly" \
+            --entrypoint python muvv-backend:hardened-trial -I -B /evidence.py --runtime --image-id "$image_id"
           python3 scripts/report-image-audit.py "$audit_dir/report.json" \
             --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
 
