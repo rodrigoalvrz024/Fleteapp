@@ -227,9 +227,32 @@ trixie. Se conservan las restricciones del escaner, sin repositorios sid:
 [herramientas ACL](https://security-tracker.debian.org/tracker/CVE-2026-54370),
 [Archive::Tar](https://security-tracker.debian.org/tracker/CVE-2026-9538).
 
-Las 98 pruebas locales seleccionadas pasan. Falta validar la nueva imagen
-Linux, su arranque, dependencias, inventario y escaneo antes de dar por
-verificada la retirada. No hay merge ni despliegue de esta candidata.
+Las 98 pruebas locales seleccionadas pasan. La corrida Linux de `b3bf98a`,
+[34866565119](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34866565119),
+aprobo pruebas, arranque, dependencias, permisos, inventario y observacion XML.
+Imagen: `sha256:0f25b9d3014d4ce7bd8d606056d3d049466ab8671208b3385da25f76bbfd6261`.
+
+- Los dos ejecutables retirados no existen en sus rutas, comprobado con lstat.
+- Cero rutas con nombre infocmp en el filesystem efectivo.
+- Una ruta con nombre nsenter: `/usr/share/bash-completion/completions/nsenter`.
+  Es la ruta de autocompletado, no `/usr/bin/nsenter`; el contador por nombre
+  no debe interpretarse como presencia del ejecutable vulnerable.
+- Cero rutas con los nombres getfacl, setfacl y chacl.
+- Cero rutas conocidas Archive/Tar.pm, y la sonda Perl tampoco lo encuentra
+  legible en su lista de busqueda habitual.
+- El verificador inspecciono 15516 entradas sin infracciones.
+
+El escaner conserva 45 High, 49 Medium y 0 Critical. Los registros Debian
+no se borraron ni manipularon y las bibliotecas permanecen: la retirada de
+un ejecutable no elimina automaticamente los avisos de su paquete fuente.
+La corrida falla solo por la politica de vulnerabilidades. No hay merge ni
+despliegue de esta candidata.
+
+Siguiente comprobacion del arranque: evitar conservar descriptores de archivo
+heredados que puedan otorgar capacidades sobre cgroups u otros recursos, sin
+interferir con entrada/salida y logs. Esto requiere pruebas especificas antes
+de aplicarlo; el estado actual de UID/capacidades no demuestra que dichos
+descriptores esten ausentes. Los otros avisos de bibliotecas siguen pendientes.
 
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
