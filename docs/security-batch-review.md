@@ -79,3 +79,18 @@ proveniencia equivocada, distinta imagen/version/hash, regresiones de cookies,
 XML, condiciones de compilacion, errores seguros y preservacion del gate.
 El revisor tambien proceso la evidencia real de la corrida indicada y confirmo
 exactamente tres candidatos; no se cambio el escaner ni su codigo de salida.
+
+## Resultado de esta ronda Linux
+
+Commit: `4e6f7486e606a74b43e0deb2aff4da15c50b5dcc`.
+[Corrida 34869663192](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34869663192).
+Imagen: `sha256:3d4cfacb14d6b950af8285020175861203b9e08574b8b774f3012c082caaff58`.
+Pasaron suite Linux, dependencias, descriptores heredados, backports, permisos,
+arranque, rechazo root, apagado, inventario y traza XML. Falla solo el escaner:
+0 Critical, 45 High, 49 Medium, 9 Low, 44 Negligible y 8 Unknown.
+
+Se recuperaron las once anotaciones publicas relevantes de esa misma corrida
+y el revisor las proceso con resultado valido: tres candidatos exactos y 42
+coincidencias altas adicionales. El conjunto conserva los 155 hallazgos y
+no concede aprobacion. No hubo cambios al codigo de la API, Dockerfile,
+configuracion de Grype ni politica de despliegue en esta ronda.
