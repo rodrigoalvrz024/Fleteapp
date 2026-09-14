@@ -4,6 +4,9 @@ Fecha: 2026-09-13. Rama de seguridad, sin merge ni deploy. Este documento es
 evidencia para revision: no es una aceptacion de riesgo, archivo VEX aprobado
 ni lista de exclusiones del escaner.
 
+Resumen de decisiones propuestas y pasos de cierre actualizado el 2026-09-14:
+[security-release-decision.md](security-release-decision.md). No aplica excepciones.
+
 ## Base de evidencia
 
 La [corrida 34763412239](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34763412239)
