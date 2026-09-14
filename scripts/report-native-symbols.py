@@ -131,8 +131,10 @@ def annotations(report):
     for group, symbols in SYMBOL_GROUPS.items():
         callers = [{"path": row["path"], "imports": sorted(symbols.intersection(row["imports"]))}
                    for row in report["files"] if symbols.intersection(row["imports"])]
+        callers.sort(key=lambda row: (not row["path"].startswith(("/usr/local/", "/app/")), row["path"]))
         # Keep public annotations bounded; the artifact retains every file.
-        payload = {"image_id": report["image_id"], "group": group, "caller_files": len(callers),
+        payload = {"image_id": report["image_id"], "elf_files": report["counts"]["elf_files"],
+                   "group": group, "caller_files": len(callers),
                    "callers": callers[:12], "omitted_from_annotation": max(0, len(callers) - 12)}
         message = json.dumps(payload, ensure_ascii=True).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::notice title=Native imports {group} (not approval)::{message}")

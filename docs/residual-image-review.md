@@ -108,8 +108,29 @@ Limites: 200.000 entradas y 256 MB por ELF, mas 180 segundos en CI. Un ELF
 invalido, ruta ambigua, exceso de limite o inventario vacio falla con salida 2;
 no se sustituye por un informe limpio. La salida 0 solo confirma la recoleccion
 de evidencia. El bloqueo Critical/High de Grype sigue sin exclusiones.
-Las 222 unitarias locales y la validacion YAML/Bash pasan; la ejecucion sobre
-la imagen Linux y sus hallazgos se registraran despues de la corrida.
+Las 222 unitarias locales y Linux de la primera corrida del inventario pasan.
+La [corrida 34855546212](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34855546212)
+analizo `27959e09aac81dedd5240167eba4b0c144205f2a`, imagen
+`sha256:43ba104d89081a315f870043c0586e35f8c2019b7d85e780ad1581f40f6e3f4f`.
+El inventario y su conservacion como artefacto pasaron. Resultados:
+
+- DNS antiguas: cero archivos con imports coincidentes, sin afirmar ausencia
+  de llamadas dinamicas o codigo interno.
+- ACL: imports en cp, install, mv, sed y tar. Ninguna extension Python del
+  inventario contiene esos imports. El uso por operadores sigue pendiente.
+- gzip: imports gzwrite/gzclose en dpkg-deb y libapt-pkg.so.7.0.0, no en las
+  extensiones Python inventariadas. No prueba ausencia de implementaciones
+  estaticas ni cierra la discrepancia del proveedor.
+- Busqueda dinamica: 33 archivos con imports; por eso se conserva la limitacion
+  de analisis estatico. La vista acotada prioriza extensiones en /usr/local
+  y /app; el artefacto conserva todos los resultados.
+
+El escaneo final (2026-09-14T14:28:04.179606941Z) continua bloqueado con
+0 Critical, 45 High, 49 Medium, 9 Low, 44 Negligible y 8 Unknown; las 155
+coincidencias siguen visibles, sin alertas de paquetes/EOL. Fallo solo la
+politica de vulnerabilidades, no el arranque ni las pruebas funcionales.
+El aviso de obsolescencia Node 20 de upload-artifact v4 se atiende migrando
+el publicador a v7.0.1 (Node 24), fijado por hash; no cambia el runtime Muvv.
 
 Actualizacion del 2026-09-14: `a357949` agrega el arranque `app.server`, que
 rechaza identidades root/capacidades y activa no_new_privs antes de importar

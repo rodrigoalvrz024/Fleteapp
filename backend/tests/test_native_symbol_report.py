@@ -113,7 +113,7 @@ class NativeSymbolReportTests(unittest.TestCase):
             self.assertNotIn("private-credential", errors.getvalue())
 
     def test_annotations_are_bounded_and_report_omissions(self):
-        report = {"image_id": IMAGE, "files": [{"path": f"/file{i}%\n", "imports": ["gzwrite"]} for i in range(20)]}
+        report = {"image_id": IMAGE, "counts": {"elf_files": 20}, "files": [{"path": f"/file{i}%\n", "imports": ["gzwrite"]} for i in range(20)]}
         with patch.object(reporter.sys, "stdout", new_callable=io.StringIO) as output:
             reporter.annotations(report)
         lines = output.getvalue().splitlines()
@@ -121,6 +121,17 @@ class NativeSymbolReportTests(unittest.TestCase):
         gzip_line = next(line for line in lines if '"group": "gzip_write"' in line)
         self.assertIn('"omitted_from_annotation": 8', gzip_line)
         self.assertIn("%25", gzip_line)
+
+    def test_annotations_prioritize_application_extensions_in_bounded_preview(self):
+        files = [{"path": f"/usr/bin/file{i}", "imports": ["dlsym"]} for i in range(20)]
+        files.append({"path": "/usr/local/lib/python/extension.so", "imports": ["dlsym"]})
+        report = {"image_id": IMAGE, "counts": {"elf_files": 21}, "files": files}
+        with patch.object(reporter.sys, "stdout", new_callable=io.StringIO) as output:
+            reporter.annotations(report)
+        line = next(line for line in output.getvalue().splitlines() if '"group": "dynamic_lookup"' in line)
+        payload = json.loads(line.split("::", 2)[2])
+        self.assertEqual(payload["callers"][0]["path"], "/usr/local/lib/python/extension.so")
+        self.assertEqual(payload["elf_files"], 21)
 
 
 if __name__ == "__main__":
