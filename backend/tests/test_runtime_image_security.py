@@ -1,4 +1,5 @@
 import importlib.util
+import io
 from pathlib import Path
 import stat
 from types import SimpleNamespace
@@ -94,3 +95,29 @@ class RuntimeImageSecurityTests(unittest.TestCase):
         with patch.object(checker.subprocess, "run", return_value=SimpleNamespace(stdout="unexpected")):
             with self.assertRaises(RuntimeError):
                 checker.perl_archive_tar_readable()
+
+    def test_perl_readability_controls_runtime_verdict_and_exit_code(self):
+        for readable in (False, True):
+            with (
+                self.subTest(readable=readable),
+                patch.object(checker.sys, "platform", "linux"),
+                patch.object(checker, "Path") as path,
+                patch.object(checker.os, "geteuid", return_value=100, create=True),
+                patch.object(checker.os, "getegid", return_value=101, create=True),
+                patch.object(checker.os, "getgroups", return_value=[101], create=True),
+                patch.object(checker.shutil, "which", return_value=None),
+                patch.object(checker, "RESTRICTED_COMMANDS", ()),
+                patch.object(checker, "SCAN_ROOTS", ()),
+                patch.object(checker, "perl_archive_tar_readable", return_value=readable),
+            ):
+                path.return_value.read_text.return_value = "CapEff:0\nCapPrm:0\nNoNewPrivs:1"
+                result = checker.inspect_runtime()
+            self.assertEqual(result["blocked"], readable)
+            self.assertEqual(result["violation_counts"],
+                             {"perl_archive_tar_readable": 1} if readable else {})
+            with (
+                patch.object(checker, "inspect_runtime", return_value=result),
+                patch.object(checker.sys, "argv", ["verify-runtime-image.py"]),
+                patch.object(checker.sys, "stdout", new_callable=io.StringIO),
+            ):
+                self.assertEqual(checker.main(), 1 if readable else 0)

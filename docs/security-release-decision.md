@@ -1,7 +1,7 @@
 # Decision de seguridad para el piloto Muvv
 
 Fecha: 2026-09-14. Estado: BORRADOR PARA REVISION, NO AUTORIZA DESPLIEGUE.
-Revisor independiente y aprobador del riesgo: pendientes. No es un archivo
+Segunda revision por agente: realizada; aprobador del riesgo: pendiente. No es un archivo
 VEX ni una lista de excepciones consumida por CI.
 
 ## En palabras simples
@@ -62,7 +62,55 @@ se detallan en la matriz enlazada. Entre ellas:
 
 ## Orden para desbloquear el piloto
 
-1. Un revisor evalua las 13 filas con la evidencia exacta y senala errores o informacion faltante. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
+### Seguimiento de la segunda revision (2026-09-14)
+
+La revision independiente por agente no aprobo produccion. Identifico dos
+defectos en las herramientas de evidencia, corregidos localmente:
+
+- `verify-runtime-image.py`: un modulo Perl `Archive::Tar` legible ahora
+  genera una infraccion, bloquea el resultado y devuelve codigo de salida 1.
+  Antes solo informaba esa condicion sin impedir la aprobacion del control.
+- `report-native-symbols.py`: los nombres se validan y se comprueban contra
+  duplicados antes de omitir enlaces, directorios u otras entradas no regulares.
+  No se extraen archivos ni se siguen enlaces.
+
+Las pruebas nuevas reprodujeron los defectos antes de corregirlos. Despues
+pasaron 80 pruebas locales de controles de imagen, simbolos, reporte del
+escaner, verificador de backports y arranque. Cubren ambos ordenes de
+duplicacion, nombres inseguros y aceptacion de alias validos. Son pruebas
+locales, no una nueva ejecucion de la candidata Linux ni una prueba en Railway.
+
+La evidencia del hash XML, los descriptores privilegiados heredados, la
+presencia de herramientas ACL y los otros avisos siguen pendientes. La
+correccion de los controles no reduce por si sola las 45 coincidencias altas
+del ultimo escaneo. No se cambiaron excepciones ni umbrales del escaner.
+
+Antes de desplegar, conservar y promover exactamente la imagen aprobada,
+o volver a analizar la imagen que se reconstruya. La base Docker no esta
+fijada por digest y la instalacion de paquetes puede variar; un mismo commit
+no garantiza un paquete identico. El flujo actual conserva evidencia, no
+publica ni conserva la imagen completa para promocion.
+
+### Pasos restantes
+
+Preparacion local adicional de evidencia XML (2026-09-14): el verificador de
+backports ahora calcula SHA-256 de `pyexpat` y `_elementtree` y prueba ambos
+parsers con XML fijo y pequeno. El inventario ELF ahora incluye las funciones
+`XML_SetHashSalt` y `XML_SetHashSalt16Bytes`, separando imports de exports.
+Las pruebas locales del conjunto ampliado suman 86 aprobadas. La proxima
+corrida Linux existente ejecutara estos controles sin agregar dependencias
+ni modificar la imagen candidata para instrumentarla.
+
+Estos cambios preparan evidencia; aun no se ejecutaron en GitHub ni Railway.
+Comparar los hashes de las anotaciones del verificador con los archivos del
+artefacto ELF de la misma corrida. Tanto el comportamiento probado como los
+simbolos estaticos tienen limites: un XML valido no demuestra que se use la
+funcion de 16 bytes, y `_elementtree` la invoca indirectamente mediante la
+C API de `pyexpat`. Se mantienen `hash_salt_call_path_proven=false`,
+`xml_hash_entropy_behavior_tested=false` y `scanner_findings_waived=false`.
+No cerrar CVE-2026-7210 con esos datos sin evidencia adicional de la ruta.
+
+1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
 3. Antes de aplicar excepciones o aceptar riesgos residuales, presentar al propietario la decision concreta. Este documento no presupone esa aprobacion.
 4. Tras resolver la politica de seguridad, autorizar por separado el servicio temporal aislado y su presupuesto. Usar datos ficticios, base y bucket separados; comprobar TLS, UID/capacidades y comandos de mantenimiento en ese entorno.

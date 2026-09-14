@@ -1,6 +1,8 @@
 import importlib.util
+import hashlib
 import io
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -12,6 +14,52 @@ spec.loader.exec_module(checker)
 
 
 class PythonBackportVerifierTests(unittest.TestCase):
+    def test_native_module_identity_hashes_bounded_content(self):
+        path = Mock()
+        module = SimpleNamespace(__file__="synthetic.so")
+        with patch.object(checker, "Path", return_value=path):
+            path.resolve.return_value = path
+            path.open.return_value.__enter__ = Mock(return_value=io.BytesIO(b"native-test"))
+            path.open.return_value.__exit__ = Mock(return_value=False)
+            result = checker.module_identity(module)
+        self.assertEqual(result["sha256"], hashlib.sha256(b"native-test").hexdigest())
+        self.assertEqual(result["size"], 11)
+
+    def test_native_module_identity_rejects_empty_or_excessive_content(self):
+        for content in (b"", b"too-large"):
+            path = Mock()
+            path.resolve.return_value = path
+            path.open.return_value.__enter__ = Mock(return_value=io.BytesIO(content))
+            path.open.return_value.__exit__ = Mock(return_value=False)
+            with patch.object(checker, "Path", return_value=path), \
+                    patch.object(checker, "MAX_NATIVE_MODULE_BYTES", 4), self.assertRaises(ValueError):
+                checker.module_identity(SimpleNamespace(__file__="synthetic.so"))
+
+    def test_both_native_parsers_work_without_claiming_hash_salt_execution(self):
+        with patch.object(checker, "module_identity", return_value={"sha256": "synthetic"}):
+            result = checker.xml_native_evidence()
+        self.assertEqual(set(result["modules"]), {"pyexpat", "_elementtree"})
+        self.assertEqual(result["parse_checks"], {"pyexpat": True, "_elementtree": True})
+        self.assertFalse(result["hash_salt_call_path_proven"])
+
+    def test_native_identity_error_fails_closed_without_leaking_paths(self):
+        with patch.object(checker, "cookie_checks", return_value={"all": True}), \
+                patch.object(checker, "xml_recursion_is_bounded", return_value=True), \
+                patch.object(checker, "module_identity", side_effect=OSError("private-path")), \
+                patch.object(checker.sys, "stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(checker.main([]), 2)
+        self.assertNotIn("private-path", output.getvalue())
+
+    def test_failed_native_parse_blocks_evidence(self):
+        for failed in ("pyexpat", "_elementtree"):
+            evidence = {"parse_checks": {"pyexpat": True, "_elementtree": True}}
+            evidence["parse_checks"][failed] = False
+            with patch.object(checker, "cookie_checks", return_value={"all": True}), \
+                    patch.object(checker, "xml_recursion_is_bounded", return_value=True), \
+                    patch.object(checker, "version_requirements", return_value={"all": True}), \
+                    patch.object(checker, "xml_native_evidence", return_value=evidence):
+                self.assertTrue(checker.collect_evidence()["blocked"])
+
     def test_reviewed_versions_required_without_accepting_other_series(self):
         self.assertTrue(all(checker.version_requirements("cpython", (3, 11, 16), "final", (2, 8, 3)).values()))
         for implementation, version, level, expat in (

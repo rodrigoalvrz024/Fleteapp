@@ -101,6 +101,8 @@ def inspect_runtime():
         if evidence["blocked"]:
             violations.append({"reason": "unneeded_system_tool_accessible", "path": command})
     archive_tar_readable = perl_archive_tar_readable()
+    if archive_tar_readable:
+        violations.append({"reason": "perl_archive_tar_readable"})
 
     inspected = 0
 

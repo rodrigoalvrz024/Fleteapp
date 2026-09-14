@@ -21,7 +21,10 @@ def archive_bytes(entries):
     with tarfile.open(fileobj=result, mode="w") as archive:
         for name, data in entries:
             member = tarfile.TarInfo(name)
-            if data is None:
+            if isinstance(data, tarfile.TarInfo):
+                data.name = name
+                archive.addfile(data)
+            elif data is None:
                 member.type = tarfile.SYMTYPE
                 member.linkname = "/outside/not-read"
                 archive.addfile(member)
@@ -52,9 +55,24 @@ class NativeSymbolReportTests(unittest.TestCase):
         self.assertEqual(reporter.symbol_evidence([])["symbol_tables"], 0)
 
     def test_known_symbols_include_aliases_and_runtime_lookup(self):
+        self.assertEqual(reporter.SYMBOL_GROUPS["xml_hash"], {"XML_SetHashSalt", "XML_SetHashSalt16Bytes"})
         self.assertIn("__fp_nquery", reporter.WATCHED)
         self.assertIn("dlsym", reporter.SYMBOL_GROUPS["dynamic_lookup"])
         self.assertIn("gz_vacate", reporter.WATCHED)
+
+    def test_xml_provider_export_is_not_reported_as_a_caller(self):
+        symbol = "XML_SetHashSalt16Bytes"
+        report = {"image_id": IMAGE, "counts": {"elf_files": 2}, "files": [
+            {"path": "/provider.so", "imports": [], "exports": [symbol]},
+            {"path": "/pyexpat.so", "imports": [symbol], "exports": []},
+        ]}
+        with patch.object(reporter.sys, "stdout", new_callable=io.StringIO) as output:
+            reporter.annotations(report)
+        line = next(line for line in output.getvalue().splitlines() if '"group": "xml_hash"' in line)
+        payload = json.loads(line.split("::", 2)[2])
+        self.assertEqual(payload["caller_files"], 1)
+        self.assertEqual(payload["callers"][0]["path"], "/pyexpat.so")
+        self.assertIn("do not prove the selected runtime branch", reporter.summary(report))
 
     def test_inventory_records_hashes_and_does_not_follow_links_or_read_non_elf_contents(self):
         evidence = {"symbol_tables": 0, "imports": [], "exports": [], "needed": []}
@@ -89,6 +107,49 @@ class NativeSymbolReportTests(unittest.TestCase):
         with patch.object(reporter, "MAX_MEMBERS", 1), self.assertRaises(ValueError):
             self.collect([("one", b"x"), ("two", b"y")])
 
+    def test_all_entry_types_reject_duplicate_paths_in_either_order(self):
+        for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.DIRTYPE,
+                     tarfile.FIFOTYPE, tarfile.CHRTYPE):
+            for reverse in (False, True):
+                member = tarfile.TarInfo()
+                member.type = kind
+                member.linkname = "usr/target"
+                entries = [("./usr/test", ELF), ("usr/test", member)]
+                if reverse:
+                    entries.reverse()
+                with (
+                    self.subTest(kind=kind, reverse=reverse),
+                    patch.object(reporter, "inspect_elf", return_value={}),
+                    self.assertRaisesRegex(ValueError, "Duplicate archive path"),
+                ):
+                    self.collect(entries)
+
+    def test_nonregular_entries_reject_unsafe_names(self):
+        for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.DIRTYPE, tarfile.FIFOTYPE):
+            for name in ("../file", "/etc/file", "usr/../file", "a\nname"):
+                member = tarfile.TarInfo()
+                member.type = kind
+                member.linkname = "usr/target"
+                with (
+                    self.subTest(kind=kind, name=name),
+                    patch.object(reporter, "inspect_elf", return_value={}),
+                    self.assertRaisesRegex(ValueError, "Invalid archive path"),
+                ):
+                    self.collect([("usr/valid", ELF), (name, member)])
+
+    def test_distinct_directories_and_link_aliases_remain_allowed(self):
+        directory = tarfile.TarInfo()
+        directory.type = tarfile.DIRTYPE
+        hardlink = tarfile.TarInfo()
+        hardlink.type = tarfile.LNKTYPE
+        hardlink.linkname = "usr/test"
+        with patch.object(reporter, "inspect_elf", return_value={}) as inspect:
+            result = self.collect([("usr", directory), ("usr/test", ELF),
+                                   ("usr/hard", hardlink), ("usr/soft", None)])
+        inspect.assert_called_once_with(ELF)
+        self.assertEqual(result["counts"], {"archive_members": 4, "regular_files": 1,
+                                           "link_aliases_not_resolved": 2, "elf_files": 1})
+
     def test_parser_failure_is_not_reported_as_absence(self):
         with patch.object(reporter, "inspect_elf", side_effect=ValueError("bad ELF")), self.assertRaises(ValueError):
             self.collect([("broken", ELF)])
@@ -117,7 +178,7 @@ class NativeSymbolReportTests(unittest.TestCase):
         with patch.object(reporter.sys, "stdout", new_callable=io.StringIO) as output:
             reporter.annotations(report)
         lines = output.getvalue().splitlines()
-        self.assertEqual(len(lines), 4)
+        self.assertEqual(len(lines), len(reporter.SYMBOL_GROUPS))
         gzip_line = next(line for line in lines if '"group": "gzip_write"' in line)
         self.assertIn('"omitted_from_annotation": 8', gzip_line)
         self.assertIn("%25", gzip_line)

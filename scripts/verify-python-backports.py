@@ -1,9 +1,12 @@
 """Collect bounded CPython backport evidence; never waive scanner findings."""
 
 import argparse
+import _elementtree
+import hashlib
 from http import cookies
 import json
 import operator
+from pathlib import Path
 import pyexpat
 import sys
 
@@ -13,6 +16,44 @@ COOKIE_CASES = (
     "js_key", "js_coded_value",
 )
 CONTROL_CHARACTERS = tuple(map(chr, (*range(32), 127)))
+MAX_NATIVE_MODULE_BYTES = 64 * 1024 * 1024
+
+
+def module_identity(module):
+    path = Path(module.__file__).resolve(strict=True)
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_NATIVE_MODULE_BYTES:
+                raise ValueError("Native module exceeds evidence limit")
+            digest.update(chunk)
+    if not size:
+        raise ValueError("Empty native module")
+    return {"path": str(path), "sha256": digest.hexdigest(), "size": size}
+
+
+def xml_native_evidence():
+    # Exercise both native parsers with fixed input, without external entities or secret values.
+    data = b'<root status="synthetic"><item>ok</item></root>'
+    elements = []
+    parser = pyexpat.ParserCreate()
+    parser.StartElementHandler = lambda name, attrs: elements.append(name)
+    parser.Parse(data, True)
+    tree_parser = _elementtree.XMLParser()
+    tree_parser.feed(data)
+    root = tree_parser.close()
+    return {
+        "modules": {module.__name__: module_identity(module)
+                    for module in (pyexpat, _elementtree)},
+        "parse_checks": {
+            "pyexpat": elements == ["root", "item"],
+            "_elementtree": (root.tag == "root" and root.get("status") == "synthetic"
+                             and len(root) == 1 and root[0].tag == "item" and root[0].text == "ok"),
+        },
+        "hash_salt_call_path_proven": False,
+    }
 
 
 def cookie_rejects(case, character):
@@ -89,6 +130,7 @@ def version_requirements(implementation, version, releaselevel, expat_version):
 def collect_evidence():
     cookie_results = cookie_checks()
     xml_result = xml_recursion_is_bounded()
+    native_xml = xml_native_evidence()
     requirements = version_requirements(
         sys.implementation.name, sys.version_info[:3], sys.version_info.releaselevel,
         pyexpat.version_info,
@@ -99,12 +141,14 @@ def collect_evidence():
         "cookie_controls_tested": len(CONTROL_CHARACTERS),
         "cookie_checks": cookie_results,
         "xml_recursion_guard": xml_result,
+        "xml_native_evidence": native_xml,
         "version_requirements": requirements,
         # Version evidence is not a dynamic entropy test for CVE-2026-7210.
         "xml_hash_entropy_behavior_tested": False,
         "scanner_findings_waived": False,
         "blocked": not (all(value is True for value in cookie_results.values())
-                        and xml_result is True and all(requirements.values())),
+                        and xml_result is True and all(requirements.values())
+                        and all(value is True for value in native_xml["parse_checks"].values())),
     }
 
 

@@ -11,6 +11,7 @@ import tarfile
 
 
 SYMBOL_GROUPS = {
+    "xml_hash": {"XML_SetHashSalt", "XML_SetHashSalt16Bytes"},
     "legacy_dns": {"ns_printrr", "ns_printrrf", "fp_nquery", "__ns_printrr", "__ns_printrrf", "__fp_nquery"},
     "acl": {"acl_get_file", "acl_set_file", "acl_delete_def_file", "acl_extended_file", "acl_extended_file_nofollow"},
     "gzip_write": {"gzwrite", "gzprintf", "gzvprintf", "gzputs", "gzputc", "gzflush", "gzclose", "gzclose_w", "gz_vacate"},
@@ -23,6 +24,7 @@ LIMITATIONS = [
     "Static symbol evidence only: imports are possible calls, not proof of exploitation.",
     "No import is NOT proof of absence: static/inlined/hidden code and runtime symbol lookup can bypass this inventory.",
     "Exports identify providers, not callers; stripped internal functions may be absent from symbol tables.",
+    "XML hash symbols do not prove the selected runtime branch; ElementTree can call through the pyexpat C API.",
     "All regular ELF files are inspected, including root-only tools; symlink/hardlink aliases are counted but not resolved.",
     "This does not trace requests, resolve loader search paths, test host privileges, approve CVEs, or alter the scanner gate.",
 ]
@@ -77,15 +79,15 @@ def collect(archive, image_id):
         members += 1
         if members > MAX_MEMBERS:
             raise ValueError("Archive member limit exceeded")
+        name = canonical_name(member.name)
+        if name in names:
+            raise ValueError("Duplicate archive path")
+        names.add(name)
         if member.issym() or member.islnk():
             links += 1
         if not member.isfile():
             continue
         regular += 1
-        name = canonical_name(member.name)
-        if name in names:
-            raise ValueError("Duplicate archive path")
-        names.add(name)
         with archive.extractfile(member) as stream:
             if stream.read(4) != b"\x7fELF":
                 continue
