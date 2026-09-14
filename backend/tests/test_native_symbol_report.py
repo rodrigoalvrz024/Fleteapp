@@ -55,7 +55,9 @@ class NativeSymbolReportTests(unittest.TestCase):
         self.assertEqual(reporter.symbol_evidence([])["symbol_tables"], 0)
 
     def test_known_symbols_include_aliases_and_runtime_lookup(self):
-        self.assertEqual(reporter.SYMBOL_GROUPS["xml_hash"], {"XML_SetHashSalt", "XML_SetHashSalt16Bytes"})
+        self.assertEqual(reporter.SYMBOL_GROUPS["xml_hash"], {
+            "XML_SetHashSalt", "XML_SetHashSalt16Bytes",
+            "PyExpat_XML_SetHashSalt", "PyExpat_XML_SetHashSalt16Bytes"})
         self.assertIn("__fp_nquery", reporter.WATCHED)
         self.assertIn("dlsym", reporter.SYMBOL_GROUPS["dynamic_lookup"])
         self.assertIn("gz_vacate", reporter.WATCHED)

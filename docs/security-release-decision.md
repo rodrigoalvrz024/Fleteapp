@@ -110,6 +110,28 @@ C API de `pyexpat`. Se mantienen `hash_salt_call_path_proven=false`,
 `xml_hash_entropy_behavior_tested=false` y `scanner_findings_waived=false`.
 No cerrar CVE-2026-7210 con esos datos sin evidencia adicional de la ruta.
 
+La corrida de `3413ef6`, [34862145209](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34862145209),
+aprobo pruebas, permisos, arranque e inventario. El escaner mantuvo 45 High
+de 13 CVE y bloqueo la candidata. Imagen:
+`sha256:fc53ab0c85785d742e7f80b890665b5a608959611e718dff985ef77c14833cc8`.
+El inventario no observo imports XML coincidentes; no demuestra ausencia
+del codigo, en particular cuando Expat esta integrado o usa nombres privados.
+
+El siguiente control preparado lee solo metadatos de la capsula C API que
+`pyexpat` comparte con `_elementtree`: version de cabeceras al compilar,
+tamano de estructura y disponibilidad de la funcion de 16 bytes. Se limita
+al ABI Linux CPython 3.11.16 de 64 bits y valida capsula, firma y tamano antes
+de leer la estructura completa. No escribe memoria, llama punteros Expat,
+lee entropia ni publica direcciones de memoria. Una version futura requiere
+revision del control en lugar de interpretar un layout desconocido.
+Se agregan los nombres privados `PyExpat_XML_*` al inventario estatico.
+Las 91 pruebas locales pasan; falta ejecutar este control en Linux.
+
+Referencia de layout: [Include/pyexpat.h de CPython 3.11.16](https://github.com/python/cpython/blob/v3.11.16/Include/pyexpat.h).
+La disponibilidad en C API es evidencia mas precisa que la version de la
+biblioteca, pero no es un registro de llamadas ni una medida de entropia;
+`hash_salt_call_path_proven` sigue siendo falso y no habilita excepciones.
+
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
 3. Antes de aplicar excepciones o aceptar riesgos residuales, presentar al propietario la decision concreta. Este documento no presupone esa aprobacion.

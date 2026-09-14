@@ -2,6 +2,7 @@
 
 import argparse
 import _elementtree
+import ctypes
 import hashlib
 from http import cookies
 import json
@@ -17,6 +18,68 @@ COOKIE_CASES = (
 )
 CONTROL_CHARACTERS = tuple(map(chr, (*range(32), 127)))
 MAX_NATIVE_MODULE_BYTES = 64 * 1024 * 1024
+EXPAT_CAPSULE_NAME = b"pyexpat.expat_CAPI"
+EXPAT_CAPI_MAGIC = b"pyexpat.expat_CAPI 1.1\0"
+
+
+class ExpatCapiHeader(ctypes.Structure):
+    _fields_ = [("magic", ctypes.c_void_p), ("size", ctypes.c_int),
+                ("major", ctypes.c_int), ("minor", ctypes.c_int), ("micro", ctypes.c_int)]
+
+
+# Append-only layout reviewed against CPython v3.11.16 Include/pyexpat.h.
+CAPI_FUNCTIONS = (
+    "ErrorString", "GetErrorCode", "GetErrorColumnNumber", "GetErrorLineNumber",
+    "Parse", "ParserCreate_MM", "ParserFree", "SetCharacterDataHandler",
+    "SetCommentHandler", "SetDefaultHandlerExpand", "SetElementHandler",
+    "SetNamespaceDeclHandler", "SetProcessingInstructionHandler", "SetUnknownEncodingHandler",
+    "SetUserData", "SetStartDoctypeDeclHandler", "SetEncoding", "DefaultUnknownEncodingHandler",
+    "SetHashSalt", "SetReparseDeferralEnabled", "SetAllocTrackerActivationThreshold",
+    "SetAllocTrackerMaximumAmplification", "SetBillionLaughsAttackProtectionActivationThreshold",
+    "SetBillionLaughsAttackProtectionMaximumAmplification", "SetHashSalt16Bytes",
+)
+
+
+class ExpatCapi(ctypes.Structure):
+    _fields_ = ExpatCapiHeader._fields_ + [(name, ctypes.c_void_p) for name in CAPI_FUNCTIONS]
+
+
+def capi_snapshot(address):
+    # Only called with a validated capsule owned by this interpreter, never external addresses.
+    if not address:
+        raise ValueError("Missing Expat C API")
+    header = ExpatCapiHeader.from_buffer_copy(ctypes.string_at(address, ctypes.sizeof(ExpatCapiHeader)))
+    if header.size != ctypes.sizeof(ExpatCapi) or not header.magic:
+        raise ValueError("Unreviewed Expat C API layout")
+    if ctypes.string_at(header.magic, len(EXPAT_CAPI_MAGIC)) != EXPAT_CAPI_MAGIC:
+        raise ValueError("Unreviewed Expat C API signature")
+    return ExpatCapi.from_buffer_copy(ctypes.string_at(address, header.size))
+
+
+def expat_capi_evidence():
+    if (sys.platform != "linux" or sys.implementation.name != "cpython"
+            or sys.version_info[:3] != (3, 11, 16) or sys.version_info.releaselevel != "final"
+            or ctypes.sizeof(ctypes.c_void_p) != 8):
+        raise RuntimeError("Expat C API probe requires reviewed Linux CPython 3.11.16 ABI")
+    valid = ctypes.pythonapi.PyCapsule_IsValid
+    valid.argtypes = [ctypes.py_object, ctypes.c_char_p]
+    valid.restype = ctypes.c_int
+    capsule = pyexpat.expat_CAPI
+    if valid(capsule, EXPAT_CAPSULE_NAME) != 1:
+        raise ValueError("Invalid Expat capsule")
+    pointer = ctypes.pythonapi.PyCapsule_GetPointer
+    pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+    pointer.restype = ctypes.c_void_p
+    api = capi_snapshot(pointer(capsule, EXPAT_CAPSULE_NAME))
+    return {
+        "compiled_expat_version": [api.major, api.minor, api.micro],
+        "reviewed_layout_size": api.size,
+        "salt_16_bytes_available": bool(api.SetHashSalt16Bytes),
+        "legacy_salt_available": bool(api.SetHashSalt),
+        "ready": (api.major, api.minor, api.micro) >= (2, 8, 0) and bool(api.SetHashSalt16Bytes),
+        "method": "read_only_validated_capi_metadata",
+        "hash_salt_call_path_proven": False,
+    }
 
 
 def module_identity(module):
@@ -131,6 +194,7 @@ def collect_evidence():
     cookie_results = cookie_checks()
     xml_result = xml_recursion_is_bounded()
     native_xml = xml_native_evidence()
+    capi = expat_capi_evidence()
     requirements = version_requirements(
         sys.implementation.name, sys.version_info[:3], sys.version_info.releaselevel,
         pyexpat.version_info,
@@ -142,13 +206,15 @@ def collect_evidence():
         "cookie_checks": cookie_results,
         "xml_recursion_guard": xml_result,
         "xml_native_evidence": native_xml,
+        "xml_capi_evidence": capi,
         "version_requirements": requirements,
         # Version evidence is not a dynamic entropy test for CVE-2026-7210.
         "xml_hash_entropy_behavior_tested": False,
         "scanner_findings_waived": False,
         "blocked": not (all(value is True for value in cookie_results.values())
                         and xml_result is True and all(requirements.values())
-                        and all(value is True for value in native_xml["parse_checks"].values())),
+                        and all(value is True for value in native_xml["parse_checks"].values())
+                        and capi["ready"] is True),
     }
 
 

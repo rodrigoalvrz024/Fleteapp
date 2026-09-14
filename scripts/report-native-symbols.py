@@ -11,7 +11,8 @@ import tarfile
 
 
 SYMBOL_GROUPS = {
-    "xml_hash": {"XML_SetHashSalt", "XML_SetHashSalt16Bytes"},
+    "xml_hash": {"XML_SetHashSalt", "XML_SetHashSalt16Bytes",
+                 "PyExpat_XML_SetHashSalt", "PyExpat_XML_SetHashSalt16Bytes"},
     "legacy_dns": {"ns_printrr", "ns_printrrf", "fp_nquery", "__ns_printrr", "__ns_printrrf", "__fp_nquery"},
     "acl": {"acl_get_file", "acl_set_file", "acl_delete_def_file", "acl_extended_file", "acl_extended_file_nofollow"},
     "gzip_write": {"gzwrite", "gzprintf", "gzvprintf", "gzputs", "gzputc", "gzflush", "gzclose", "gzclose_w", "gz_vacate"},
