@@ -78,6 +78,8 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         runtime = self.dockerfile.split("FROM ${PYTHON_RUNTIME_IMAGE} AS trial", 1)[1]
         self.assertIn("'/usr/bin/infocmp', '/bin/infocmp'", runtime)
         self.assertIn("unlink(missing_ok=True)", runtime)
+        self.assertIn("os.chown('/app', 0, 0)", runtime)
+        self.assertIn("os.chmod('/app', 0o755)", runtime)
         self.assertLess(runtime.index("unlink"), runtime.index("USER 65532:65532"))
         self.assertNotIn("/var/lib/dpkg", runtime)
 

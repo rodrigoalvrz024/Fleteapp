@@ -155,6 +155,10 @@ def main():
     print(json.dumps(result, indent=2))
     if args.github_annotation:
         summary = {key: value for key, value in result.items() if key != "violations"}
+        if result.get("profile") == "dhi":
+            summary["violation_examples"] = [
+                {"reason": row["reason"], "path": row.get("path", "")[:200]}
+                for row in result["violations"][:8]]
         level = "error" if result["blocked"] else "notice"
         print(f"::{level} title=Runtime image security::{json.dumps(summary)}")
     return 1 if result["blocked"] else 0

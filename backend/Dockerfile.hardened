@@ -26,7 +26,7 @@ COPY --from=build --chown=0:0 /opt/muvv-venv /opt/muvv-venv
 COPY --from=build --chown=0:0 /app /app
 # No shell is needed to remove this unused vulnerable terminal-analysis tool.
 USER 0:0
-RUN ["/opt/muvv-venv/bin/python", "-I", "-B", "-c", "from pathlib import Path; [Path(p).unlink(missing_ok=True) for p in ('/usr/bin/infocmp', '/bin/infocmp')]"]
+RUN ["/opt/muvv-venv/bin/python", "-I", "-B", "-c", "import os; from pathlib import Path; os.chown('/app', 0, 0); os.chmod('/app', 0o755); [Path(p).unlink(missing_ok=True) for p in ('/usr/bin/infocmp', '/bin/infocmp')]"]
 USER 65532:65532
 ENTRYPOINT []
 CMD ["/opt/muvv-venv/bin/python", "-m", "app.server"]
