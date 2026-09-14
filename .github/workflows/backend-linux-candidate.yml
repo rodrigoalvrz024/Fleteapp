@@ -188,6 +188,27 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Observe XML calls in isolated containers with a host debugger
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v gdb > /dev/null; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends gdb
+          fi
+          image_id="$(docker image inspect muvv-backend:candidate --format '{{.Id}}')"
+          mkdir -p "$RUNNER_TEMP/xml-call-evidence"
+          timeout --signal=TERM --kill-after=10s 180s python3 -B scripts/trace-xml-calls.py \
+            --image-id "$image_id" --output "$RUNNER_TEMP/xml-call-evidence/report.json" --github-annotation
+
+      - name: Preserve XML call evidence without addresses or secret values
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: xml-call-evidence
+          path: ${{ runner.temp }}/xml-call-evidence/report.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Scan OS and Python packages in the tested image
         shell: bash
         run: |

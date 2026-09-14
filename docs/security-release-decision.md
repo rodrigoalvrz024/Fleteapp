@@ -148,6 +148,30 @@ El inventario sigue sin imports XML observables, incluso con los alias:
 no usarlo como prueba de ausencia. El escaner termina bloqueado con 45 High,
 49 Medium y 0 Critical. No se aplicaron excepciones ni cambios en Railway.
 
+## Prueba de ejecucion XML preparada
+
+Se agrega una observacion mediante GDB en el host temporal de GitHub, no en
+el contenedor publicado. Dos contenedores desechables de la imagen exacta
+ejecutan tres constructores y lecturas XML sinteticas cada uno. Se ejecutan
+sin red, sin credenciales, sin capacidades, con filesystem de solo lectura
+y limites de memoria, CPU, procesos y tiempo. Se eliminan al terminar.
+
+El observador valida PID, hashes de ambos modulos y que las direcciones de
+las funciones correspondan al mapeo ejecutable de `pyexpat`. Usa breakpoints
+de hardware en la funcion de 16 bytes y la heredada, sin leer argumentos de
+entropia. Solo publica hashes y contadores; el control con direcciones y los
+logs internos permanecen temporales y no se suben como artefactos.
+
+El resultado exige tres llamadas nuevas, cero heredadas, tres lecturas
+correctas, mismos hashes y salida normal para cada procesador. Un debugger
+no disponible, layout diferente, fallo de permisos, optimizacion que impida
+observar la funcion o cualquier observacion incompleta bloquea esta prueba;
+no se considera una demostracion de vulnerabilidad por si solo.
+
+Esto no mide calidad aleatoria, resistencia estadistica ni todos los usos XML.
+Tampoco aplica exclusiones al escaner. Se prepararon 97 pruebas locales;
+la observacion de hardware requiere validacion Linux en CI.
+
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
 3. Antes de aplicar excepciones o aceptar riesgos residuales, presentar al propietario la decision concreta. Este documento no presupone esa aprobacion.

@@ -56,7 +56,7 @@ def capi_snapshot(address):
     return ExpatCapi.from_buffer_copy(ctypes.string_at(address, header.size))
 
 
-def expat_capi_evidence():
+def validated_expat_capi_address():
     if (sys.platform != "linux" or sys.implementation.name != "cpython"
             or sys.version_info[:3] != (3, 11, 16) or sys.version_info.releaselevel != "final"
             or ctypes.sizeof(ctypes.c_void_p) != 8):
@@ -70,7 +70,13 @@ def expat_capi_evidence():
     pointer = ctypes.pythonapi.PyCapsule_GetPointer
     pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
     pointer.restype = ctypes.c_void_p
-    api = capi_snapshot(pointer(capsule, EXPAT_CAPSULE_NAME))
+    address = pointer(capsule, EXPAT_CAPSULE_NAME)
+    capi_snapshot(address)
+    return address
+
+
+def expat_capi_evidence():
+    api = capi_snapshot(validated_expat_capi_address())
     return {
         "compiled_expat_version": [api.major, api.minor, api.micro],
         "reviewed_layout_size": api.size,
