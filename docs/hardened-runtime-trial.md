@@ -89,3 +89,16 @@ planes pagados; no se presupone acceso ni necesidad de contratarlos.
 
 La aprobacion pendiente de los tres arreglos Python es independiente de esta
 evaluacion. No se interpreto "sigamos" como autorizacion para excluirlos.
+
+## Resultado del primer intento
+
+Commit preparado: `02305a6956c764b7a93bb714c1d3d42dec945899`.
+[Evaluacion DHI 34872463423](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34872463423)
+bloqueada en `Require read-only registry access`: falta uno o ambos secretos.
+Checkout, descargas, build, pruebas y escaner de la alternativa no se ejecutaron.
+No es un fallo de la API ni evidencia de que DHI tenga cero vulnerabilidades.
+
+La [candidata actual 34872463273](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34872463273)
+paso pruebas, arranque, permisos, inventario y traza. Su escaner mantuvo 45 High,
+49 Medium y 0 Critical (155 coincidencias), sin cambios de politica.
+Imagen actual comprobada: `sha256:390888a331a9a12e4bd9ddd1507bc7a09e4445150b8e0c75e2b387883b7ee525`.
