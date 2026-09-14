@@ -36,6 +36,29 @@ def archive_bytes(entries):
 
 
 class NativeSymbolReportTests(unittest.TestCase):
+    def test_component_inventory_distinguishes_tools_from_libraries_and_counts_aliases(self):
+        with patch.object(reporter, "inspect_elf", return_value={"imports": [], "exports": []}):
+            result = self.collect([("usr/lib/libacl.so", ELF), ("usr/bin/getfacl", ELF),
+                                   ("usr/bin/nsenter", None), ("opt/Archive/Tar.pm", b"module"),
+                                   ("other/Tar.pm", b"unrelated"), ("opt/infocmp", ELF)])
+        components = result["component_inventory"]
+        self.assertEqual(components["getfacl"], ["/usr/bin/getfacl"])
+        self.assertEqual(components["nsenter"], ["/usr/bin/nsenter"])
+        self.assertEqual(components["infocmp"], ["/opt/infocmp"])
+        self.assertEqual(components["perl_archive_tar"], ["/opt/Archive/Tar.pm"])
+        self.assertEqual(components["setfacl"], [])
+        self.assertEqual(components["chacl"], [])
+
+    def test_component_annotation_retains_scope_counts_and_bounded_paths(self):
+        report = {"image_id": IMAGE, "counts": {"elf_files": 1}, "files": [],
+                  "component_inventory": {"infocmp": [f"/copy{i}/infocmp" for i in range(15)]}}
+        with patch.object(reporter.sys, "stdout", new_callable=io.StringIO) as output:
+            reporter.annotations(report)
+        payload = json.loads(output.getvalue().splitlines()[0].split("::", 2)[2])
+        self.assertEqual(payload["scope"], "known_names_in_effective_filesystem")
+        self.assertEqual(payload["components"]["infocmp"]["count"], 15)
+        self.assertEqual(len(payload["components"]["infocmp"]["paths"]), 12)
+
     def collect(self, entries, image=IMAGE):
         with tarfile.open(fileobj=archive_bytes(entries), mode="r:") as archive:
             return reporter.collect(archive, image)

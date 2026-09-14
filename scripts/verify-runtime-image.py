@@ -14,7 +14,7 @@ import sys
 REMOVED_COMMANDS = ("mount", "umount", "swapon", "swapoff", "losetup")
 PROTECTED_ROOTS = (Path("/app"), Path("/usr/local"))
 SCAN_ROOTS = (Path("/usr"), Path("/app"))
-RESTRICTED_COMMANDS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
+REMOVED_TOOL_PATHS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
 
 
 def is_legacy_openssl_library(name):
@@ -55,17 +55,12 @@ def process_security(status):
             "no_new_privileges": int(fields["NoNewPrivs"].strip())}
 
 
-def inspect_restricted_command(path):
+def inspect_removed_tool(path):
     try:
-        metadata = path.lstat()
+        path.lstat()
     except FileNotFoundError:
         return {"present": False, "blocked": False}
-    readable = os.access(path, os.R_OK)
-    executable = os.access(path, os.X_OK)
-    restricted = (stat.S_ISREG(metadata.st_mode) and metadata.st_uid == 0
-                  and not metadata.st_mode & 0o077)
-    return {"present": True, "readable_by_app": readable, "executable_by_app": executable,
-            "blocked": not restricted or readable or executable}
+    return {"present": True, "blocked": True}
 
 
 def perl_archive_tar_readable():
@@ -96,10 +91,10 @@ def inspect_runtime():
     for command in REMOVED_COMMANDS:
         if shutil.which(command):
             violations.append({"reason": "unneeded_mount_command", "path": command})
-    restricted_commands = {path.name: inspect_restricted_command(path) for path in RESTRICTED_COMMANDS}
-    for command, evidence in restricted_commands.items():
+    removed_tools = {path.name: inspect_removed_tool(path) for path in REMOVED_TOOL_PATHS}
+    for command, evidence in removed_tools.items():
         if evidence["blocked"]:
-            violations.append({"reason": "unneeded_system_tool_accessible", "path": command})
+            violations.append({"reason": "removed_system_tool_present", "path": command})
     archive_tar_readable = perl_archive_tar_readable()
     if archive_tar_readable:
         violations.append({"reason": "perl_archive_tar_readable"})
@@ -125,7 +120,7 @@ def inspect_runtime():
                 violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
                 inspected += 1
     return {"uid": os.geteuid(), "gid": os.getegid(), **process,
-            "restricted_commands": restricted_commands,
+            "removed_tools": removed_tools,
             "perl_archive_tar_readable": archive_tar_readable,
             "inspected_entries": inspected, "blocked": bool(violations),
             "violation_counts": dict(Counter(item["reason"] for item in violations)),

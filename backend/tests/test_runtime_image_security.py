@@ -58,30 +58,21 @@ class RuntimeImageSecurityTests(unittest.TestCase):
             with self.assertRaises((KeyError, ValueError)):
                 checker.process_security(status)
 
-    def test_restricted_tool_is_unreadable_and_unexecutable_by_app(self):
-        path = Mock()
-        path.lstat.return_value = SimpleNamespace(st_mode=stat.S_IFREG | 0o700, st_uid=0)
-        with patch.object(checker.os, "access", return_value=False):
-            self.assertFalse(checker.inspect_restricted_command(path)["blocked"])
-        for access in ((True, False), (False, True)):
-            with patch.object(checker.os, "access", side_effect=access):
-                self.assertTrue(checker.inspect_restricted_command(path)["blocked"])
-
-    def test_restricted_tool_rejects_wrong_owner_permissions_and_symlink(self):
-        for uid, mode in ((100, stat.S_IFREG | 0o700), (0, stat.S_IFREG | 0o750),
-                          (0, stat.S_IFLNK | 0o777)):
+    def test_removed_tool_rejects_even_root_only_inaccessible_files_and_links(self):
+        for uid, mode in ((0, stat.S_IFREG | 0o700), (0, stat.S_IFREG),
+                          (100, stat.S_IFREG | 0o700), (0, stat.S_IFLNK | 0o777)):
             path = Mock()
             path.lstat.return_value = SimpleNamespace(st_mode=mode, st_uid=uid)
             with patch.object(checker.os, "access", return_value=False):
-                self.assertTrue(checker.inspect_restricted_command(path)["blocked"])
+                self.assertEqual(checker.inspect_removed_tool(path), {"present": True, "blocked": True})
 
-    def test_missing_restricted_tool_is_allowed_but_inspection_failure_is_not(self):
+    def test_missing_removed_tool_is_allowed_but_inspection_failure_is_not(self):
         path = Mock()
         path.lstat.side_effect = FileNotFoundError()
-        self.assertEqual(checker.inspect_restricted_command(path), {"present": False, "blocked": False})
+        self.assertEqual(checker.inspect_removed_tool(path), {"present": False, "blocked": False})
         path.lstat.side_effect = PermissionError()
         with self.assertRaises(PermissionError):
-            checker.inspect_restricted_command(path)
+            checker.inspect_removed_tool(path)
 
     def test_perl_probe_uses_fixed_command_and_clean_environment(self):
         for answer, expected in (("present\n", True), ("absent\n", False)):
@@ -96,28 +87,37 @@ class RuntimeImageSecurityTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 checker.perl_archive_tar_readable()
 
-    def test_perl_readability_controls_runtime_verdict_and_exit_code(self):
-        for readable in (False, True):
+    def test_component_presence_controls_runtime_verdict_and_exit_code(self):
+        for readable, removed_present in ((False, False), (True, False), (False, True), (True, True)):
+            removed_path = Mock(name="removed_path")
+            removed_path.name = "nsenter"
             with (
-                self.subTest(readable=readable),
+                self.subTest(readable=readable, removed_present=removed_present),
                 patch.object(checker.sys, "platform", "linux"),
                 patch.object(checker, "Path") as path,
                 patch.object(checker.os, "geteuid", return_value=100, create=True),
                 patch.object(checker.os, "getegid", return_value=101, create=True),
                 patch.object(checker.os, "getgroups", return_value=[101], create=True),
                 patch.object(checker.shutil, "which", return_value=None),
-                patch.object(checker, "RESTRICTED_COMMANDS", ()),
+                patch.object(checker, "REMOVED_TOOL_PATHS", (removed_path,)),
+                patch.object(checker, "inspect_removed_tool", return_value={
+                    "present": removed_present, "blocked": removed_present}),
                 patch.object(checker, "SCAN_ROOTS", ()),
                 patch.object(checker, "perl_archive_tar_readable", return_value=readable),
             ):
                 path.return_value.read_text.return_value = "CapEff:0\nCapPrm:0\nNoNewPrivs:1"
                 result = checker.inspect_runtime()
-            self.assertEqual(result["blocked"], readable)
-            self.assertEqual(result["violation_counts"],
-                             {"perl_archive_tar_readable": 1} if readable else {})
+            blocked = readable or removed_present
+            self.assertEqual(result["blocked"], blocked)
+            reasons = {}
+            if readable:
+                reasons["perl_archive_tar_readable"] = 1
+            if removed_present:
+                reasons["removed_system_tool_present"] = 1
+            self.assertEqual(result["violation_counts"], reasons)
             with (
                 patch.object(checker, "inspect_runtime", return_value=result),
                 patch.object(checker.sys, "argv", ["verify-runtime-image.py"]),
                 patch.object(checker.sys, "stdout", new_callable=io.StringIO),
             ):
-                self.assertEqual(checker.main(), 1 if readable else 0)
+                self.assertEqual(checker.main(), 1 if blocked else 0)

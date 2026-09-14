@@ -200,6 +200,37 @@ sigue fallando unicamente por el escaner: 45 High, 49 Medium, 0 Critical,
 El siguiente frente son los componentes del sistema pendientes (glibc, ACL,
 util-linux, ncurses, Perl y zlib), no repetir la misma comprobacion XML.
 
+## Retirada de herramientas no utilizadas
+
+Preparacion del 2026-09-14: el backend y sus migraciones no contienen usos
+de `infocmp` ni `nsenter`. Se retiran exactamente `/usr/bin/infocmp` y
+`/usr/bin/nsenter` del filesystem efectivo de la imagen candidata, despues
+de instalar sus dependencias. Antes estaban presentes con permisos 0700;
+ahora el verificador exige ausencia mediante lstat, incluidos enlaces rotos.
+Una denegacion de permisos no se interpreta como ausencia.
+
+Se conservan las bibliotecas y los registros de paquetes Debian. Esto no
+parchea libmount ni convierte todos los avisos de ncurses/util-linux en
+resueltos. Tampoco impide el uso de un nsenter externo por un operador del
+host ni elimina un descriptor privilegiado heredado desde ese host.
+
+El inventario de todo el `docker export` registra rutas con nombres conocidos
+de infocmp, nsenter, getfacl, setfacl, chacl y Archive/Tar.pm, incluyendo aliases
+sin seguirlos. Distingue herramientas ACL de libacl y el modulo Archive::Tar
+del interprete Perl. No prueba ausencia de copias renombradas, implementaciones
+embebidas o componentes del host. No se leen documentos ni contenidos Perl.
+
+Las fuentes primarias reconsultadas mantienen los avisos de las versiones
+trixie. Se conservan las restricciones del escaner, sin repositorios sid:
+[infocmp](https://security-tracker.debian.org/tracker/CVE-2025-69720),
+[nsenter](https://security-tracker.debian.org/tracker/CVE-2026-78408),
+[herramientas ACL](https://security-tracker.debian.org/tracker/CVE-2026-54370),
+[Archive::Tar](https://security-tracker.debian.org/tracker/CVE-2026-9538).
+
+Las 98 pruebas locales seleccionadas pasan. Falta validar la nueva imagen
+Linux, su arranque, dependencias, inventario y escaneo antes de dar por
+verificada la retirada. No hay merge ni despliegue de esta candidata.
+
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
 3. Antes de aplicar excepciones o aceptar riesgos residuales, presentar al propietario la decision concreta. Este documento no presupone esa aprobacion.

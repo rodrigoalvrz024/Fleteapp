@@ -23,7 +23,7 @@ COPY --chown=root:root alembic.ini .
 
 # The API never changes OS identities or edits its installed code.
 RUN chmod -R go-w /app /usr/local \
-    && chmod 0700 /usr/bin/infocmp /usr/bin/nsenter \
+    && rm -- /usr/bin/infocmp /usr/bin/nsenter \
     && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 
 USER app

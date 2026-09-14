@@ -21,6 +21,7 @@ SYMBOL_GROUPS = {
 WATCHED = frozenset().union(*SYMBOL_GROUPS.values())
 MAX_ELF_BYTES = 256 * 1024 * 1024
 MAX_MEMBERS = 200_000
+COMPONENT_NAMES = ("infocmp", "nsenter", "getfacl", "setfacl", "chacl", "perl_archive_tar")
 LIMITATIONS = [
     "Static symbol evidence only: imports are possible calls, not proof of exploitation.",
     "No import is NOT proof of absence: static/inlined/hidden code and runtime symbol lookup can bypass this inventory.",
@@ -28,6 +29,7 @@ LIMITATIONS = [
     "XML hash symbols do not prove the selected runtime branch; ElementTree can call through the pyexpat C API.",
     "All regular ELF files are inspected, including root-only tools; symlink/hardlink aliases are counted but not resolved.",
     "This does not trace requests, resolve loader search paths, test host privileges, approve CVEs, or alter the scanner gate.",
+    "Component paths use known filenames in the effective filesystem, not proof against renamed copies or host tools.",
 ]
 
 
@@ -75,6 +77,7 @@ def collect(archive, image_id):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
         raise ValueError("Immutable image identity required")
     records, names = [], set()
+    components = {name: [] for name in COMPONENT_NAMES}
     members = links = regular = 0
     for member in archive:
         members += 1
@@ -84,6 +87,12 @@ def collect(archive, image_id):
         if name in names:
             raise ValueError("Duplicate archive path")
         names.add(name)
+        if not member.isdir():
+            basename = PurePosixPath(name).name
+            if basename in components and basename != "perl_archive_tar":
+                components[basename].append(name)
+            if name.endswith("/Archive/Tar.pm"):
+                components["perl_archive_tar"].append(name)
         if member.issym() or member.islnk():
             links += 1
         if not member.isfile():
@@ -115,6 +124,7 @@ def collect(archive, image_id):
         "status": "evidence_only_not_security_approval",
         "counts": {"archive_members": members, "regular_files": regular, "link_aliases_not_resolved": links, "elf_files": len(records)},
         "symbol_groups": {key: sorted(value) for key, value in SYMBOL_GROUPS.items()},
+        "component_inventory": {key: sorted(paths) for key, paths in components.items()},
         "limitations": LIMITATIONS,
         "files": sorted(records, key=lambda row: row["path"]),
     }
@@ -126,11 +136,19 @@ def summary(report):
     for group, symbols in SYMBOL_GROUPS.items():
         callers = [row["path"] for row in report["files"] if symbols.intersection(row["imports"])]
         lines.append(f"{group}: {len(callers)} files with matching imports.")
+    for component, paths in report.get("component_inventory", {}).items():
+        lines.append(f"Component {component}: {len(paths)} matching paths in the effective filesystem.")
     lines.extend(["", *LIMITATIONS, ""])
     return "\n".join(lines)
 
 
 def annotations(report):
+    if "component_inventory" in report:
+        payload = {"image_id": report["image_id"], "scope": "known_names_in_effective_filesystem",
+                   "components": {name: {"count": len(paths), "paths": paths[:12]}
+                                  for name, paths in report["component_inventory"].items()}}
+        message = json.dumps(payload, ensure_ascii=True).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::notice title=Component inventory (not approval)::{message}")
     for group, symbols in SYMBOL_GROUPS.items():
         callers = [{"path": row["path"], "imports": sorted(symbols.intersection(row["imports"]))}
                    for row in report["files"] if symbols.intersection(row["imports"])]
