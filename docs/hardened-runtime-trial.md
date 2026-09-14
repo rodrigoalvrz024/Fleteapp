@@ -116,3 +116,21 @@ declara resueltas vulnerabilidades ni autoriza un despliegue.
 
 Metadatos verificados: https://pypi.org/pypi/cloudinary/1.40.0/json
 SHA-256: `fe1a5309734814b481de637ab3041e8699995387df965ec0f2d8f767db7067a2`.
+
+### Verificacion de la correccion
+
+Commit `39aabbc96b1b81ef28f3b21fb30ada97c645e5a1`.
+Construccion local del wheel universal correcta y 6 pruebas de configuracion
+aprobadas. La [evaluacion 34878869225](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34878869225)
+construyo la imagen y paso guard real, pip check, suite offline y regresiones
+Python. El escaner completo termino y bloqueo: Critical 0, High 26, Medium 30,
+Low 2, Negligible 20, Unknown 8; 86 coincidencias y 0 package alerts.
+Imagen: `sha256:11b72e870ad5bfe4b97674e0370504667557ab532387c0dc70aaf1aec05d7988`.
+
+Las 26 coincidencias altas agrupan 10 CVE diferentes. Hay filas duplicadas en
+los detalles publicados; falta revisar el inventario completo para determinar
+si son registros duplicados o componentes distintos. No se interpreta la
+diferencia 45 -> 26 como 19 vulnerabilidades corregidas: cambia la composicion
+de paquetes y aparecen avisos de libexpat1 que requieren analisis propio.
+No se modifico el filtro del escaner, no hubo excepciones ni despliegue.
+Siguen pendientes todas las validaciones de adopcion descritas arriba.
