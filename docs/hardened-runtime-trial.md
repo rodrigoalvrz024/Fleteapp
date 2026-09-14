@@ -102,3 +102,17 @@ La [candidata actual 34872463273](https://github.com/rodrigoalvrz024/Fleteapp/ac
 paso pruebas, arranque, permisos, inventario y traza. Su escaner mantuvo 45 High,
 49 Medium y 0 Critical (155 coincidencias), sin cambios de politica.
 Imagen actual comprobada: `sha256:390888a331a9a12e4bd9ddd1507bc7a09e4445150b8e0c75e2b387883b7ee525`.
+
+## Correccion de construccion: Cloudinary
+
+El intento 3 supero el control de secretos y llego al build. Fallo porque
+`cloudinary==1.40.0` solo publica un sdist, incompatible con `--only-binary=:all:`.
+Se conserva esa version y se genera su wheel exclusivamente en el builder,
+desde la URL oficial de PyPI y con SHA-256 fijado. Se usan las herramientas de
+build ya fijadas, sin resolver dependencias adicionales durante ese paso.
+La instalacion restante sigue exigiendo wheels; ni el archivo fuente ni el
+directorio de wheels se copian al runtime. Esto corrige el empaquetado, no
+declara resueltas vulnerabilidades ni autoriza un despliegue.
+
+Metadatos verificados: https://pypi.org/pypi/cloudinary/1.40.0/json
+SHA-256: `fe1a5309734814b481de637ab3041e8699995387df965ec0f2d8f767db7067a2`.

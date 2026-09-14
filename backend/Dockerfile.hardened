@@ -8,8 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN python -m venv /opt/muvv-venv
 COPY requirements.txt .
+# This release is source-only; build its hash-verified wheel outside the runtime.
 RUN /opt/muvv-venv/bin/python -m pip install --no-cache-dir --upgrade pip==26.2.1 setuptools==84.0.0 wheel==0.48.0 \
-    && /opt/muvv-venv/bin/python -m pip install --no-cache-dir --only-binary=:all: -r requirements.txt
+    && /opt/muvv-venv/bin/python -m pip wheel --no-cache-dir --no-deps --no-build-isolation --wheel-dir /wheels \
+        'https://files.pythonhosted.org/packages/9d/9d/e59116cf145fb56a899de700447851976d225a3b9f0676b56129c9bc3e3a/cloudinary-1.40.0.tar.gz#sha256=fe1a5309734814b481de637ab3041e8699995387df965ec0f2d8f767db7067a2' \
+    && /opt/muvv-venv/bin/python -m pip install --no-cache-dir --only-binary=:all: --find-links=/wheels -r requirements.txt
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
