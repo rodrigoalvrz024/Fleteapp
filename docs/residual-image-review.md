@@ -191,5 +191,21 @@ PostgreSQL (9 RLS, 8 migraciones y 39 HTTP/WebSocket) aprobadas. Se preservan
 permisos cliente/conductor/admin, documentos privados, precios y estados de
 pago. El cluster temporal fue detenido y eliminado. No prueba la conexion
 TLS real de Supabase/PgBouncer ni la concurrencia del hosting: quedan para el
-entorno aislado antes de promover a produccion. La corrida Linux del cambio
-del conector debe acreditar la imagen final y repetir el escaneo completo.
+entorno aislado antes de promover a produccion.
+
+Verificacion Linux final: [corrida 34857584759](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34857584759),
+commit `72f9f5fb5a60402fe9447853cadc288c0e4eeb4e`, imagen
+`sha256:1178e5973e7baf87c3a657b0186a16452006d375559c28db40720f5ed580c2f5`.
+Pasaron las unitarias, pip check, backports, permisos, rechazo root, arranque,
+cierre SIGTERM e inventario nativo. Version observada: psycopg2 2.9.13,
+libpq 170011 (17.11); el inventario de 786 ELF contiene la biblioteca
+`libcrypto-fb8d5b21.so.3` de psycopg2. El control de nombres OpenSSL antiguos
+no encontro infracciones en 15.518 entradas revisadas. Las coincidencias
+DNS/ACL/gzip/busqueda dinamica conservan respectivamente 0/5/2/33 callers.
+
+El escaneo final a 2026-09-14T14:46:47.324608256Z mantiene 0 Critical,
+45 High, 49 Medium, 9 Low, 44 Negligible y 8 Unknown; cero alertas de
+paquetes/EOL y las 155 coincidencias visibles. Falla solamente la politica
+de vulnerabilidades. El reemplazo de la copia OpenSSL mejora un componente
+real, pero no se presenta como cierre de los 13 CVE altos de la matriz.
+No hay merge a main, deploy, cambio de planes ni uso de datos reales.
