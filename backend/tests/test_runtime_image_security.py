@@ -14,6 +14,14 @@ spec.loader.exec_module(checker)
 
 
 class RuntimeImageSecurityTests(unittest.TestCase):
+    def test_profiles_preserve_classic_and_cover_dhi_python_and_venv(self):
+        self.assertEqual(checker.runtime_paths("classic"), (checker.PROTECTED_ROOTS, checker.SCAN_ROOTS))
+        protected, scanned = checker.runtime_paths("dhi")
+        self.assertEqual({str(path) for path in protected}, {str(Path("/app")), str(Path("/usr")), str(Path("/opt/muvv-venv"))})
+        self.assertIn(Path("/opt"), scanned)
+        with self.assertRaises(ValueError):
+            checker.runtime_paths("skip")
+
     def test_legacy_openssl_names_include_bundled_wheel_libraries(self):
         for name in ("libssl.so.1.1", "libcrypto-7d0e8add.so.1.1", "libssl-hash.so.1.0.0", "libcrypto.so.1.0.2"):
             self.assertTrue(checker.is_legacy_openssl_library(name))

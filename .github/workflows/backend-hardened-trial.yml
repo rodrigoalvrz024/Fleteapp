@@ -9,6 +9,9 @@ on:
       - .github/workflows/backend-hardened-trial.yml
       - scripts/inspect-hardened-findings.py
       - backend/tests/test_hardened_finding_evidence.py
+      - scripts/verify-runtime-image.py
+      - scripts/report-native-symbols.py
+      - scripts/native-audit-requirements.txt
 
 permissions:
   contents: read
@@ -101,6 +104,109 @@ jobs:
             --security-opt no-new-privileges --pids-limit 32 \
             --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-python-backports.py,dst=/python-backport-check.py,readonly" \
             --entrypoint python muvv-backend:hardened-trial -I -B /python-backport-check.py --github-annotation
+
+      - name: Verify DHI filesystem permissions without read-only masking
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-runtime-image.py,dst=/runtime-check.py,readonly" \
+            --entrypoint python muvv-backend:hardened-trial -B /runtime-check.py --profile dhi --github-annotation
+
+      - name: Verify real DHI startup and shutdown without hosting privilege flags
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          container="$(docker run --detach --network none --read-only --pids-limit 256 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+            --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false --env PORT=18080 \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" --env ACCESS_TOKEN_EXPIRE_MINUTES=1440 \
+            muvv-backend:hardened-trial)"
+          trap 'docker rm --force "$container" > /dev/null 2>&1 || true' EXIT
+          docker exec --interactive "$container" python -B - <<'PY'
+          import json
+          from pathlib import Path
+          import time
+          import urllib.error
+          import urllib.request
+
+          base = 'http://127.0.0.1:18080'
+          for attempt in range(100):
+              try:
+                  with urllib.request.urlopen(base + '/', timeout=1) as response:
+                      assert response.status == 200
+                      assert json.load(response)['status'] == 'ok'
+                  break
+              except (urllib.error.URLError, TimeoutError):
+                  time.sleep(0.1)
+          else:
+              raise SystemExit('Candidate startup did not become ready')
+          command = Path('/proc/1/cmdline').read_bytes().split(b'\0')
+          assert command[:3] == [b'/opt/muvv-venv/bin/python', b'-m', b'app.server'], 'Unexpected PID 1'
+          status = dict(line.split(':', 1) for line in Path('/proc/1/status').read_text().splitlines() if ':' in line)
+          assert int(status['NoNewPrivs'].strip()) == 1, 'Startup did not disable new privileges'
+          for field in ('CapInh', 'CapPrm', 'CapEff', 'CapAmb'):
+              assert int(status[field].strip(), 16) == 0, 'Server has process capabilities'
+          for field in ('Uid', 'Gid', 'Groups'):
+              assert 0 not in map(int, status[field].split()), 'Server has a root identity'
+          for route in ('/users/me', '/drivers/me', '/admin/users'):
+              for headers in ({}, {'Authorization': 'Bearer invalid-test-token'}):
+                  try:
+                      urllib.request.urlopen(urllib.request.Request(base + route, headers=headers), timeout=2)
+                  except urllib.error.HTTPError as error:
+                      assert error.code == 401, (route, error.code)
+                  else:
+                      raise AssertionError('Protected route accepted unauthenticated access')
+          print('::notice title=DHI startup checks::Real CMD, PID 1, no_new_privs, zero process capabilities and six unauthenticated-route checks passed without hosting privilege flags')
+          PY
+          docker exec "$container" python -B -m alembic heads
+          docker stop --time 10 "$container" > /dev/null
+          exit_code="$(docker inspect "$container" --format '{{.State.ExitCode}}')"
+          case "$exit_code" in
+            0|143) ;;
+            *) exit 1 ;;
+          esac
+          shutdown_log="$(docker logs "$container" 2>&1)"
+          [[ "$shutdown_log" == *"Application shutdown complete."* ]]
+          printf '::notice title=DHI shutdown check::Server stopped cleanly on SIGTERM\n'
+
+      - name: Verify DHI startup refuses a root hosting configuration
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(timeout --signal=TERM --kill-after=5s 15s docker run --rm \
+            --network none --read-only --cap-drop ALL --user 0:0 --pids-limit 32 \
+            muvv-backend:hardened-trial 2>&1)"
+          code=$?
+          set -e
+          test "$code" -eq 1
+          test "$output" = '[startup] Security checks failed; server not started.'
+          printf '::notice title=DHI root rejection::Actual container CMD refused UID 0 before importing the application\n'
+
+      - name: Inspect complete DHI native filesystem without executing its files
+        run: |
+          set -euo pipefail
+          audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-dhi-native.XXXXXX")"
+          python3 -m venv "$audit_dir/venv"
+          "$audit_dir/venv/bin/python" -m pip install --disable-pip-version-check \
+            --require-hashes --only-binary=:all: --no-deps -r scripts/native-audit-requirements.txt
+          image_id="$(docker image inspect muvv-backend:hardened-trial --format '{{.Id}}')"
+          container="$(docker create --network none "$image_id")"
+          trap 'docker rm "$container" > /dev/null 2>&1 || true' EXIT
+          docker export --output "$audit_dir/rootfs.tar" "$container"
+          mkdir -p "$RUNNER_TEMP/dhi-native-symbol-evidence"
+          timeout --signal=TERM --kill-after=5s 180s "$audit_dir/venv/bin/python" \
+            scripts/report-native-symbols.py "$audit_dir/rootfs.tar" --image-id "$image_id" \
+            --output "$RUNNER_TEMP/dhi-native-symbol-evidence/report.json" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+
+      - name: Preserve DHI native metadata only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dhi-native-symbol-evidence
+          path: ${{ runner.temp }}/dhi-native-symbol-evidence/report.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Scan full trial without VEX suppressions or ignored matches
         run: |

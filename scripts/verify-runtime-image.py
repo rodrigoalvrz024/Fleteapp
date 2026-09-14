@@ -17,6 +17,14 @@ SCAN_ROOTS = (Path("/usr"), Path("/app"))
 REMOVED_TOOL_PATHS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
 
 
+def runtime_paths(profile):
+    if profile == "classic":
+        return PROTECTED_ROOTS, SCAN_ROOTS
+    if profile == "dhi":
+        return (Path("/app"), Path("/usr"), Path("/opt/muvv-venv")), (Path("/usr"), Path("/app"), Path("/opt"))
+    raise ValueError("Unknown runtime profile")
+
+
 def is_legacy_openssl_library(name):
     stem, separator, version = name.partition(".so.")
     return bool(separator and version in ("1.0.0", "1.0.2", "1.1")
@@ -77,7 +85,8 @@ def perl_archive_tar_readable():
     return answer == "present"
 
 
-def inspect_runtime():
+def inspect_runtime(profile="classic"):
+    protected_roots, scan_roots = runtime_paths(profile)
     if sys.platform != "linux":
         raise RuntimeError("Runtime verification requires the Linux candidate container")
     process = process_security(Path("/proc/self/status").read_text())
@@ -95,7 +104,10 @@ def inspect_runtime():
     for command, evidence in removed_tools.items():
         if evidence["blocked"]:
             violations.append({"reason": "removed_system_tool_present", "path": command})
-    archive_tar_readable = perl_archive_tar_readable()
+    # DHI may omit Perl entirely. Unknown include paths are recorded as null,
+    # not a successful Perl probe; the filesystem walk still checks module names.
+    archive_tar_readable = (None if profile == "dhi" and not os.path.lexists("/usr/bin/perl")
+                            else perl_archive_tar_readable())
     if archive_tar_readable:
         violations.append({"reason": "perl_archive_tar_readable"})
 
@@ -104,22 +116,24 @@ def inspect_runtime():
     def walk_error(error):
         raise error
 
-    for root in SCAN_ROOTS:
+    for root in scan_roots:
         if not root.is_dir():
             raise RuntimeError("Missing runtime directory")
         for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
             for path in [Path(directory), *(Path(directory) / name for name in dirs + files)]:
                 metadata = path.lstat()
-                protected = any(path.is_relative_to(base) for base in PROTECTED_ROOTS)
+                protected = any(path.is_relative_to(base) for base in protected_roots)
                 capability = stat.S_ISREG(metadata.st_mode) and has_file_capability(path)
                 reasons = file_violations(metadata, protected=protected,
                                           writable=protected and os.access(path, os.W_OK),
                                           capability=capability)
                 if (stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)) and is_legacy_openssl_library(path.name):
                     reasons.append("legacy_openssl_library")
+                if profile == "dhi" and path.as_posix().endswith("/Archive/Tar.pm"):
+                    reasons.append("perl_archive_tar_named_file")
                 violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
                 inspected += 1
-    return {"uid": os.geteuid(), "gid": os.getegid(), **process,
+    return {"profile": profile, "uid": os.geteuid(), "gid": os.getegid(), **process,
             "removed_tools": removed_tools,
             "perl_archive_tar_readable": archive_tar_readable,
             "inspected_entries": inspected, "blocked": bool(violations),
@@ -130,9 +144,10 @@ def inspect_runtime():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--github-annotation", action="store_true")
+    parser.add_argument("--profile", choices=("classic", "dhi"), default="classic")
     args = parser.parse_args()
     try:
-        result = inspect_runtime()
+        result = inspect_runtime(args.profile)
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         # Never print exception payloads or process/environment contents.
         print(f"Runtime image verification incomplete: {type(error).__name__}")

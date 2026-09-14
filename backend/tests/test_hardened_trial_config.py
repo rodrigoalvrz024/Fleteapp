@@ -81,6 +81,31 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         self.assertLess(runtime.index("unlink"), runtime.index("USER 65532:65532"))
         self.assertNotIn("/var/lib/dpkg", runtime)
 
+    def test_dhi_lifecycle_uses_real_cmd_and_no_production_network(self):
+        steps = {step["name"]: step for step in self.config["jobs"]["evaluate"]["steps"]}
+        startup = steps["Verify real DHI startup and shutdown without hosting privilege flags"]["run"]
+        for required in ("--network none", "RUN_STARTUP_MIGRATIONS=false", "/users/me", "/drivers/me", "/admin/users",
+                         "error.code == 401", "NoNewPrivs", "CapAmb", "docker stop --time 10", "Application shutdown complete."):
+            self.assertIn(required, startup)
+        self.assertNotIn("--entrypoint", startup)
+        self.assertNotIn("--security-opt", startup)
+        self.assertNotIn("--cap-drop", startup)
+        self.assertIn("trap 'docker rm --force", startup)
+        embedded = startup.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+        compile(embedded, "dhi-startup-probe", "exec")
+        reject = steps["Verify DHI startup refuses a root hosting configuration"]["run"]
+        self.assertIn("--user 0:0", reject)
+        self.assertIn('test "$code" -eq 1', reject)
+
+    def test_permissions_are_not_masked_and_native_export_not_published(self):
+        steps = {step["name"]: step for step in self.config["jobs"]["evaluate"]["steps"]}
+        permissions = steps["Verify DHI filesystem permissions without read-only masking"]["run"]
+        self.assertIn("--profile dhi", permissions)
+        self.assertNotIn("--read-only", permissions)
+        exported = steps["Preserve DHI native metadata only"]["with"]
+        self.assertTrue(exported["path"].endswith("/report.json"))
+        self.assertEqual(exported["retention-days"], "14")
+
 
 if __name__ == "__main__":
     unittest.main()
