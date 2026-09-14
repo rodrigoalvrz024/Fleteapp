@@ -1,0 +1,124 @@
+name: Hardened runtime evaluation (not release approval)
+
+on:
+  push:
+    branches:
+      - codex/mvp-supabase-rls-review
+    paths:
+      - backend/Dockerfile.hardened
+      - .github/workflows/backend-hardened-trial.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hardened-evaluation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Require read-only registry access
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DHI_USERNAME" || -z "$DHI_TOKEN" ]]; then
+            printf '::error::Evaluation blocked: configure DHI_USERNAME and DHI_READ_TOKEN repository secrets. No image tested or release approved.\n'
+            exit 1
+          fi
+
+      - name: Checkout without persistent Git credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pull and build using temporary read-only registry credentials
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export DOCKER_CONFIG
+          DOCKER_CONFIG="$(mktemp -d "${RUNNER_TEMP}/muvv-dhi-auth.XXXXXX")"
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
+          docker pull dhi.io/python:3.11-debian13-dev
+          docker pull dhi.io/python:3.11-debian13
+          declare -A images
+          for role in build runtime; do
+            tag='dhi.io/python:3.11-debian13'
+            if [[ "$role" = build ]]; then tag="${tag}-dev"; fi
+            digest="$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')"
+            [[ "$digest" =~ ^dhi\.io/python@sha256:[0-9a-f]{64}$ ]]
+            images[$role]="$digest"
+            printf 'Resolved %s base: `%s`\n' "$role" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          done
+          docker build --file backend/Dockerfile.hardened \
+            --build-arg "PYTHON_BUILD_IMAGE=${images[build]}" \
+            --build-arg "PYTHON_RUNTIME_IMAGE=${images[runtime]}" \
+            --tag muvv-backend:hardened-trial backend
+          docker image inspect muvv-backend:hardened-trial --format 'Trial image: {{.Id}}' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify dependency consistency and real privilege guard
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --pids-limit 32 \
+            --entrypoint python muvv-backend:hardened-trial -B -c \
+            'import os,sys; from app.server import enforce_runtime_security; assert sys.version_info[:3] == (3,11,16); enforce_runtime_security(); assert os.geteuid() == 65532; print("Real startup privilege guard passed")'
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 32 \
+            --entrypoint python muvv-backend:hardened-trial -m pip check
+
+      - name: Run application and security regression suite offline
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 256 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+            --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" --env ACCESS_TOKEN_EXPIRE_MINUTES=1440 \
+            --env PYTHONPATH=/app \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/tests,dst=/workspace/backend/tests,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts,dst=/workspace/scripts,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/alembic,dst=/workspace/backend/alembic,readonly" \
+            --workdir /workspace/backend --entrypoint python muvv-backend:hardened-trial \
+            -B -m unittest discover -s tests
+
+      - name: Check bounded Python regressions in the trial
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 30s docker run --rm \
+            --network none --read-only --cap-drop ALL --memory 256m --cpus 1 \
+            --security-opt no-new-privileges --pids-limit 32 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-python-backports.py,dst=/python-backport-check.py,readonly" \
+            --entrypoint python muvv-backend:hardened-trial -I -B /python-backport-check.py --github-annotation
+
+      - name: Scan full trial without VEX suppressions or ignored matches
+        run: |
+          set -euo pipefail
+          audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-dhi-audit.XXXXXX")"
+          curl --fail --silent --show-error --location --retry 3 \
+            --proto '=https' --proto-redir '=https' \
+            https://github.com/anchore/grype/releases/download/v0.118.0/grype_0.118.0_linux_amd64.tar.gz \
+            --output "$audit_dir/grype.tar.gz"
+          printf '%s  %s\n' '1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2' "$audit_dir/grype.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$audit_dir/grype.tar.gz" --directory "$audit_dir" grype
+          image_id="$(docker image inspect muvv-backend:hardened-trial --format '{{.Id}}')"
+          "$audit_dir/grype" "docker:${image_id}" --config scripts/grype-candidate.yaml \
+            --output json > "$audit_dir/report.json"
+          python3 scripts/report-image-audit.py "$audit_dir/report.json" \
+            --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+
+      - name: State evaluation limits
+        if: always()
+        run: |
+          printf '%s\n' 'Evaluation only: no image push, deployment, production data or release approval.' \
+            'Before adoption: verify publisher signatures/provenance, full runtime permissions, real HTTP/SIGTERM, XML trace, private-storage/database TLS and target hosting compatibility.' \
+            >> "$GITHUB_STEP_SUMMARY"
