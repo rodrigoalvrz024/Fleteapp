@@ -74,6 +74,13 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         self.assertNotIn("pip install", runtime)
         self.assertNotIn("--no-binary=:all:", self.dockerfile)
 
+    def test_trial_removes_infocmp_without_erasing_package_catalog(self):
+        runtime = self.dockerfile.split("FROM ${PYTHON_RUNTIME_IMAGE} AS trial", 1)[1]
+        self.assertIn("'/usr/bin/infocmp', '/bin/infocmp'", runtime)
+        self.assertIn("unlink(missing_ok=True)", runtime)
+        self.assertLess(runtime.index("unlink"), runtime.index("USER 65532:65532"))
+        self.assertNotIn("/var/lib/dpkg", runtime)
+
 
 if __name__ == "__main__":
     unittest.main()

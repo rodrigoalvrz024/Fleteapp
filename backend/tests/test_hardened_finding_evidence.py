@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 
@@ -75,6 +76,24 @@ class HardenedFindingEvidenceTests(unittest.TestCase):
         result = evidence.inspect_findings(data, IMAGE)
         self.assertEqual(result["counts_unchanged"]["Medium"], 1)
         self.assertEqual(result["matches"], [])
+
+    def test_annotations_are_bounded_complete_and_do_not_mutate(self):
+        data = report()
+        data["matches"] = [match(str(index), "/var/lib/dpkg/status") for index in range(40)]
+        result = evidence.inspect_findings(data, IMAGE)
+        before = copy.deepcopy(result)
+        lines = evidence.annotation_lines(result, "Test")
+        self.assertEqual(result, before)
+        payloads = [json.loads(line.split("::", 2)[2].replace("%25", "%")) for line in lines]
+        self.assertGreater(len(payloads), 2)
+        self.assertEqual(payloads[0]["identity_matches"], 40)
+        self.assertEqual(payloads[0]["identity_batches"], len(payloads) - 1)
+        self.assertEqual(sum(len(part["matches"]) for part in payloads[1:]), 40)
+        self.assertTrue(all(len(line.split("::", 2)[2].encode()) <= 3500 for line in lines))
+
+    def test_oversized_annotation_rejected_without_truncation(self):
+        with self.assertRaises(ValueError):
+            evidence.annotation_lines({"image_id": IMAGE, "large": "x" * 4000}, "Test")
 
 
 if __name__ == "__main__":

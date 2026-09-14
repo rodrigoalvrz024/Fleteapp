@@ -70,6 +70,8 @@ def runtime_evidence(image_id):
         files.append({"path": str(path), "size": path.stat().st_size,
                       "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
     tools = ("infocmp", "mount", "umount", "nsenter", "getfacl", "setfacl", "chacl")
+    if any(os.path.lexists(path) for path in ("/usr/bin/infocmp", "/bin/infocmp")):
+        raise ValueError("Removed infocmp tool remains present")
     return {"image_id": image_id, "python": sys.version.split()[0],
             "expat": pyexpat.EXPAT_VERSION, "uid": os.geteuid(),
             "mapped_native_files": files,
@@ -78,6 +80,32 @@ def runtime_evidence(image_id):
                 if os.path.lexists(Path(root) / tool)],
             "limitations": "Known paths only; loaded libraries do not prove vulnerable code execution.",
             "findings_waived": False}
+
+
+def annotation_lines(result, title):
+    def encode(payload):
+        return json.dumps(payload, sort_keys=True).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+    summary = {key: value for key, value in result.items() if key != "matches"}
+    batches = []
+    for row in result.get("matches", []):
+        if not batches or len(encode(batches[-1] + [row]).encode()) > 3000:
+            batches.append([])
+        batches[-1].append(row)
+    summary["identity_batches"] = len(batches)
+    summary["identity_matches"] = len(result.get("matches", []))
+    payloads = [(title, summary)] + [
+        (f"{title} part {index + 1}", {"image_id": result["image_id"],
+         "part": index + 1, "total_parts": len(batches), "matches": rows})
+        for index, rows in enumerate(batches)]
+    lines = []
+    for label, payload in payloads:
+        escaped = encode(payload)
+        # GitHub may truncate individual annotation messages around 4 KiB.
+        if len(escaped.encode()) > 3500:
+            raise ValueError("Evidence exceeds annotation limit")
+        lines.append(f"::notice title={label}::{escaped}")
+    return lines
 
 
 def main():
@@ -98,11 +126,8 @@ def main():
                 raise ValueError("Invalid report")
             result = inspect_findings(json.loads(args.report.read_text()), args.image_id)
             title = "Hardened finding identities"
-        payload = json.dumps(result, sort_keys=True)
-        if len(payload.encode()) > 50000:
-            raise ValueError("Evidence exceeds annotation limit")
-        escaped = payload.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-        print(f"::notice title={title}::{escaped}")
+        for line in annotation_lines(result, title):
+            print(line)
         return 0
     except (ValueError, KeyError, TypeError, OSError):
         print("Hardened diagnostic evidence incomplete; no approval.", file=sys.stderr)
