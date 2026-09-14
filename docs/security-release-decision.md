@@ -282,10 +282,23 @@ Solo el servidor Uvicorn esta sustituido en esta prueba; el workflow mantiene
 ademas la prueba del CMD real, HTTP sin autenticar y apagado SIGTERM.
 
 Local Windows: 104 pruebas seleccionadas, 103 aprobadas y una omitida por
-requerir Linux. La verificacion Linux real esta pendiente del workflow; no
-se presenta el resultado local como prueba de close_range en el contenedor.
-No cambia el escaner, sus umbrales ni sus excepciones. No hay deploy.
+requerir Linux. La corrida de `e8b42d5`,
+[34867936706](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34867936706),
+aprobo la suite Linux y el paso dedicado de descriptores reales. Tambien
+pasaron CMD real, seis rechazos HTTP sin credenciales validas, rechazo de
+root, SIGTERM, permisos, dependencias, inventario y ambas observaciones XML.
+Imagen: `sha256:69b8bb68d6bbc03b0d42f500dfe724dcd8d67ef16020e5853a59826ab146f4fa`.
+El unico paso fallido fue el escaner: 0 Critical, 45 High, 49 Medium, 9 Low,
+44 Negligible y 8 Unknown (155 coincidencias). El cierre fue comprobado, no
+una eliminacion de los avisos de paquetes. No cambia el escaner, sus umbrales
+ni sus excepciones. No hay deploy ni merge a main.
 Referencia: [close_range(2)](https://www.man7.org/linux/man-pages/man2/close_range.2.html).
+
+Siguiente frente: completar la decision por CVE sobre las bibliotecas que
+permanecen (incluidos glibc/DNS, ACL, zlib y util-linux), diferenciando codigo
+corregido, herramientas ausentes y mitigaciones condicionadas al hosting.
+La ausencia de imports estaticos no basta como prueba de inalcanzabilidad;
+el guard de descriptores no debe usarse como excepcion general de util-linux.
 
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
