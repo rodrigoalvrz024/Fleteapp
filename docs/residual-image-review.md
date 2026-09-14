@@ -85,6 +85,32 @@ sigue abierta y Debian aun no registra una correccion para trixie.
 
 ## Criterios para cerrar la revision
 
+### Inventario nativo reproducible
+
+`scripts/report-native-symbols.py` inspecciona un `docker export` del mismo
+ID inmutable que se somete a Grype. No extrae archivos al host ni ejecuta los
+binarios. El parser pyelftools 0.33 se instala con hash verificado en un venv
+temporal de CI, nunca dentro de la imagen de la API. No recibe credenciales
+de produccion. El archivo `native-symbol-evidence/report.json` se conserva
+14 dias como artefacto de la corrida; contiene rutas, hashes, permisos,
+dependencias DT_NEEDED y simbolos relevantes, no contenidos de archivos.
+
+Se separan imports (posibles llamadas) de exports (proveedores) para funciones
+DNS antiguas, ACL, escritura gzip y busqueda dinamica. Las anotaciones publicas
+incluyen hasta 12 callers por grupo e indican explicitamente los omitidos;
+el artefacto conserva el inventario completo. Las tablas ausentes, funciones
+internas eliminadas por stripping, codigo estatico/inlined y busqueda dinamica
+impiden convertir un resultado sin imports en una declaracion de seguridad.
+Los enlaces simbolicos/hardlinks se cuentan pero no se resuelven; tampoco se
+simula el orden de busqueda del loader ni se trazan solicitudes reales.
+
+Limites: 200.000 entradas y 256 MB por ELF, mas 180 segundos en CI. Un ELF
+invalido, ruta ambigua, exceso de limite o inventario vacio falla con salida 2;
+no se sustituye por un informe limpio. La salida 0 solo confirma la recoleccion
+de evidencia. El bloqueo Critical/High de Grype sigue sin exclusiones.
+Las 222 unitarias locales y la validacion YAML/Bash pasan; la ejecucion sobre
+la imagen Linux y sus hallazgos se registraran despues de la corrida.
+
 Actualizacion del 2026-09-14: `a357949` agrega el arranque `app.server`, que
 rechaza identidades root/capacidades y activa no_new_privs antes de importar
 la API. La [corrida 34805978535](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34805978535)

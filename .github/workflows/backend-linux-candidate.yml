@@ -163,6 +163,31 @@ jobs:
           printf 'Runtime versions: %s\n' "$runtime_info" >> "$GITHUB_STEP_SUMMARY"
           printf 'No image push, Railway deploy, external payment or production database access.\n' >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Collect native symbol evidence without changing the candidate image
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-native-audit.XXXXXX")"
+          python3 -m venv "$audit_dir/venv"
+          "$audit_dir/venv/bin/python" -m pip install --disable-pip-version-check \
+            --require-hashes --only-binary=:all: --no-deps -r scripts/native-audit-requirements.txt
+          image_id="$(docker image inspect muvv-backend:candidate --format '{{.Id}}')"
+          container="$(docker create --network none "$image_id")"
+          trap 'docker rm "$container" > /dev/null 2>&1 || true' EXIT
+          docker export --output "$audit_dir/rootfs.tar" "$container"
+          mkdir -p "$RUNNER_TEMP/native-symbol-evidence"
+          timeout --signal=TERM --kill-after=5s 180s "$audit_dir/venv/bin/python" \
+            scripts/report-native-symbols.py "$audit_dir/rootfs.tar" --image-id "$image_id" \
+            --output "$RUNNER_TEMP/native-symbol-evidence/report.json" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+
+      - name: Preserve native review evidence (no filesystem contents or credentials)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-symbol-evidence
+          path: ${{ runner.temp }}/native-symbol-evidence/report.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Scan OS and Python packages in the tested image
         shell: bash
         run: |
