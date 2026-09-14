@@ -4,6 +4,10 @@ Fecha: 2026-09-14. Estado: BORRADOR PARA REVISION, NO AUTORIZA DESPLIEGUE.
 Segunda revision por agente: realizada; aprobador del riesgo: pendiente. No es un archivo
 VEX ni una lista de excepciones consumida por CI.
 
+Revision conjunta actualizada: [security-batch-review.md](security-batch-review.md).
+Tres arreglos Python cotejados juntos; reconocimiento en el gate pendiente de
+aprobacion especifica. Las 45 coincidencias siguen bloqueando, sin exclusiones.
+
 ## En palabras simples
 
 Las pruebas de funcionamiento pasan, pero el escaner registra 45 coincidencias
