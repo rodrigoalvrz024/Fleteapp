@@ -58,6 +58,18 @@ jobs:
             --workdir /workspace/backend \
             --entrypoint python muvv-backend:candidate -B -m unittest discover -s tests
 
+      - name: Verify actual inherited descriptors are closed before serving
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 40s docker run --rm \
+            --network none --read-only --cap-drop ALL --pids-limit 32 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=32m --env PYTHONPATH=/app \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/tests,dst=/workspace/backend/tests,readonly" \
+            --workdir /workspace/backend --entrypoint python muvv-backend:candidate \
+            -B -m unittest -v tests.test_server_startup.LinuxDescriptorInheritanceTests
+          printf '::notice title=Inherited descriptor checks::Actual file, socket, pipe, directory and high-numbered descriptors closed before serving; stdio and parent handles preserved\n'
+
       - name: Verify bounded Python backport behavior without external connectivity
         shell: bash
         run: |

@@ -2,6 +2,11 @@ import contextlib
 import ctypes
 import io
 import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -33,12 +38,28 @@ class RuntimeSecurityTests(unittest.TestCase):
             patch.object(server, "_process_status", return_value=process_status())
         )
         self.enable = self.stack.enter_context(patch.object(server, "_enable_no_new_privileges"))
+        self.close_descriptors = self.stack.enter_context(
+            patch.object(server, "_close_inherited_descriptors")
+        )
 
     def test_enables_protection_when_host_does_not_set_it(self):
         self.status.side_effect = [process_status(NoNewPrivs="0"), process_status()]
         server.enforce_runtime_security()
         self.enable.assert_called_once_with()
         self.assertEqual(self.status.call_count, 2)
+        self.close_descriptors.assert_called_once_with()
+
+    def test_closes_descriptors_only_after_privilege_checks(self):
+        events = []
+        self.enable.side_effect = lambda: events.append("no_new_privileges")
+        self.close_descriptors.side_effect = lambda: events.append("close_descriptors")
+        server.enforce_runtime_security()
+        self.assertEqual(events, ["no_new_privileges", "close_descriptors"])
+
+    def test_descriptor_closure_failure_blocks_startup(self):
+        self.close_descriptors.side_effect = server.StartupSecurityError("inherited_descriptors_not_closed")
+        with self.assertRaisesRegex(server.StartupSecurityError, "inherited_descriptors_not_closed"):
+            server.enforce_runtime_security()
 
     def test_keeps_protection_when_host_already_sets_it(self):
         server.enforce_runtime_security()
@@ -55,6 +76,7 @@ class RuntimeSecurityTests(unittest.TestCase):
                         server.enforce_runtime_security()
                     identity.return_value = (100, 100, 100)
         self.enable.assert_not_called()
+        self.close_descriptors.assert_not_called()
 
     def test_rejects_root_supplementary_group(self):
         self.groups.return_value = [101, 0]
@@ -105,6 +127,96 @@ class PrctlTests(unittest.TestCase):
                 with patch.object(server.ctypes, "CDLL", return_value=Mock(prctl=Mock(side_effect=results))):
                     with self.assertRaises(server.StartupSecurityError):
                         server._enable_no_new_privileges()
+
+
+class DescriptorClosureTests(unittest.TestCase):
+    def test_closes_full_range_immediately_with_unshared_table(self):
+        function = Mock(return_value=0)
+        with patch.object(server.ctypes, "CDLL", return_value=Mock(close_range=function)):
+            server._close_inherited_descriptors()
+        self.assertEqual(function.argtypes, [ctypes.c_uint, ctypes.c_uint, ctypes.c_int])
+        self.assertEqual(function.restype, ctypes.c_int)
+        function.assert_called_once_with(3, 4294967295, 2)
+
+    def test_kernel_rejection_fails_closed(self):
+        with patch.object(server.ctypes, "CDLL", return_value=Mock(close_range=Mock(return_value=-1))):
+            with self.assertRaisesRegex(server.StartupSecurityError, "inherited_descriptors_not_closed"):
+                server._close_inherited_descriptors()
+
+    def test_missing_libc_function_fails_closed(self):
+        with patch.object(server.ctypes, "CDLL", return_value=object()):
+            with self.assertRaises(AttributeError):
+                server._close_inherited_descriptors()
+
+
+@unittest.skipUnless(sys.platform == "linux", "Requires actual Linux descriptor inheritance")
+class LinuxDescriptorInheritanceTests(unittest.TestCase):
+    def test_real_inherited_handles_closed_before_server_runs(self):
+        import fcntl
+
+        with contextlib.ExitStack() as stack:
+            regular = stack.enter_context(tempfile.TemporaryFile())
+            connection = stack.enter_context(socket.socket())
+            pipe_read, pipe_write = os.pipe()
+            stack.callback(os.close, pipe_read)
+            stack.callback(os.close, pipe_write)
+            directory = os.open("/tmp", os.O_RDONLY | os.O_DIRECTORY)
+            stack.callback(os.close, directory)
+            high = fcntl.fcntl(regular.fileno(), fcntl.F_DUPFD, 512)
+            stack.callback(os.close, high)
+            descriptors = (regular.fileno(), connection.fileno(), pipe_read, pipe_write, directory, high)
+            code = r'''
+import errno
+import os
+import resource
+import sys
+import tempfile
+import types
+from app import server
+
+descriptors = tuple(map(int, sys.argv[1:]))
+assert len(descriptors) == 6
+for descriptor in descriptors:
+    os.fstat(descriptor)
+stdio = [os.fstat(descriptor) for descriptor in range(3)]
+# An inherited descriptor can exceed a subsequently lowered soft limit.
+soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard))
+called = []
+
+def run(application, **options):
+    assert application == "app.main:app"
+    assert options == {"host": "0.0.0.0", "port": 18080}
+    for descriptor in descriptors:
+        try:
+            os.fstat(descriptor)
+        except OSError as error:
+            assert error.errno == errno.EBADF
+        else:
+            raise AssertionError("Inherited descriptor survived startup")
+    assert [os.fstat(descriptor) for descriptor in range(3)] == stdio
+    with tempfile.TemporaryFile() as opened_after_guard:
+        opened_after_guard.write(b"test")
+    called.append(True)
+
+sys.modules["uvicorn"] = types.SimpleNamespace(run=run)
+assert server.main() == 0
+assert called == [True]
+print("Inherited descriptor isolation passed")
+'''
+            result = subprocess.run(
+                [sys.executable, "-B", "-c", code, *map(str, descriptors)],
+                cwd=Path(__file__).resolve().parents[1],
+                env={**os.environ, "PORT": "18080"},
+                pass_fds=descriptors, stdin=subprocess.DEVNULL,
+                capture_output=True, text=True, timeout=20,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertIn("Inherited descriptor isolation passed", result.stdout)
+            # The child must not alter the test runner's descriptor table.
+            for descriptor in descriptors:
+                os.fstat(descriptor)
 
 
 class ServerStartupTests(unittest.TestCase):

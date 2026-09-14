@@ -8,6 +8,7 @@ import sys
 
 _PR_SET_NO_NEW_PRIVS = 38
 _PR_GET_NO_NEW_PRIVS = 39
+_CLOSE_RANGE_UNSHARE = 2
 _CAPABILITY_FIELDS = ("CapInh", "CapPrm", "CapEff", "CapAmb")
 
 
@@ -34,6 +35,16 @@ def _enable_no_new_privileges():
         raise StartupSecurityError("no_new_privileges_not_enabled")
 
 
+def _close_inherited_descriptors():
+    # Keep stdio; detach the descriptor table and close everything else now,
+    # not just on a future exec. Uvicorn opens its own sockets after this guard.
+    close_range = ctypes.CDLL(None, use_errno=True).close_range
+    close_range.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_int]
+    close_range.restype = ctypes.c_int
+    if close_range(3, ctypes.c_uint(-1).value, _CLOSE_RANGE_UNSHARE) != 0:
+        raise StartupSecurityError("inherited_descriptors_not_closed")
+
+
 def enforce_runtime_security():
     if sys.platform != "linux":
         raise StartupSecurityError("linux_required")
@@ -49,6 +60,7 @@ def enforce_runtime_security():
     _enable_no_new_privileges()
     if int(_process_status()["NoNewPrivs"].strip()) != 1:
         raise StartupSecurityError("no_new_privileges_not_enabled")
+    _close_inherited_descriptors()
 
 
 def configured_port():

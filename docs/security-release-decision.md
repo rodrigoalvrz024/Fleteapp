@@ -254,6 +254,39 @@ interferir con entrada/salida y logs. Esto requiere pruebas especificas antes
 de aplicarlo; el estado actual de UID/capacidades no demuestra que dichos
 descriptores esten ausentes. Los otros avisos de bibliotecas siguen pendientes.
 
+## Cierre de descriptores heredados antes de servir
+
+Cambio candidato del 2026-09-14: `app.server` cierra los descriptores 3 en
+adelante antes de importar Uvicorn. Usa `close_range(3, UINT_MAX,
+CLOSE_RANGE_UNSHARE)` con tipos ctypes explicitos, despues de verificar un
+solo hilo, identidad no root, capacidades vacias y no_new_privs. El cierre
+es inmediato; no se limita a marcar close-on-exec ni al limite blando actual.
+Un simbolo libc ausente o una llamada rechazada detienen el arranque con el
+mensaje generico existente. No hay fallback que conserve accesos heredados.
+
+Se preservan los descriptores 0, 1 y 2 para entrada/salida y logs. Esto supone
+que el hosting los configura como canales de confianza: no se inspecciona
+su destino ni se aprueba que apunten a un recurso privilegiado. Esta medida
+no demuestra ausencia total de accesos concedidos por un host comprometido
+ni resuelve por si sola todas las CVE de util-linux. La API crea sus propias
+conexiones despues; no se admite socket activation ni un socket preabierto.
+El CMD actual no usa workers, reload ni sockets heredados.
+
+Pruebas: tipos y rango exactos, rechazo del kernel, funcion libc ausente,
+orden de los controles y propagacion del fallo. La prueba Linux arranca un
+subproceso con seis descriptores reales (archivo, socket, ambos extremos de
+un pipe, directorio y duplicado numerado >=512). Baja RLIMIT_NOFILE a 256,
+ejecuta el guard real y verifica EBADF antes de servir, preservacion de stdio
+y de los handles del padre y apertura de un archivo nuevo despues del guard.
+Solo el servidor Uvicorn esta sustituido en esta prueba; el workflow mantiene
+ademas la prueba del CMD real, HTTP sin autenticar y apagado SIGTERM.
+
+Local Windows: 104 pruebas seleccionadas, 103 aprobadas y una omitida por
+requerir Linux. La verificacion Linux real esta pendiente del workflow; no
+se presenta el resultado local como prueba de close_range en el contenedor.
+No cambia el escaner, sus umbrales ni sus excepciones. No hay deploy.
+Referencia: [close_range(2)](https://www.man7.org/linux/man-pages/man2/close_range.2.html).
+
 1. Resolver la evidencia faltante senalada por la segunda revision para las 13 CVE y ejecutar nuevamente los controles sobre la candidata Linux. Una segunda revision de un agente no sustituye una auditoria profesional de produccion.
 2. Las correcciones confirmadas se distinguen de riesgos mitigados. Cualquier excepcion propuesta debe identificar CVE, paquete, version, imagen, fundamento, alcance, vencimiento y condiciones de invalidacion; no basta autorizar "ignorar los altos".
 3. Antes de aplicar excepciones o aceptar riesgos residuales, presentar al propietario la decision concreta. Este documento no presupone esa aprobacion.
