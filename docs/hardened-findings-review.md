@@ -86,3 +86,46 @@ ncurses que el escaner identifica ni demuestra ausencia de copias renombradas.
 Prioridad siguiente: resolver la procedencia y parche de Expat, comprobar el
 inventario completo de la nueva imagen y su arranque HTTP/apagado. No se
 reutilizan pruebas de la imagen antigua para aprobar una imagen diferente.
+
+## Arranque, permisos e inventario ampliados
+
+Commit `5586ee0df8998128d5933f0921d13f079fcd5293`.
+[Corrida 34881844312](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34881844312).
+Imagen `sha256:bb111e6e0dd9e4d318dce31ba584f5022d968141d3b280adfd5076d211cdabb3`.
+
+Se agrego un perfil DHI al verificador existente para incluir `/usr`, `/app`
+y el virtualenv de `/opt`. El perfil classic conserva sus rutas y consulta
+Perl obligatoria. DHI registra la consulta Perl como desconocida si no tiene
+interprete, y examina nombres del modulo en el filesystem; no confunde un
+interprete ausente con una prueba ejecutada con exito.
+
+El primer intento amplio detecto una entrada de codigo no perteneciente a
+root y modificable por la app. Se reforzo explicitamente `/app` a root:root
+y modo 0755 en el runtime, conservando el contenido root-owned. La siguiente
+corrida inspecciono 15164 entradas sin violaciones, con filesystem escribible
+para no esconder fallos de permisos tras un montaje de solo lectura.
+
+Tambien pasaron: CMD real como PID 1, no_new_privs aplicado por la propia app,
+capacidades vacias, seis peticiones anonimas/token invalido rechazadas con 401
+en users/me, drivers/me y admin/users, lectura de Alembic heads sin migrar,
+apagado SIGTERM limpio y rechazo de UID 0 antes de importar la aplicacion.
+Esto no sustituye pruebas de roles autenticados ni conexiones reales a datos.
+
+El inventario completo inspecciono 435 archivos ELF sin ejecutarlos. No encontro
+infocmp, nsenter, getfacl, setfacl, chacl ni Archive/Tar.pm por nombre. Imports
+estaticos de DNS obsoleto, ACL, gzip_write y xml_hash: cero. Hay 16 archivos con
+busqueda dinamica de simbolos: no se declara inalcanzabilidad ni se aprueban CVE.
+La evidencia completa de metadatos se conserva 14 dias como artifact, sin
+publicar el filesystem exportado ni credenciales.
+
+Pruebas locales: 77 aprobadas; once bloques Bash con sintaxis verificada.
+Todos los pasos funcionales anteriores al escaner pasaron en Linux.
+Escaner: 0 Critical, 26 High, 30 Medium, 2 Low, 20 Negligible, 8 Unknown;
+86 coincidencias y bloqueo activo. No se modificaron roles, API ni produccion.
+
+La receta oficial de Expat 2.8.4 existe en el catalogo Docker consultado,
+pero no demuestra que la copia integrada en Python 3.11.16 este actualizada.
+Se preparo `docs/dhi-expat-provider-question.md` como consulta no enviada.
+Sigue pendiente obtener una actualizacion mantenida o evidencia concreta de
+backport para las copias efectivas, ademas de firmas/procedencia, traza XML y
+pruebas de TLS/hosting antes de adoptar la alternativa.
