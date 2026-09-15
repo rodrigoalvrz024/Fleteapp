@@ -101,6 +101,27 @@ conocidos el 2026-09-15. Reporte local no versionado:
 `.local-tools/dependency-audit/recheck-20260915.json`. No es un escaneo Linux,
 del sistema operativo ni de la imagen que esta ejecutandose en Railway.
 
+## Candidata Linux comprobada
+
+Commit de seguridad: `e55defc8644f5ad15d4d0e28dad4fe20a70a4268`, subido con
+autorizacion a `codex/mvp-supabase-rls-review`, sin deploy.
+[Ejecucion 34932432750](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34932432750).
+
+- Construccion, dependencias, unitarias, descriptores, backports, permisos,
+  arranque sin privilegios, rechazo de root y evidencia nativa/XML: aprobados.
+- La etapa final Grype termino con reporte valido y bloqueo por vulnerabilidades,
+  no por error de construccion o formato del reporte.
+- Imagen exacta: `sha256:4a07fa0598a82fb4be5ba6eeb23c0b3e0450b4367c44d314a35b3f441116f08e`.
+- Grype 0.118.0; Debian 13.7; escaneo `2026-09-15T05:24:17.064117449Z`.
+- Coincidencias: critica 0, alta 45, media 49, baja 9, negligible 44,
+  desconocida 8; 155 conservadas en anotaciones, cero alertas de paquete/EOL.
+  Las 45 altas corresponden a 13 avisos diferentes, no a 45 ataques demostrados.
+- Sin excepciones nuevas, filtros solo-corregibles ni cambios de politica.
+  Gitleaks del contenido preparado: 43.16 KB revisados, sin secretos detectados.
+
+Esta candidata NO esta aprobada para produccion. Las correcciones locales no
+estan instaladas en Railway; la autorizacion de esta ronda excluye desplegar.
+
 ## Archivos
 
 - `backend/app/core/security.py`, `rate_limit.py`, `backend/app/models/user.py`.
@@ -112,11 +133,11 @@ del sistema operativo ni de la imagen que esta ejecutandose en Railway.
 
 ## Antes de publicar
 
-1. Revision independiente del cambio y pruebas Linux sobre una nueva imagen
-   exacta. Las corridas anteriores no certifican este codigo nuevo.
+1. Conservar la segunda revision y la evidencia de esta candidata. Cualquier
+   cambio posterior de codigo o imagen requiere nuevas pruebas Linux.
 2. Resolver la politica de vulnerabilidades Docker sin borrar hallazgos ni
    aprobar excepciones implicitamente. La ultima corrida documentada sigue
-   bloqueada; no se lanzo un nuevo escaneo Linux en esta ronda local.
+   bloqueada tambien en la nueva candidata Linux documentada arriba.
 3. En entorno aislado, aplicar primero la migracion `a7d2e9c1f630`, despues el
    backend. No ejecutar estos comandos en produccion desde esta revision.
 4. Terminar todos los procesos antiguos, incluidos sockets: una instancia del

@@ -2,9 +2,11 @@
 
 Seguimiento 2026-09-15: [sesiones y chat](session-security-review.md).
 Correcciones de sesiones, chat y limitacion de intentos verificadas localmente;
-segunda revision de sesiones/chat realizada. Requieren nueva candidata Linux
-antes de publicarse. No reducen
-por si mismos los hallazgos del sistema operativo enumerados en este documento.
+segunda revision de sesiones/chat realizada. Candidata `e55defc` comprobada en
+[Linux](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34932432750):
+pruebas funcionales aprobadas, escaner bloqueado con 45 coincidencias altas
+(13 avisos). No hubo deploy ni excepciones nuevas. El detalle e identidad de
+imagen estan en el informe de sesiones. No elimina los pendientes de esta decision.
 
 Fecha: 2026-09-14. Estado: BORRADOR PARA REVISION, NO AUTORIZA DESPLIEGUE.
 Segunda revision por agente: realizada; aprobador del riesgo: pendiente. No es un archivo
