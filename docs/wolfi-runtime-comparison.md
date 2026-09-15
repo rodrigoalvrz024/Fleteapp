@@ -80,3 +80,61 @@ aprobacion de despliegue aunque la comparacion termine verde.
   pruebas dedicadas aprobadas, sin P1/P2 remanentes en ese arreglo acotado.
 - Nueve bloques Bash pasan comprobacion sintactica local. Resultado de ejecucion
   Linux y pruebas completas se agrega cuando exista; no se presume exito.
+
+## Resultado Linux de la base
+
+Commit `250d031347591d96d9109421ea5ebc18204143ae`.
+[Corrida 34935117810](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34935117810).
+Ambas firmas pasaron con identidad exacta; artefactos conservados. El escaner
+reconocio Wolfi y emitio un reporte completo de la base sin modificar.
+
+Base analizada: `sha256:48010bfb026096e2e99117091108a1f3c179c96b9308accb320ddbe901fcbd54`.
+Grype 0.118.0; `2026-09-15T06:02:43.760929249Z`.
+Coincidencias: Critical 0, High 1, Medium 2, Low 1, Negligible 0, Unknown 1.
+Cinco hallazgos originales conservados, sin excepciones.
+
+| Aviso | Paquete | Resultado |
+| --- | --- | --- |
+| CVE-2026-85091 | zlib 1.3.2-r7 | High; Grype indica 1.3.3-r0 como corregida |
+| GHSA-g5fp-32jq-cfw2 | zlib 1.3.2-r7 | Unknown; misma version corregida indicada |
+| CVE-2025-15367, CVE-2026-19672 | python-3.14 3.14.7_git20260914-r3 | Medium; sin resolucion en esta ronda |
+| CVE-2026-15310 | python-3.14 3.14.7_git20260914-r3 | Low; sin resolucion en esta ronda |
+
+La barrera de base bloqueo correctamente. Build de Muvv, unitarias bajo Python
+3.14, permisos reales, HTTP/apagado y escaneo de la aplicacion NO se ejecutaron.
+No comparar este unico High de la base con los 42 pendientes de Muvv como si
+se hubiera reducido ya el riesgo de la aplicacion completa.
+
+### Disponibilidad del arreglo
+
+Se consulto por HTTPS el indice publico APK x86_64 el 2026-09-15. La lista de
+zlib llega hasta `1.3.2-r7`; no aparece `1.3.3-r0`. Solo se leyo el indice,
+sin instalar paquetes ni verificar sus firmas para instalacion. La receta
+publica consultada sigue en version 1.3.2 y la URL de release upstream 1.3.3
+respondio 404. No se concluye disponibilidad a partir de `fix_versions` solo.
+
+Fuentes: [avisos del proveedor](https://images.chainguard.dev/directory/image/python/vulnerabilities),
+[receta publica](https://github.com/wolfi-dev/os/blob/main/zlib.yaml),
+[indice de paquetes](https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz).
+
+Siguiente paso: aclarar con el proveedor la version publicada/planificada o
+backport concreto, sin aceptar la vulnerabilidad ni saltar esta barrera. La
+consulta propuesta figura abajo y NO se envio. No repetir builds sin una
+imagen o evidencia nueva. Se mantiene la candidata actual sin deploy.
+
+## Consulta propuesta al proveedor (no enviada)
+
+Title: Public Python Starter image: zlib fixed version availability
+
+We verified the signatures of both public Python Starter variants with the
+documented Free certificate identity. Grype 0.118.0 detects CVE-2026-85091 in
+zlib 1.3.2-r7 in the runtime base and reports 1.3.3-r0 as fixed. Your public
+Python vulnerability page lists the same issue. A read-only check of the
+Wolfi x86_64 APK index on 2026-09-15 found zlib versions through 1.3.2-r7,
+but not 1.3.3-r0.
+
+Is the indicated fixed package released to the public Starter channel or
+planned? If a backport exists under a different version, which published
+package/source evidence and rebuilt Python image digest should we verify?
+We have not suppressed the finding or deployed this runtime. We are seeking
+a maintained update and are not requesting a paid trial or subscription.
