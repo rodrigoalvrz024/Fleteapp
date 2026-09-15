@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../widgets/muvv_mobile_ui.dart';
+import '../../../widgets/muvv_page_scaffold.dart';
 
 const _publicHomeUrl = String.fromEnvironment(
   'PUBLIC_HOME_URL',
@@ -35,6 +38,36 @@ class RecoveryAuthScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb) {
+      return MuvvPageScaffold(
+        title: 'Cuenta',
+        fallbackPath: '/auth/login',
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          children: [
+            Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset('assets/branding/muvv-app-icon.png',
+                    width: 44, height: 44),
+              ),
+              const SizedBox(width: 12),
+              const Text('Muvv',
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.midnight)),
+            ]),
+            const SizedBox(height: 32),
+            Text(panelTitle, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 12),
+            Text(panelSubtitle, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 24),
+            child,
+          ],
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppTheme.midnight,
       body: LayoutBuilder(
@@ -556,6 +589,14 @@ class RecoveryPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb) {
+      return MuvvGradientButton(
+        label: label,
+        icon: icon,
+        isLoading: isLoading,
+        onPressed: onPressed,
+      );
+    }
     return ElevatedButton.icon(
       onPressed: isLoading ? null : onPressed,
       icon: isLoading

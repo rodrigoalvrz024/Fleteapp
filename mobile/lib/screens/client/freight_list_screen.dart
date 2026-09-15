@@ -97,9 +97,7 @@ class _FreightListScreenState extends ConsumerState<FreightListScreen> {
 
     return WebPageScaffold(
       title: 'Mis fletes',
-      subtitle: user == null
-          ? 'Revisa solicitudes, estados, rutas y precios'
-          : '${user.email} · revisa solicitudes, estados, rutas y precios',
+      subtitle: 'Solicitudes, viajes activos e historial',
       actions: [WebAppBarActions(homePath: homePath)],
       bottomNavigationBar: const MuvvBottomNavigation(
         selected: MuvvNavigationSection.activity,

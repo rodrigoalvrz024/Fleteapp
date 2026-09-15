@@ -47,11 +47,13 @@ Para generar el APK release usa los mismos dos `--dart-define`.
 
 ## Comportamiento de cuentas
 
-Por ahora Google permite **iniciar sesion solamente con una cuenta Muvv ya
-creada que use el mismo correo y este activa**. La creacion de cuentas sigue
-pidiendo telefono, perfil y consentimientos expresos de terminos y privacidad;
-no se crean cuentas ni se registran aceptaciones legales automaticamente desde
-Google.
+Google permite iniciar sesion con una cuenta Muvv activa y tambien completar
+un registro explicito mediante `POST /auth/google/register`. El backend verifica
+el ID token y obtiene el nombre del perfil Google verificado cuando esta
+disponible. El registro sigue pidiendo telefono, perfil y consentimientos
+expresos de terminos y privacidad; aceptar Google no acepta automaticamente los
+terminos de Muvv. Una cuenta puede tener modo cliente y conductor, pero operar
+como conductor requiere documentos y vehiculo aprobados.
 
 ## iPhone
 

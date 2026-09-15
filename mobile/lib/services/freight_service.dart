@@ -6,7 +6,8 @@ import '../models/freight_model.dart';
 import '../core/constants/api_constants.dart';
 
 class FreightService {
-  final _api = ApiService();
+  final ApiService _api;
+  FreightService({ApiService? api}) : _api = api ?? ApiService();
 
   Future<FreightModel> createFreight({
     required String originAddress,
@@ -20,6 +21,7 @@ class FreightService {
     double? cargoVolumeM3,
     String? serviceType,
     String? quoteId,
+    String? requestedVehicleType,
     int requiresHelpers = 0,
     bool isUrgent = false,
     DateTime? scheduledAt,
@@ -37,6 +39,8 @@ class FreightService {
       if (cargoVolumeM3 != null) 'cargo_volume_m3': cargoVolumeM3,
       if (serviceType != null) 'service_type': serviceType,
       if (quoteId != null) 'quote_id': quoteId,
+      if (requestedVehicleType != null)
+        'requested_vehicle_type': requestedVehicleType,
       'requires_helpers': requiresHelpers,
       'is_urgent': isUrgent,
       if (cargoPhotoRefs.isNotEmpty) 'cargo_photo_refs': cargoPhotoRefs,

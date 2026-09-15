@@ -107,14 +107,18 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final fmt = NumberFormat('#,##0', 'es_CL');
 
     // Mostrar alerta de flete entrante
-    if (driver.incomingFreight != null && !_incomingOverlayOpen) {
+    if (driver.incomingFreight != null &&
+        !_incomingOverlayOpen &&
+        ModalRoute.of(context)?.isCurrent == true) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showIncomingFreightOverlay(driver.incomingFreight!);
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+          _showIncomingFreightOverlay(driver.incomingFreight!);
+        }
       });
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: RefreshIndicator(
           color: AppTheme.primary,
@@ -134,7 +138,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                           children: [
                             Text('Hola, $name 👋',
                                 style: const TextStyle(
-                                  fontSize: 20,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                   color: AppTheme.midnight,
                                 )),
@@ -216,8 +220,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                               }
                             },
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        padding: const EdgeInsets.all(18),
+                        duration: AppTheme.motionStandard,
+                        curve: AppTheme.motionCurve,
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           gradient: driver.isOnline
                               ? const LinearGradient(
@@ -230,7 +235,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                                 )
                               : null,
                           color: driver.isOnline ? null : Colors.white,
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.circular(16),
                           border: driver.isOnline
                               ? null
                               : Border.all(
@@ -520,19 +525,30 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       barrierDismissible: false,
       barrierLabel: 'Nuevo flete',
       barrierColor: AppTheme.midnight.withValues(alpha: 0.42),
-      transitionDuration: const Duration(milliseconds: 220),
+      transitionDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : AppTheme.motionStandard,
       pageBuilder: (_, __, ___) => _IncomingFreightOverlay(freight: freight),
-      transitionBuilder: (_, animation, __, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.08),
-            end: Offset.zero,
-          ).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-          child: child,
-        ),
-      ),
+      transitionBuilder: (_, animation, __, child) {
+        final curve = CurvedAnimation(
+          parent: animation,
+          curve: AppTheme.motionCurve,
+        );
+        return FadeTransition(
+          opacity: curve,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.06),
+              end: Offset.zero,
+            ).animate(curve),
+            child: ScaleTransition(
+              alignment: Alignment.bottomCenter,
+              scale: Tween<double>(begin: 0.96, end: 1).animate(curve),
+              child: child,
+            ),
+          ),
+        );
+      },
     );
     if (!mounted || action == null) {
       _incomingOverlayOpen = false;

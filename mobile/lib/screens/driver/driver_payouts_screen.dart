@@ -21,6 +21,7 @@ class _DriverPayoutsScreenState extends State<DriverPayoutsScreen> {
   final _date = DateFormat('d MMM yyyy, HH:mm', 'es_CL');
   List<PayoutModel> _payouts = [];
   bool _loading = true;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -29,10 +30,15 @@ class _DriverPayoutsScreenState extends State<DriverPayoutsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
     try {
       final payouts = await _service.listMine();
       if (mounted) setState(() => _payouts = payouts);
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -48,7 +54,7 @@ class _DriverPayoutsScreenState extends State<DriverPayoutsScreen> {
         .fold<double>(0, (sum, item) => sum + item.amount);
 
     return WebPageScaffold(
-      title: 'Mis liquidaciones',
+      title: 'Ganancias',
       subtitle: 'Pagos correspondientes a tus fletes cobrados',
       actions: const [DriverAppBarActions()],
       bottomNavigationBar: const MuvvBottomNavigation(
@@ -80,6 +86,14 @@ class _DriverPayoutsScreenState extends State<DriverPayoutsScreen> {
           const SizedBox(height: 16),
           if (_loading)
             const WebLoadingState()
+          else if (_failed)
+            WebEmptyState(
+              icon: Icons.cloud_off_outlined,
+              title: 'No pudimos cargar tus ganancias',
+              description: 'Revisa tu conexión y vuelve a intentarlo.',
+              actionLabel: 'Reintentar',
+              onAction: _load,
+            )
           else if (_payouts.isEmpty)
             const WebEmptyState(
               icon: Icons.account_balance_wallet_outlined,
@@ -122,7 +136,7 @@ class _Summary extends StatelessWidget {
               value,
               style: TextStyle(
                 color: color,
-                fontSize: 22,
+                fontSize: 20,
                 fontWeight: FontWeight.w800,
               ),
             ),

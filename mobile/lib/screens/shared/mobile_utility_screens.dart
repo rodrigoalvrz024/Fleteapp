@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/muvv_mobile_ui.dart';
+import '../../widgets/muvv_page_scaffold.dart';
 
 class MuvvAccountHubScreen extends ConsumerWidget {
   final bool driver;
@@ -18,24 +19,23 @@ class MuvvAccountHubScreen extends ConsumerWidget {
     final initial = name.trim().isEmpty ? 'M' : name.trim()[0].toUpperCase();
     final activityPath = driver ? '/app/driver/trips' : '/app/client/freights';
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text('Perfil'),
-        actions: [
-          IconButton(
-            tooltip: 'Editar perfil',
-            onPressed: () => context.push('/app/profile'),
-            icon: const Icon(Icons.edit_outlined),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 116),
+    return MuvvPageScaffold(
+      title: 'Perfil',
+      fallbackPath: driver ? '/app/driver' : '/app/client',
+      actions: [
+        IconButton(
+          tooltip: 'Editar perfil',
+          onPressed: () => context.push('/app/profile'),
+          icon: const Icon(Icons.edit_outlined),
+        ),
+        const SizedBox(width: 6),
+      ],
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
           MuvvSurfaceCard(
             emphasized: true,
+            onTap: () => context.push('/app/profile'),
             child: Row(
               children: [
                 Container(
@@ -88,110 +88,98 @@ class MuvvAccountHubScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 28),
-          const MuvvSectionHeader(eyebrow: 'Cuenta', title: 'Lo esencial'),
+          const SizedBox(height: 24),
+          const MuvvSectionHeader(title: 'Cuenta'),
           const SizedBox(height: 12),
-          MuvvSurfaceCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                _MenuRow(
-                  icon: Icons.person_outline_rounded,
-                  title: 'Editar perfil',
-                  subtitle: 'Datos personales y contacto',
-                  onTap: () => context.push('/app/profile'),
+          MuvvSettingsGroup(
+            children: [
+              _MenuRow(
+                icon: Icons.person_outline_rounded,
+                title: 'Editar perfil',
+                subtitle: 'Datos personales y contacto',
+                onTap: () => context.push('/app/profile'),
+              ),
+              const _MenuDivider(),
+              _MenuRow(
+                icon: driver
+                    ? Icons.verified_user_outlined
+                    : Icons.location_on_outlined,
+                title:
+                    driver ? 'Estado de verificacion' : 'Direcciones guardadas',
+                subtitle: driver
+                    ? 'Documentos y datos de tu vehiculo'
+                    : 'Casa, trabajo y lugares frecuentes',
+                onTap: () => context.push(
+                  driver ? '/app/driver/onboarding' : '/app/client/addresses',
                 ),
-                const _MenuDivider(),
-                _MenuRow(
-                  icon: driver
-                      ? Icons.verified_user_outlined
-                      : Icons.location_on_outlined,
-                  title: driver
-                      ? 'Estado de verificacion'
-                      : 'Direcciones guardadas',
-                  subtitle: driver
-                      ? 'Documentos y datos de tu vehiculo'
-                      : 'Casa, trabajo y lugares frecuentes',
-                  onTap: () => context.push(
-                    driver ? '/app/driver/onboarding' : '/app/client/addresses',
-                  ),
-                ),
-                const _MenuDivider(),
-                _MenuRow(
-                  icon: driver
-                      ? Icons.route_outlined
-                      : Icons.local_shipping_outlined,
-                  title: driver ? 'Historial de viajes' : 'Mis fletes',
-                  subtitle: driver
-                      ? 'Servicios aceptados y completados'
-                      : 'Solicitudes, ruta y comprobantes',
-                  onTap: () => context.go(activityPath),
-                ),
-              ],
-            ),
+              ),
+              const _MenuDivider(),
+              _MenuRow(
+                icon: driver
+                    ? Icons.route_outlined
+                    : Icons.local_shipping_outlined,
+                title: driver ? 'Historial de viajes' : 'Mis fletes',
+                subtitle: driver
+                    ? 'Servicios aceptados y completados'
+                    : 'Solicitudes, ruta y comprobantes',
+                onTap: () => context.go(activityPath),
+              ),
+            ],
           ),
           const SizedBox(height: 26),
           MuvvSectionHeader(
-            eyebrow: driver ? 'Operación' : 'Pagos y beneficios',
-            title: driver ? 'Tu operación' : 'Preferencias de pago',
-          ),
+              title: driver ? 'Tu operación' : 'Pagos y beneficios'),
           const SizedBox(height: 12),
-          MuvvSurfaceCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
+          MuvvSettingsGroup(
+            children: [
+              _MenuRow(
+                icon: driver
+                    ? Icons.account_balance_wallet_outlined
+                    : Icons.credit_card_outlined,
+                title: driver ? 'Ganancias' : 'Métodos de pago',
+                subtitle: driver
+                    ? 'Liquidaciones programadas y pagadas'
+                    : 'Tarjetas y comprobantes',
+                onTap: () => context.push(
+                    driver ? '/app/driver/payouts' : '/app/client/payments'),
+              ),
+              if (!driver) ...[
+                const _MenuDivider(),
                 _MenuRow(
-                  icon: driver
-                      ? Icons.account_balance_wallet_outlined
-                      : Icons.credit_card_outlined,
-                  title: driver ? 'Ganancias' : 'Metodos de pago',
-                  subtitle: driver
-                      ? 'Liquidaciones programadas y pagadas'
-                      : 'Tarjetas y comprobantes',
-                  onTap: () => context.push(
-                      driver ? '/app/driver/payouts' : '/app/client/payments'),
+                  icon: Icons.confirmation_number_outlined,
+                  title: 'Promociones',
+                  subtitle: 'Cupones disponibles para tus fletes',
+                  onTap: () => context.push('/app/client/promotions'),
                 ),
-                if (!driver) ...[
-                  const _MenuDivider(),
-                  _MenuRow(
-                    icon: Icons.confirmation_number_outlined,
-                    title: 'Promociones',
-                    subtitle: 'Cupones disponibles para tus fletes',
-                    onTap: () => context.push('/app/client/promotions'),
-                  ),
-                ],
               ],
-            ),
+            ],
           ),
           const SizedBox(height: 26),
-          const MuvvSectionHeader(eyebrow: 'Muvv', title: 'Ayuda y ajustes'),
+          const MuvvSectionHeader(title: 'Ayuda y ajustes'),
           const SizedBox(height: 12),
-          MuvvSurfaceCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                _MenuRow(
-                  icon: Icons.notifications_none_rounded,
-                  title: 'Notificaciones',
-                  subtitle: 'Avisos del estado de tus servicios',
-                  onTap: () => context.push('/app/settings/notifications'),
-                ),
-                const _MenuDivider(),
-                _MenuRow(
-                  icon: Icons.help_outline_rounded,
-                  title: 'Centro de ayuda',
-                  subtitle: 'Resuelve dudas o solicita asistencia',
-                  onTap: () => context.push('/app/settings/help'),
-                ),
-                const _MenuDivider(),
-                _MenuRow(
-                  icon: Icons.tune_rounded,
-                  title: 'Configuracion',
-                  subtitle: 'Privacidad, seguridad y preferencias',
-                  onTap: () => context.push('/app/settings/preferences'),
-                ),
-              ],
-            ),
+          MuvvSettingsGroup(
+            children: [
+              _MenuRow(
+                icon: Icons.notifications_none_rounded,
+                title: 'Notificaciones',
+                subtitle: 'Avisos del estado de tus servicios',
+                onTap: () => context.push('/app/settings/notifications'),
+              ),
+              const _MenuDivider(),
+              _MenuRow(
+                icon: Icons.help_outline_rounded,
+                title: 'Centro de ayuda',
+                subtitle: 'Resuelve dudas o solicita asistencia',
+                onTap: () => context.push('/app/settings/help'),
+              ),
+              const _MenuDivider(),
+              _MenuRow(
+                icon: Icons.tune_rounded,
+                title: 'Configuración',
+                subtitle: 'Privacidad, seguridad y preferencias',
+                onTap: () => context.push('/app/settings/preferences'),
+              ),
+            ],
           ),
         ],
       ),
@@ -213,16 +201,16 @@ enum MuvvUtilityPage {
   chat
 }
 
-class MuvvUtilityScreen extends StatefulWidget {
+class MuvvUtilityScreen extends ConsumerStatefulWidget {
   final MuvvUtilityPage page;
 
   const MuvvUtilityScreen({super.key, required this.page});
 
   @override
-  State<MuvvUtilityScreen> createState() => _MuvvUtilityScreenState();
+  ConsumerState<MuvvUtilityScreen> createState() => _MuvvUtilityScreenState();
 }
 
-class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
+class _MuvvUtilityScreenState extends ConsumerState<MuvvUtilityScreen> {
   bool _tripUpdates = true;
   bool _marketing = false;
   bool _biometrics = false;
@@ -239,8 +227,8 @@ class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
   }
 
   _UtilityCopy get _copy => switch (widget.page) {
-        MuvvUtilityPage.payments => const _UtilityCopy('Metodos de pago',
-            'Configura como pagaras tus fletes.', Icons.credit_card_outlined),
+        MuvvUtilityPage.payments => const _UtilityCopy('Pagos',
+            'Métodos de pago y comprobantes', Icons.credit_card_outlined),
         MuvvUtilityPage.addresses => const _UtilityCopy(
             'Direcciones guardadas',
             'Ahorra tiempo en tus proximas solicitudes.',
@@ -257,7 +245,7 @@ class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
             'Centro de ayuda',
             'Estamos aqui para que tu flete avance seguro.',
             Icons.support_agent_outlined),
-        MuvvUtilityPage.preferences => const _UtilityCopy('Configuracion',
+        MuvvUtilityPage.preferences => const _UtilityCopy('Configuración',
             'Privacidad, seguridad y preferencias.', Icons.tune_rounded),
         MuvvUtilityPage.chat => const _UtilityCopy(
             'Chat con conductor',
@@ -266,20 +254,19 @@ class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
       };
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        backgroundColor: AppTheme.background,
-        appBar: AppBar(title: Text(_copy.title)),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+  Widget build(BuildContext context) => MuvvPageScaffold(
+        title: _copy.title,
+        bottomNavigationBar: widget.page == MuvvUtilityPage.payments
+            ? const MuvvBottomNavigation(selected: MuvvNavigationSection.wallet)
+            : null,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            MuvvSectionHeader(eyebrow: 'Muvv', title: _copy.title),
-            const SizedBox(height: 6),
-            Text(
-              _copy.subtitle,
-              style: const TextStyle(
-                  color: AppTheme.slate600, fontSize: 14, height: 1.4),
-            ),
-            const SizedBox(height: 20),
+            if (widget.page != MuvvUtilityPage.payments) ...[
+              Text(_copy.subtitle,
+                  style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 20),
+            ],
             switch (widget.page) {
               MuvvUtilityPage.payments => _payments(),
               MuvvUtilityPage.addresses => _addresses(),
@@ -294,44 +281,98 @@ class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
       );
 
   Widget _payments() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          MuvvSurfaceCard(
-            child: Column(
+          const MuvvSectionHeader(title: 'Métodos de pago'),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDF3FF),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  height: 52,
-                  width: 52,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.lock_outline_rounded,
-                      color: AppTheme.primary),
-                ),
-                const SizedBox(height: 14),
-                const Text('Tus pagos se protegen dentro de Muvv',
-                    style: TextStyle(
-                        color: AppTheme.midnight,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16)),
-                const SizedBox(height: 6),
-                const Text('Agrega una tarjeta al activar la pasarela de pago.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppTheme.slate600, height: 1.35)),
+                const Icon(Icons.credit_card_outlined,
+                    color: AppTheme.primary, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tarjetas',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    Text('Aún no tienes tarjetas guardadas.',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 12),
+                    const MuvvStatusPill(
+                        label: 'Próximamente', color: AppTheme.slate600),
+                  ],
+                )),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: MuvvGradientButton(
-              label: 'Agregar tarjeta',
-              icon: Icons.add_card_rounded,
-              onPressed: () => _showComingSoon(
-                  'La conexión segura de tarjetas se habilitará con Webpay.'),
+          MuvvGradientButton(
+            label: 'Agregar tarjeta',
+            icon: Icons.add_card_rounded,
+            onPressed: () => _showCardAvailability(),
+          ),
+          const SizedBox(height: 12),
+          Text(
+              'Webpay aún no está habilitado. No ingreses datos de tu tarjeta.',
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 28),
+          const MuvvSectionHeader(title: 'Actividad'),
+          const SizedBox(height: 12),
+          MuvvSettingsGroup(children: [
+            _MenuRow(
+              icon: Icons.receipt_long_outlined,
+              title: 'Pagos de mis fletes',
+              subtitle: 'Revisa el estado de pago de cada servicio',
+              onTap: () => context.go('/app/client/freights'),
+            ),
+            const _MenuDivider(),
+            _MenuRow(
+              icon: Icons.help_outline_rounded,
+              title: 'Ayuda con un pago',
+              subtitle: 'Cobros y comprobantes',
+              onTap: () => context.push('/app/settings/help'),
+            ),
+          ]),
+        ],
+      );
+
+  Future<void> _showCardAvailability() => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const MuvvSectionHeader(title: 'Tarjetas con Webpay'),
+                const SizedBox(height: 12),
+                const Text(
+                    'La vinculación de tarjetas todavía no está disponible. '
+                    'Por ahora, revisa las opciones de pago en el detalle de tu flete.'),
+                const SizedBox(height: 20),
+                MuvvGradientButton(
+                  label: 'Entendido',
+                  icon: Icons.check_rounded,
+                  onPressed: () => Navigator.pop(sheetContext),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       );
 
   Widget _addresses() => Column(
@@ -358,27 +399,24 @@ class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
         ],
       );
 
-  Widget _notifications() => MuvvSurfaceCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            _ToggleRow(
-              icon: Icons.local_shipping_outlined,
-              title: 'Actualizaciones de fletes',
-              subtitle: 'Cambios de estado, llegada y entrega',
-              value: _tripUpdates,
-              onChanged: (value) => setState(() => _tripUpdates = value),
-            ),
-            const _MenuDivider(),
-            _ToggleRow(
-              icon: Icons.local_offer_outlined,
-              title: 'Promociones Muvv',
-              subtitle: 'Beneficios y novedades ocasionales',
-              value: _marketing,
-              onChanged: (value) => setState(() => _marketing = value),
-            ),
-          ],
-        ),
+  Widget _notifications() => MuvvSettingsGroup(
+        children: [
+          _ToggleRow(
+            icon: Icons.local_shipping_outlined,
+            title: 'Actualizaciones de fletes',
+            subtitle: 'Cambios de estado, llegada y entrega',
+            value: _tripUpdates,
+            onChanged: (value) => setState(() => _tripUpdates = value),
+          ),
+          const _MenuDivider(),
+          _ToggleRow(
+            icon: Icons.local_offer_outlined,
+            title: 'Promociones Muvv',
+            subtitle: 'Beneficios y novedades ocasionales',
+            value: _marketing,
+            onChanged: (value) => setState(() => _marketing = value),
+          ),
+        ],
       );
 
   Widget _promotions() => Column(
@@ -416,57 +454,56 @@ class _MuvvUtilityScreenState extends State<MuvvUtilityScreen> {
         ],
       );
 
-  Widget _help() => MuvvSurfaceCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            _MenuRow(
-                icon: Icons.route_outlined,
-                title: 'Mi solicitud',
-                subtitle: 'Ruta, precio, conductor y estado',
-                onTap: () =>
-                    _showComingSoon('Abriremos ayuda para tu solicitud.')),
-            const _MenuDivider(),
-            _MenuRow(
-                icon: Icons.receipt_long_outlined,
-                title: 'Pagos y comprobantes',
-                subtitle: 'Cobros, pagos y liquidaciones',
-                onTap: () => _showComingSoon('Abriremos ayuda de pagos.')),
-            const _MenuDivider(),
-            _MenuRow(
-                icon: Icons.shield_outlined,
-                title: 'Seguridad y privacidad',
-                subtitle: 'Datos, documentos y reportes',
-                onTap: () => _showComingSoon('Abriremos ayuda de seguridad.')),
-          ],
-        ),
+  Widget _help() => MuvvSettingsGroup(
+        children: [
+          _MenuRow(
+              icon: Icons.route_outlined,
+              title: 'Mi solicitud',
+              subtitle: 'Ruta, precio, conductor y estado',
+              onTap: () => context.push(
+                  ref.read(authProvider).user?.role == 'driver'
+                      ? '/app/driver/trips'
+                      : '/app/client/freights')),
+          const _MenuDivider(),
+          _MenuRow(
+              icon: Icons.receipt_long_outlined,
+              title: 'Pagos y comprobantes',
+              subtitle: 'Cobros, pagos y liquidaciones',
+              onTap: () => context.push(
+                  ref.read(authProvider).user?.role == 'driver'
+                      ? '/app/driver/payouts'
+                      : '/app/client/payments')),
+          const _MenuDivider(),
+          _MenuRow(
+              icon: Icons.shield_outlined,
+              title: 'Seguridad y privacidad',
+              subtitle: 'Datos, documentos y reportes',
+              onTap: () => context.push('/legal/privacy')),
+        ],
       );
 
-  Widget _preferences() => MuvvSurfaceCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            _ToggleRow(
-                icon: Icons.fingerprint_outlined,
-                title: 'Acceso biometrico',
-                subtitle: 'Disponible al activar biometria nativa',
-                value: _biometrics,
-                onChanged: (value) => setState(() => _biometrics = value)),
-            const _MenuDivider(),
-            _ToggleRow(
-                icon: Icons.my_location_outlined,
-                title: 'Ubicacion durante un flete',
-                subtitle: 'Necesaria para seguimiento en vivo',
-                value: _shareLocation,
-                onChanged: (value) => setState(() => _shareLocation = value)),
-            const _MenuDivider(),
-            _MenuRow(
-                icon: Icons.privacy_tip_outlined,
-                title: 'Privacidad y datos',
-                subtitle: 'Solicitudes y documentos legales',
-                onTap: () => context.push('/legal/privacy')),
-          ],
-        ),
+  Widget _preferences() => MuvvSettingsGroup(
+        children: [
+          _ToggleRow(
+              icon: Icons.fingerprint_outlined,
+              title: 'Acceso biometrico',
+              subtitle: 'Disponible al activar biometria nativa',
+              value: _biometrics,
+              onChanged: (value) => setState(() => _biometrics = value)),
+          const _MenuDivider(),
+          _ToggleRow(
+              icon: Icons.my_location_outlined,
+              title: 'Ubicacion durante un flete',
+              subtitle: 'Necesaria para seguimiento en vivo',
+              value: _shareLocation,
+              onChanged: (value) => setState(() => _shareLocation = value)),
+          const _MenuDivider(),
+          _MenuRow(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Privacidad y datos',
+              subtitle: 'Solicitudes y documentos legales',
+              onTap: () => context.push('/legal/privacy')),
+        ],
       );
 
   Widget _chat() => Column(
@@ -704,7 +741,7 @@ class _ToggleRow extends StatelessWidget {
                       style: const TextStyle(
                           color: AppTheme.slate400, fontSize: 11))
                 ])),
-            Switch(
+            Switch.adaptive(
                 value: value,
                 activeThumbColor: AppTheme.primary,
                 onChanged: onChanged),

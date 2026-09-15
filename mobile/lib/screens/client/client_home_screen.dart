@@ -97,7 +97,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
   List<_SavedPlace> _recents = [];
 
   static const double _snapMin = 0.44;
-  static const double _snapMiddle = 0.68;
+  static const double _snapMiddle = 0.64;
   static const double _snapMax = 0.92;
 
   @override
@@ -127,8 +127,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
           _searchFocus.unfocus();
           _sheetCtrl.animateTo(
             _snapMin,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
+            duration: AppTheme.motionStandard,
+            curve: AppTheme.motionCurve,
           );
         }
         Future<void>.delayed(const Duration(milliseconds: 300), () {
@@ -258,8 +258,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
   void _collapseSheet() {
     _searchFocus.unfocus();
     _sheetCtrl.animateTo(_snapMin,
-        duration: const Duration(milliseconds: 360),
-        curve: Curves.easeOutCubic);
+        duration: AppTheme.motionStandard, curve: AppTheme.motionCurve);
   }
 
   void _goToMyLocation() {
@@ -571,7 +570,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.white.withValues(alpha: 0.97),
                         shape: BoxShape.circle,
                         border: Border.all(color: AppTheme.slate200),
                         boxShadow: [
@@ -617,10 +616,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                         color: Colors.white,
                         borderRadius: desktop
                             ? const BorderRadius.only(
-                                topRight: Radius.circular(28),
+                                topRight: Radius.circular(24),
                               )
                             : const BorderRadius.vertical(
-                                top: Radius.circular(28),
+                                top: Radius.circular(24),
                               ),
                         border: Border.all(
                           color: AppTheme.slate200.withValues(alpha: 0.9),
@@ -637,10 +636,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                       child: ClipRRect(
                         borderRadius: desktop
                             ? const BorderRadius.only(
-                                topRight: Radius.circular(28),
+                                topRight: Radius.circular(24),
                               )
                             : const BorderRadius.vertical(
-                                top: Radius.circular(28),
+                                top: Radius.circular(24),
                               ),
                         child: ListView(
                           controller: scrollController,
@@ -710,8 +709,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                       ),
                                     ),
                                   AnimatedSize(
-                                    duration: const Duration(milliseconds: 260),
-                                    curve: Curves.easeOutCubic,
+                                    duration: AppTheme.motionStandard,
+                                    curve: AppTheme.motionCurve,
                                     child: showSuggestions
                                         ? const SizedBox(height: 18)
                                         : showExpandedContent
@@ -724,7 +723,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                                     '¿Qué necesitas mover?',
                                                     style: TextStyle(
                                                       color: AppTheme.midnight,
-                                                      fontSize: 17,
+                                                      fontSize: 16,
                                                       fontWeight:
                                                           FontWeight.w800,
                                                     ),
@@ -747,7 +746,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen>
                                                       style: TextStyle(
                                                         color:
                                                             AppTheme.midnight,
-                                                        fontSize: 17,
+                                                        fontSize: 16,
                                                         fontWeight:
                                                             FontWeight.w800,
                                                       ),
@@ -935,7 +934,7 @@ class _MuvvHomePanelHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppTheme.slate600,
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -944,9 +943,9 @@ class _MuvvHomePanelHeader extends StatelessWidget {
                   '¿Qué necesitas mover hoy?',
                   style: TextStyle(
                     color: AppTheme.midnight,
-                    fontSize: 19,
-                    height: 1.15,
-                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -1144,21 +1143,29 @@ class _MuvvServiceGrid extends StatelessWidget {
         id: 'package',
         label: 'Paquetería',
         icon: Icons.inventory_2_outlined,
+        color: Color(0xFF1677C8),
+        background: Color(0xFFEAF5FF),
       ),
       _MuvvServiceOption(
         id: 'moving',
         label: 'Mudanza',
         icon: Icons.local_shipping_outlined,
+        color: AppTheme.primary,
+        background: Color(0xFFEAF1FF),
       ),
       _MuvvServiceOption(
         id: 'home-office',
         label: 'Hogar u oficina',
         icon: Icons.chair_outlined,
+        color: Color(0xFF0B9A70),
+        background: Color(0xFFEAF8F2),
       ),
       _MuvvServiceOption(
         id: 'urgent',
         label: 'Envío urgente',
         icon: Icons.bolt_rounded,
+        color: Color(0xFFEA6A22),
+        background: Color(0xFFFFF1E8),
         urgent: true,
       ),
     ];
@@ -1166,10 +1173,11 @@ class _MuvvServiceGrid extends StatelessWidget {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 10,
       mainAxisSpacing: 10,
-      childAspectRatio: 2.7,
+      childAspectRatio: 2.35,
       children: [
         for (final service in services)
           _MuvvServiceCard(
@@ -1270,12 +1278,16 @@ class _MuvvServiceOption {
   final String id;
   final String label;
   final IconData icon;
+  final Color color;
+  final Color background;
   final bool urgent;
 
   const _MuvvServiceOption({
     required this.id,
     required this.label,
     required this.icon,
+    required this.color,
+    required this.background,
     this.urgent = false,
   });
 }
@@ -1293,50 +1305,90 @@ class _MuvvServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = service.urgent ? AppTheme.urgent : AppTheme.primary;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: selected ? color.withValues(alpha: 0.10) : Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(
-              color: selected ? color : AppTheme.slate200,
-              width: selected ? 1.25 : 0.9,
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedScale(
+      scale: !reduceMotion && selected ? 1.015 : 1,
+      duration: reduceMotion ? Duration.zero : AppTheme.motionFast,
+      curve: AppTheme.motionCurve,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(15),
+          child: AnimatedContainer(
+            duration: reduceMotion ? Duration.zero : AppTheme.motionFast,
+            curve: AppTheme.motionCurve,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: selected
+                  ? service.color.withValues(alpha: 0.16)
+                  : service.background,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: selected
+                    ? AppTheme.primary
+                    : service.color.withValues(alpha: 0.22),
+                width: selected ? 1.7 : 0.9,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: 0.12),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ]
+                  : null,
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: selected ? 0.16 : 0.10),
-                  borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: service.color
+                            .withValues(alpha: selected ? 0.22 : 0.13),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(service.icon, color: service.color, size: 17),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        service.label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected ? service.color : AppTheme.midnight,
+                          fontSize: 11,
+                          height: 1.15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Icon(service.icon, color: color, size: 17),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  service.label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: selected ? color : AppTheme.slate600,
-                    fontSize: 11,
-                    height: 1.15,
-                    fontWeight: FontWeight.w800,
+                if (selected)
+                  Positioned(
+                    top: -3,
+                    right: -3,
+                    child: Container(
+                      width: 17,
+                      height: 17,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.check_rounded,
+                          color: Colors.white, size: 12),
+                    ),
                   ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

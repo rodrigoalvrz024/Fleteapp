@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/driver_model.dart';
 import '../../providers/driver_onboarding_provider.dart';
 import '../../services/driver_onboarding_service.dart';
+import '../../widgets/muvv_page_scaffold.dart';
 
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   const DriverOnboardingScreen({super.key});
@@ -119,9 +120,11 @@ class _DriverOnboardingScreenState
     final state = ref.watch(onboardingProvider);
     final driver = state.driver;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: SafeArea(
+    return MuvvPageScaffold(
+      title: 'Registro de conductor',
+      fallbackPath: '/app/driver',
+      child: SafeArea(
+        top: false,
         child: state.isLoading
             ? const Center(
                 child: CircularProgressIndicator(color: AppTheme.primary))

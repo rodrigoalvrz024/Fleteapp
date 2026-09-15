@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import '../../widgets/muvv_page_scaffold.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/chat_message_model.dart';
@@ -228,6 +229,10 @@ class _FreightChatScreenState extends ConsumerState<FreightChatScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
+        leading: MuvvBackButton(
+            fallbackPath: isDriver
+                ? '/app/driver/freights/${widget.freightId}'
+                : '/app/client/freights/${widget.freightId}'),
         titleSpacing: 0,
         title: _ChatHeader(summary: state.summary, isDriver: isDriver),
         actions: [

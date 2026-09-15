@@ -80,8 +80,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           alsoDriver: _alsoDriver,
           acceptsTerms: _acceptTerms,
           acceptsPrivacy: _acceptPrivacy,
-          acceptsDriverDocuments:
-              _requestsDriverMode && _acceptDriverDocuments,
+          acceptsDriverDocuments: _requestsDriverMode && _acceptDriverDocuments,
         );
     if (!mounted) return;
     if (ok) {
@@ -102,7 +101,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
     if (_requestsDriverMode && !_acceptDriverDocuments) {
-      _showError('Autoriza la revision de documentos para activar el modo conductor.');
+      _showError(
+          'Autoriza la revision de documentos para activar el modo conductor.');
       return;
     }
 
@@ -195,7 +195,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 isGoogleLoading: _isGoogleLoading,
                 loginPath: _loginPath,
                 onRoleChanged: _setRole,
-                onAlsoDriverChanged: (value) => setState(() => _alsoDriver = value),
+                onAlsoDriverChanged: (value) =>
+                    setState(() => _alsoDriver = value),
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onAcceptTerms: (value) => setState(() => _acceptTerms = value),
                 onAcceptPrivacy: (value) => setState(
@@ -420,7 +421,7 @@ class _SketchMobileRegister extends StatelessWidget {
                           'Crea tu cuenta',
                           style: TextStyle(
                             color: AppTheme.midnight,
-                            fontSize: compact ? 28 : 32,
+                            fontSize: compact ? 24 : 28,
                             fontWeight: FontWeight.w800,
                             height: 1.1,
                             letterSpacing: 0,
@@ -1059,9 +1060,8 @@ class _DriverInterestRow extends StatelessWidget {
           children: [
             Checkbox(
               value: value,
-              onChanged: enabled
-                  ? (selected) => onChanged(selected ?? false)
-                  : null,
+              onChanged:
+                  enabled ? (selected) => onChanged(selected ?? false) : null,
               visualDensity: VisualDensity.compact,
               activeColor: AppTheme.primary,
             ),
@@ -1114,7 +1114,8 @@ class _RegisterSocialButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppTheme.midnight,
           side: const BorderSide(color: Color(0xFFDCE3EF)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
         child: loading
             ? const SizedBox(

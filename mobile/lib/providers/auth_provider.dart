@@ -24,8 +24,10 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  final AuthService _service = AuthService();
-  AuthNotifier() : super(const AuthState());
+  final AuthService _service;
+  AuthNotifier({AuthService? service})
+      : _service = service ?? AuthService(),
+        super(const AuthState());
 
   Future<void> checkAuth() async {
     if (await _service.isLoggedIn()) {
@@ -40,11 +42,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String email, String password,
+      {String? preferredRole}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final data = await _service.login(email: email, password: password);
-      final user = UserModel.fromJson(data['user']);
+      final user = await _resolveLoginRole(data, preferredRole);
       state = AuthState(user: user);
       await _syncNotificationToken();
 
@@ -55,17 +58,50 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> loginWithGoogle(String idToken) async {
+  Future<bool> loginWithGoogle(String idToken, {String? preferredRole}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final data = await _service.loginWithGoogle(idToken);
-      final user = UserModel.fromJson(data['user']);
+      final user = await _resolveLoginRole(data, preferredRole);
       state = AuthState(user: user);
       await _syncNotificationToken();
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _parseError(e));
       return false;
+    }
+  }
+
+  Future<UserModel> _resolveLoginRole(
+      Map<String, dynamic> data, String? preferredRole) async {
+    final user = UserModel.fromJson(data['user']);
+    if (preferredRole == null || user.role == 'admin') return user;
+    try {
+      if (!user.hasRole(preferredRole)) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/auth/switch-role'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/auth/switch-role'),
+            statusCode: 403,
+            data: {
+              'detail': preferredRole == 'driver'
+                  ? 'Tu cuenta no tiene perfil de conductor. Ingresa como cliente.'
+                  : 'Tu cuenta no tiene perfil de cliente. Ingresa como conductor.'
+            },
+          ),
+        );
+      }
+      if (user.role == preferredRole) return user;
+      final switched = await _service.switchRole(preferredRole);
+      final selected = UserModel.fromJson(switched['user']);
+      if (selected.role != preferredRole) {
+        throw StateError('Unexpected active role');
+      }
+      return selected;
+    } catch (_) {
+      // Never retain the initial token if entering the requested mode failed.
+      await _service.logout();
+      rethrow;
     }
   }
 
@@ -202,7 +238,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             : 'Revisa los datos ingresados.';
       }
       if (status == 401) {
-        return detail?.isNotEmpty == true ? detail! : 'Credenciales incorrectas';
+        return detail?.isNotEmpty == true
+            ? detail!
+            : 'Credenciales incorrectas';
       }
       if (status == 403) return detail ?? 'Cuenta suspendida';
       if (status == 422) return 'Revisa el formato de los datos.';

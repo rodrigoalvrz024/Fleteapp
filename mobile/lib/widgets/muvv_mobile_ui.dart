@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/theme/app_theme.dart';
 
-class MuvvGradientButton extends StatelessWidget {
+class MuvvGradientButton extends StatefulWidget {
   final String label;
   final IconData? icon;
   final VoidCallback? onPressed;
@@ -20,61 +20,85 @@ class MuvvGradientButton extends StatelessWidget {
   });
 
   @override
+  State<MuvvGradientButton> createState() => _MuvvGradientButtonState();
+}
+
+class _MuvvGradientButtonState extends State<MuvvGradientButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final enabled = onPressed != null && !isLoading;
+    final enabled = widget.onPressed != null && !widget.isLoading;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       button: true,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: enabled ? AppTheme.primaryGradient : null,
-            color: enabled ? null : AppTheme.slate200,
-            borderRadius: BorderRadius.circular(compact ? 14 : 17),
-            boxShadow: enabled
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.20),
-                      blurRadius: 16,
-                      offset: const Offset(0, 8),
-                    ),
-                  ]
-                : null,
-          ),
-          child: InkWell(
-            onTap: enabled ? onPressed : null,
-            borderRadius: BorderRadius.circular(compact ? 14 : 17),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: compact ? 46 : 54),
-              child: Center(
-                child: isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (icon != null) ...[
-                            Icon(icon, size: 20, color: Colors.white),
-                            const SizedBox(width: 9),
-                          ],
-                          Text(
-                            label,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                        ],
+      label: widget.label,
+      child: AnimatedScale(
+        scale: !reduceMotion && _pressed && enabled ? 0.985 : 1,
+        duration: reduceMotion ? Duration.zero : AppTheme.motionFast,
+        curve: AppTheme.motionCurve,
+        child: Material(
+          color: Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: enabled ? AppTheme.primaryGradient : null,
+              color: enabled ? null : AppTheme.slate200,
+              borderRadius: BorderRadius.circular(widget.compact ? 13 : 15),
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: 0.18),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
                       ),
+                    ]
+                  : null,
+            ),
+            child: InkWell(
+              onTap: enabled ? widget.onPressed : null,
+              onHighlightChanged: (value) {
+                if (enabled && mounted) setState(() => _pressed = value);
+              },
+              borderRadius: BorderRadius.circular(widget.compact ? 13 : 15),
+              child: ConstrainedBox(
+                constraints:
+                    BoxConstraints(minHeight: widget.compact ? 44 : 50),
+                child: Center(
+                  child: widget.isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.icon != null) ...[
+                              Icon(widget.icon, size: 19, color: Colors.white),
+                              const SizedBox(width: 8),
+                            ],
+                            Flexible(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                                child: Text(
+                                  widget.label,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
             ),
           ),
@@ -84,7 +108,7 @@ class MuvvGradientButton extends StatelessWidget {
   }
 }
 
-class MuvvSurfaceCard extends StatelessWidget {
+class MuvvSurfaceCard extends StatefulWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
@@ -94,37 +118,56 @@ class MuvvSurfaceCard extends StatelessWidget {
   const MuvvSurfaceCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding = const EdgeInsets.all(16),
     this.onTap,
     this.borderColor,
     this.emphasized = false,
   });
 
   @override
+  State<MuvvSurfaceCard> createState() => _MuvvSurfaceCardState();
+}
+
+class _MuvvSurfaceCardState extends State<MuvvSurfaceCard> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final decoration = BoxDecoration(
       color: AppTheme.surface,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: borderColor ?? AppTheme.slate200,
-        width: emphasized ? 1.2 : 0.8,
+        color: widget.borderColor ?? AppTheme.slate200,
+        width: widget.emphasized ? 1.2 : 0.8,
       ),
       boxShadow: [
         BoxShadow(
-          color: AppTheme.midnight.withValues(alpha: emphasized ? 0.08 : 0.035),
-          blurRadius: emphasized ? 22 : 14,
-          offset: const Offset(0, 7),
+          color: AppTheme.midnight
+              .withValues(alpha: widget.emphasized ? 0.08 : 0.035),
+          blurRadius: widget.emphasized ? 22 : 14,
+          offset: const Offset(0, 6),
         ),
       ],
     );
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: decoration,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
-          child: Padding(padding: padding, child: child),
+    return AnimatedScale(
+      scale: !reduceMotion && _pressed && widget.onTap != null ? 0.99 : 1,
+      duration: reduceMotion ? Duration.zero : AppTheme.motionFast,
+      curve: AppTheme.motionCurve,
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: decoration,
+          child: InkWell(
+            onTap: widget.onTap,
+            onHighlightChanged: (value) {
+              if (widget.onTap != null && mounted) {
+                setState(() => _pressed = value);
+              }
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(padding: widget.padding, child: widget.child),
+          ),
         ),
       ),
     );
@@ -160,7 +203,7 @@ class MuvvSectionHeader extends StatelessWidget {
                       color: AppTheme.primary,
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.7,
+                      letterSpacing: 0,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -169,7 +212,7 @@ class MuvvSectionHeader extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     color: AppTheme.midnight,
-                    fontSize: 20,
+                    fontSize: 18,
                     height: 1.15,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
@@ -226,13 +269,15 @@ class MuvvStatusPill extends StatelessWidget {
               Icon(icon, size: 14, color: color),
               const SizedBox(width: 5),
             ],
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0,
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
               ),
             ),
           ],
@@ -323,7 +368,7 @@ class _RouteStop extends StatelessWidget {
                     color: AppTheme.slate400,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 0.55,
+                    letterSpacing: 0,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -359,14 +404,14 @@ class MuvvPriceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             colors: [Color(0xFFF0F5FF), Color(0xFFF8FBFF)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
         ),
         child: Row(
@@ -402,7 +447,7 @@ class MuvvPriceCard extends StatelessWidget {
                     amount,
                     style: const TextStyle(
                       color: AppTheme.midnight,
-                      fontSize: 23,
+                      fontSize: 21,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0,
                     ),
@@ -465,7 +510,7 @@ class MuvvBottomNavigation extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 7),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.97),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppTheme.slate200),
           boxShadow: [
             BoxShadow(
@@ -475,16 +520,19 @@ class MuvvBottomNavigation extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            for (final item in items)
-              Expanded(
-                child: _MuvvBottomNavigationItem(
-                  item: item,
-                  selected: item.section == selected,
+        child: Material(
+          color: Colors.transparent,
+          child: Row(
+            children: [
+              for (final item in items)
+                Expanded(
+                  child: _MuvvBottomNavigationItem(
+                    item: item,
+                    selected: item.section == selected,
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -509,43 +557,65 @@ class _MuvvBottomNavigationItem extends StatelessWidget {
   const _MuvvBottomNavigationItem({required this.item, required this.selected});
 
   @override
-  Widget build(BuildContext context) => InkWell(
-        onTap: () => context.go(item.route),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppTheme.primary.withValues(alpha: 0.11)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context) => Semantics(
+        selected: selected,
+        button: true,
+        label: item.label,
+        excludeSemantics: true,
+        onTap: selected ? null : () => context.go(item.route),
+        child: InkWell(
+          onTap: selected ? null : () => context.go(item.route),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : AppTheme.motionFast,
+                  curve: AppTheme.motionCurve,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? AppTheme.primary.withValues(alpha: 0.11)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    item.icon,
+                    size: 20,
+                    color: selected ? AppTheme.primary : AppTheme.slate400,
+                  ),
                 ),
-                child: Icon(
-                  item.icon,
-                  size: 20,
-                  color: selected ? AppTheme.primary : AppTheme.slate400,
+                const SizedBox(height: 2),
+                Text(
+                  item.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: TextStyle(
+                    color: selected ? AppTheme.primary : AppTheme.slate400,
+                    fontSize: 11,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? AppTheme.primary : AppTheme.slate400,
-                  fontSize: 10,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+      );
+}
+
+class MuvvSettingsGroup extends StatelessWidget {
+  final List<Widget> children;
+
+  const MuvvSettingsGroup({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: AppTheme.surface,
+        child: Column(children: children),
       );
 }

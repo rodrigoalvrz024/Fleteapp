@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/api_constants.dart';
 import '../../models/place_suggestion.dart';
+import '../../models/cargo_guidance.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/freight_service.dart';
@@ -20,8 +21,10 @@ import '../../services/places_service.dart';
 import '../../utils/api_error_message.dart';
 import '../../widgets/muvv_mobile_ui.dart';
 import '../shared/web_layout.dart';
+import 'widgets/cargo_vehicle_widgets.dart';
 
 class CreateFreightScreen extends ConsumerStatefulWidget {
+  final ApiService? api;
   final String? destAddress;
   final double? destLat;
   final double? destLng;
@@ -33,6 +36,7 @@ class CreateFreightScreen extends ConsumerStatefulWidget {
 
   const CreateFreightScreen({
     super.key,
+    this.api,
     this.destAddress,
     this.destLat,
     this.destLng,
@@ -49,8 +53,9 @@ class CreateFreightScreen extends ConsumerStatefulWidget {
 }
 
 class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
-  final _freightService = FreightService();
-  final _api = ApiService();
+  late final _api = widget.api ?? ApiService();
+  late final _freightService = FreightService(api: _api);
+  final _scrollController = ScrollController();
   final _cargoCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _volumeCtrl = TextEditingController();
@@ -87,6 +92,11 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
   double? _distanceKm;
   String? _durationText;
   String? _recommendedVehicleName;
+  String? _recommendedVehicleType;
+  String? _selectedVehicleType;
+  String? _requestedVehicleType;
+  int _estimateRevision = 0;
+  CargoInventory _inventory = CargoInventory({});
   String? _quoteId;
   bool _requiresManualQuote = false;
   bool _minimumApplied = false;
@@ -99,7 +109,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     _isUrgent = widget.initialUrgent;
     _serviceType = _validServiceType(widget.initialServiceType);
     _applyInitialRoute();
-    _requestLocation();
+    if (_originLatLng == null) _requestLocation();
   }
 
   @override
@@ -110,6 +120,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     _originCtrl.dispose();
     _destCtrl.dispose();
     _mapController?.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -239,25 +250,51 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     _estimatePrice();
   }
 
-  double? get _cargoWeight =>
-      double.tryParse(_weightCtrl.text.trim().replaceAll(',', '.'));
+  double? get _cargoWeight => _weightCtrl.text.trim().isNotEmpty
+      ? double.tryParse(_weightCtrl.text.trim().replaceAll(',', '.'))
+      : (_inventory.isEmpty ? null : _inventory.weightKg);
 
-  double? get _cargoVolume =>
-      double.tryParse(_volumeCtrl.text.trim().replaceAll(',', '.'));
+  double? get _cargoVolume => _volumeCtrl.text.trim().isNotEmpty
+      ? double.tryParse(_volumeCtrl.text.trim().replaceAll(',', '.'))
+      : (_inventory.isEmpty ? null : _inventory.volumeM3);
+
+  String get _cargoDescription => [
+        if (!_inventory.isEmpty)
+          'Objetos declarados: ${_inventory.summary}. Medidas orientativas.',
+        _cargoCtrl.text.trim(),
+      ]
+          .where((part) => part.isNotEmpty)
+          .join(' ')
+          .replaceAll(RegExp(r'\s+'), ' ');
+
+  bool get _vehicleReady =>
+      _selectedVehicleType != null &&
+      isVehicleCandidate(_selectedVehicleType!, _recommendedVehicleType) &&
+      !_requiresManualQuote;
 
   bool get _routeReady => _originLatLng != null && _destLatLng != null;
 
   bool get _cargoReady =>
       _serviceType != null &&
-      _cargoCtrl.text.trim().isNotEmpty &&
-      (_cargoWeight ?? 0) > 0;
+      _cargoDescription.length >= 2 &&
+      _cargoDescription.length <= 1000 &&
+      (_cargoWeight ?? 0) > 0 &&
+      (_cargoWeight ?? 0) <= 20000 &&
+      (_cargoVolume == null || (_cargoVolume! > 0 && _cargoVolume! <= 200));
 
   bool get _timingReady =>
       _isUrgent || (_scheduledDate != null && _scheduledTime != null);
 
   bool get _priceReady => _clientPays != null;
 
-  void _clearEstimate() {
+  void _clearEstimate({bool resetVehicle = false}) {
+    _estimateRevision++;
+    _estimating = false;
+    if (resetVehicle) {
+      _recommendedVehicleType = null;
+      _selectedVehicleType = null;
+      _requestedVehicleType = null;
+    }
     _clientPays = null;
     _basePrice = null;
     _helpersCost = null;
@@ -281,9 +318,15 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
   }
 
   Future<void> _estimatePrice() async {
-    if (!_routeReady || !_cargoReady || !_timingReady) return;
+    if (!_routeReady || !_cargoReady) return;
 
-    setState(() => _estimating = true);
+    final revision = ++_estimateRevision;
+    setState(() {
+      _estimating = true;
+      _clientPays = null;
+      _quoteId = null;
+      _error = null;
+    });
     try {
       DateTime? scheduledAt;
       if (!_isUrgent && _scheduledDate != null && _scheduledTime != null) {
@@ -304,13 +347,16 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         'destination_address': _destCtrl.text.trim(),
         'cargo_weight_kg': _cargoWeight,
         if (_cargoVolume != null) 'cargo_volume_m3': _cargoVolume,
-        'cargo_description': _cargoCtrl.text.trim(),
+        'cargo_description': _cargoDescription,
+        if (_requestedVehicleType != null)
+          'requested_vehicle_type': _requestedVehicleType,
         'service_type': _serviceTypeApiValue,
         'requires_helpers': _helpers,
         'is_urgent': _isUrgent,
-        if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
+        if (scheduledAt != null)
+          'scheduled_at': scheduledAt.toUtc().toIso8601String(),
       });
-      if (!mounted) return;
+      if (!mounted || revision != _estimateRevision) return;
       setState(() {
         _requiresManualQuote = response.data['requires_manual_quote'] == true;
         _clientPays = _requiresManualQuote
@@ -325,11 +371,15 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         _durationText = response.data['duration_text']?.toString();
         _recommendedVehicleName =
             response.data['recommended_vehicle_name']?.toString();
+        _recommendedVehicleType =
+            response.data['recommended_vehicle_type']?.toString();
+        _selectedVehicleType =
+            response.data['selected_vehicle_type']?.toString();
         _quoteId = response.data['quote_id']?.toString();
         _minimumApplied = response.data['minimum_applied'] == true;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || revision != _estimateRevision) return;
       setState(() {
         _clearEstimate();
         _error = apiErrorMessage(
@@ -339,7 +389,8 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         );
       });
     } finally {
-      if (mounted) setState(() => _estimating = false);
+      if (mounted && revision == _estimateRevision)
+        setState(() => _estimating = false);
     }
   }
 
@@ -394,7 +445,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     HapticFeedback.selectionClick();
     setState(() {
       _serviceType = service;
-      _clearEstimate();
+      _clearEstimate(resetVehicle: true);
       _error = null;
     });
   }
@@ -438,9 +489,11 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
       _currentStep = step;
       _error = null;
     });
+    if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }
 
   Future<void> _continue() async {
+    if (_loading || _estimating) return;
     if (_currentStep == 0) {
       if (!_routeReady) {
         setState(() => _error = 'Selecciona un punto de retiro y un destino.');
@@ -454,24 +507,33 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         setState(() => _error = 'Elige el tipo de carga para continuar.');
         return;
       }
-      if (_cargoCtrl.text.trim().isEmpty) {
+      if (_cargoDescription.isEmpty) {
         setState(() => _error = 'Describe la carga que necesitas mover.');
         return;
       }
       if ((_cargoWeight ?? 0) <= 0) {
-        setState(
-            () => _error = 'Ingresa un peso estimado para calcular el precio.');
+        setState(() =>
+            _error = 'Agrega objetos a tu carga o ingresa un peso aproximado.');
         return;
       }
       _goToStep(2);
+      await _estimatePrice();
       return;
     }
     if (_currentStep == 2) {
+      if (!_vehicleReady || !_priceReady) {
+        await _estimatePrice();
+        return;
+      }
+      _goToStep(3);
+      return;
+    }
+    if (_currentStep == 3) {
       if (!_timingReady) {
         setState(() => _error = 'Elige cuándo necesitas el flete.');
         return;
       }
-      _goToStep(3);
+      _goToStep(4);
       await _estimatePrice();
       return;
     }
@@ -513,6 +575,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     if (!await _ensureClientSession() ||
         !_routeReady ||
         !_cargoReady ||
+        !_vehicleReady ||
         !_timingReady) {
       return;
     }
@@ -533,10 +596,11 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
           _scheduledTime!.minute,
         );
       }
-      final cargo = _cargoCtrl.text.trim();
+      final cargo = _cargoDescription;
       if (_quoteId == null) {
         await _estimatePrice();
-        if (!mounted || _quoteId == null) {
+        if (!mounted) return;
+        if (_quoteId == null) {
           setState(() =>
               _error = 'No pudimos confirmar la tarifa. Reintenta el calculo.');
           return;
@@ -554,9 +618,10 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         cargoVolumeM3: _cargoVolume,
         serviceType: _serviceTypeApiValue,
         quoteId: _quoteId,
+        requestedVehicleType: _requestedVehicleType,
         requiresHelpers: _helpers,
         isUrgent: _isUrgent,
-        scheduledAt: scheduledAt,
+        scheduledAt: scheduledAt?.toUtc(),
         cargoPhotoRefs: cargoPhotoRefs,
       );
       if (!mounted) return;
@@ -649,44 +714,20 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
     }
   }
 
-  void _showWeightHelp() {
-    showModalBottomSheet<void>(
+  Future<void> _editInventory() async {
+    final inventory = await showModalBottomSheet<CargoInventory>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '¿No conoces el peso?',
-                style: TextStyle(
-                  color: AppTheme.midnight,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Para darte un precio automático necesitamos una estimación. Usa una aproximación: una lavadora pesa cerca de 70 kg y un sofá de tres cuerpos cerca de 45 kg.',
-                style: TextStyle(color: AppTheme.slate600, height: 1.45),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: MuvvGradientButton(
-                  label: 'Entendido',
-                  compact: true,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+          heightFactor: 0.85, child: CargoInventorySheet(initial: _inventory)),
     );
+    if (!mounted || inventory == null) return;
+    setState(() {
+      _inventory = inventory;
+      _clearEstimate(resetVehicle: true);
+      _error = null;
+    });
   }
 
   // Kept only for a backwards-compatible route; the active flow uses _pickCargoPhotos.
@@ -813,17 +854,26 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
   }
 
   String get _ctaLabel => switch (_currentStep) {
-        0 || 1 => 'Continuar',
-        2 => 'Calcular precio',
+        0 => 'Continuar',
+        1 => 'Ver vehículos',
+        2 when _estimating => 'Consultando precio',
+        2 when !_priceReady => 'Reintentar cálculo',
+        2 => 'Elegir horario',
+        3 => 'Revisar flete',
         _ when _estimating => 'Calculando precio',
         _ when !_priceReady => 'Reintentar cálculo',
         _ => 'Solicitar flete',
       };
 
-  bool get _canUseCta => switch (_currentStep) {
+  bool get _canUseCta =>
+      !_loading &&
+      !_estimating &&
+      !_requiresManualQuote &&
+      switch (_currentStep) {
         0 => _routeReady,
         1 => _cargoReady,
-        2 => _timingReady,
+        2 => _cargoReady,
+        3 => _timingReady,
         _ => !_loading,
       };
 
@@ -847,16 +897,17 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
         ),
         bottomNavigationBar: _FlowBottomBar(
           label: _ctaLabel,
-          icon: _currentStep == 3
+          icon: _currentStep == 4
               ? Icons.local_shipping_outlined
               : Icons.arrow_forward_rounded,
           enabled: _canUseCta,
-          loading: _loading || (_currentStep == 3 && _estimating),
+          loading: _loading || _estimating,
           onPressed: _canUseCta ? _continue : null,
         ),
         child: WebPageBody(
+          controller: _scrollController,
           maxWidth: 620,
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 122),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
           children: [
             _FlowStepper(
               currentStep: _currentStep,
@@ -865,16 +916,20 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
               timeDone: _timingReady,
               priceDone: _priceReady,
             ),
-            const SizedBox(height: 26),
+            const SizedBox(height: 22),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
                 child: SlideTransition(
                   position: Tween<Offset>(
-                    begin: const Offset(0.03, 0),
+                    begin: MediaQuery.disableAnimationsOf(context)
+                        ? Offset.zero
+                        : const Offset(0.03, 0),
                     end: Offset.zero,
                   ).animate(animation),
                   child: child,
@@ -898,7 +953,8 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
   Widget _buildCurrentStep(NumberFormat format) => switch (_currentStep) {
         0 => _buildRouteStep(),
         1 => _buildCargoStep(),
-        2 => _buildTimingStep(),
+        2 => _buildVehicleStep(format),
+        3 => _buildTimingStep(),
         _ => _buildPriceStep(format),
       };
 
@@ -947,7 +1003,9 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
             ),
           ),
           AnimatedSize(
-            duration: const Duration(milliseconds: 220),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             child: _showMap
                 ? Padding(
@@ -990,6 +1048,36 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
             onSelected: _setServiceType,
           ),
           const SizedBox(height: 25),
+          MuvvSurfaceCard(
+            onTap: _editInventory,
+            child: Row(children: [
+              const Icon(Icons.inventory_2_outlined, color: AppTheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(
+                        _inventory.isEmpty
+                            ? 'Agregar objetos'
+                            : 'Objetos de tu carga',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                        _inventory.isEmpty
+                            ? 'Cajas, muebles o electrodomésticos'
+                            : _inventory.summary,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ])),
+              const Icon(Icons.chevron_right, color: AppTheme.slate600),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+              'La estimación usa objetos de tamaño habitual. Incluye toda la carga; las medidas y fotos ayudan a confirmar el espacio.',
+              style: TextStyle(
+                  fontSize: 12, color: AppTheme.slate600, height: 1.4)),
+          const SizedBox(height: 20),
           const _CargoSectionTitle(title: 'Descripción de la carga'),
           const SizedBox(height: 10),
           MuvvSurfaceCard(
@@ -999,12 +1087,12 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
               children: [
                 TextFormField(
                   controller: _cargoCtrl,
-                  minLines: 4,
+                  minLines: 2,
                   maxLines: 4,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
                   onChanged: (_) => setState(() {
-                    _clearEstimate();
+                    _clearEstimate(resetVehicle: true);
                     _error = null;
                   }),
                   decoration: const InputDecoration(
@@ -1018,62 +1106,55 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
             ),
           ),
           const SizedBox(height: 25),
-          const _CargoSectionTitle(title: 'Peso aproximado'),
-          const SizedBox(height: 10),
-          MuvvSurfaceCard(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _weightCtrl,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-                  ],
-                  onChanged: (_) => setState(() {
-                    _clearEstimate();
-                    _error = null;
-                  }),
-                  decoration: const InputDecoration(
-                    hintText: 'Ej: 70',
-                    prefixIcon: Icon(Icons.scale_outlined),
-                    suffixText: 'kg',
-                  ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Peso y volumen',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            subtitle: Text(
+                _inventory.isEmpty
+                    ? 'Si no agregaste objetos, ingresa una aproximación'
+                    : 'Opcional: reemplazar las medidas orientativas',
+                style: const TextStyle(fontSize: 12, color: AppTheme.slate600)),
+            children: [
+              TextFormField(
+                controller: _weightCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                ],
+                onChanged: (_) => setState(() {
+                  _clearEstimate(resetVehicle: true);
+                  _error = null;
+                }),
+                decoration: const InputDecoration(
+                  labelText: 'Peso total aproximado',
+                  hintText: 'Ej: 70',
+                  prefixIcon: Icon(Icons.scale_outlined),
+                  suffixText: 'kg',
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _showWeightHelp,
-                    icon: const Icon(Icons.lightbulb_outline_rounded, size: 16),
-                    label: const Text('No sé el peso'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          const _CargoSectionTitle(title: 'Volumen estimado (opcional)'),
-          const SizedBox(height: 10),
-          MuvvSurfaceCard(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            child: TextFormField(
-              controller: _volumeCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
-              ],
-              onChanged: (_) => setState(() {
-                _clearEstimate();
-                _error = null;
-              }),
-              decoration: const InputDecoration(
-                hintText: 'Ej: 2.5',
-                prefixIcon: Icon(Icons.inventory_2_outlined),
-                suffixText: 'm3',
               ),
-            ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _volumeCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                ],
+                onChanged: (_) => setState(() {
+                  _clearEstimate(resetVehicle: true);
+                  _error = null;
+                }),
+                decoration: const InputDecoration(
+                  labelText: 'Volumen total aproximado',
+                  hintText: 'Ej: 2.5',
+                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                  suffixText: 'm3',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
           ),
           const SizedBox(height: 18),
           Row(
@@ -1130,6 +1211,110 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
             ),
           ],
         ],
+      );
+
+  Widget _buildVehicleStep(NumberFormat format) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _StepIntro(
+              title: 'El espacio que necesitas',
+              subtitle:
+                  'Una recomendación basada en los objetos que llevarás.'),
+          if (_recommendedVehicleType != null && !_requiresManualQuote) ...[
+            const SizedBox(height: 12),
+            Text('Carga declarada',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+                _inventory.isEmpty
+                    ? _cargoCtrl.text.trim()
+                    : _inventory.summary,
+                style: Theme.of(context).textTheme.bodySmall),
+            TextButton.icon(
+              onPressed: () => _goToStep(1),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Revisar mi carga'),
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (_estimating) ...[
+            const LinearProgressIndicator(minHeight: 3),
+            const SizedBox(height: 12),
+            const Text('Consultando vehículo y precio…',
+                style: TextStyle(color: AppTheme.slate600)),
+          ],
+          if (_requiresManualQuote)
+            const _ManualQuoteRequired()
+          else if (vehicleGuide(_recommendedVehicleType) == null &&
+              !_estimating)
+            _PriceUnavailable(onRetry: _estimatePrice),
+          if (vehicleGuide(_recommendedVehicleType) != null &&
+              !_requiresManualQuote) ...[
+            const SizedBox(height: 8),
+            _vehicleChoice(vehicleGuide(_recommendedVehicleType)!, format),
+            const SizedBox(height: 8),
+            const Text(
+                'Ejemplos orientativos; el espacio necesario depende del tamaño de tus objetos.',
+                style: TextStyle(
+                    fontSize: 12, color: AppTheme.slate600, height: 1.4)),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              key: ValueKey('compare-$_recommendedVehicleType'),
+              expansionAnimationStyle: MediaQuery.disableAnimationsOf(context)
+                  ? AnimationStyle.noAnimation
+                  : null,
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Comparar otras opciones',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                  _selectedVehicleType != _recommendedVehicleType
+                      ? 'Elegido: ${vehicleGuide(_selectedVehicleType)?.cargoLabel ?? ''}'
+                      : 'Opcional: vehículos con más espacio',
+                  style:
+                      const TextStyle(fontSize: 12, color: AppTheme.slate600)),
+              initiallyExpanded:
+                  _selectedVehicleType != _recommendedVehicleType,
+              children: [
+                for (final guide in [
+                  ...freightVehicleGuides.where((v) =>
+                      v.type != _recommendedVehicleType &&
+                      isVehicleCandidate(v.type, _recommendedVehicleType)),
+                  ...freightVehicleGuides.where((v) =>
+                      !isVehicleCandidate(v.type, _recommendedVehicleType)),
+                ]) ...[
+                  _vehicleChoice(guide, format),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+                'El horario y los servicios adicionales pueden cambiar el precio. La capacidad final depende de las medidas de tus objetos y del vehículo asignado.',
+                style: TextStyle(
+                    fontSize: 12, color: AppTheme.slate600, height: 1.4)),
+          ],
+        ],
+      );
+
+  Widget _vehicleChoice(FreightVehicleGuide guide, NumberFormat format) =>
+      FreightVehicleChoice(
+        guide: guide,
+        selected: _selectedVehicleType == guide.type,
+        recommended: _recommendedVehicleType == guide.type,
+        enabled: isVehicleCandidate(guide.type, _recommendedVehicleType),
+        price: _selectedVehicleType == guide.type && _clientPays != null
+            ? '\$${format.format(_clientPays)} CLP estimados'
+            : null,
+        onTap: () {
+          if (_estimating || _selectedVehicleType == guide.type) return;
+          HapticFeedback.selectionClick();
+          setState(() {
+            _requestedVehicleType = guide.type;
+            _selectedVehicleType = guide.type;
+            _clearEstimate();
+          });
+          _estimatePrice();
+        },
       );
 
   Widget _buildTimingStep() => Column(
@@ -1281,7 +1466,7 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
             origin: _originCtrl.text,
             destination: _destCtrl.text,
             service: _serviceType,
-            cargo: _cargoCtrl.text.trim(),
+            cargo: _cargoDescription,
             weight: _cargoWeight,
             helpers: _helpers,
             isUrgent: _isUrgent,
@@ -1299,9 +1484,9 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _recommendedVehicleName == null
+                        _selectedVehicleType == null
                             ? 'Asignacion inteligente'
-                            : 'Vehiculo recomendado',
+                            : 'Vehículo elegido',
                         style: TextStyle(
                           color: AppTheme.midnight,
                           fontWeight: FontWeight.w800,
@@ -1309,9 +1494,9 @@ class _CreateFreightScreenState extends ConsumerState<CreateFreightScreen> {
                       ),
                       SizedBox(height: 3),
                       Text(
-                        _recommendedVehicleName == null
+                        _selectedVehicleType == null
                             ? 'Buscaremos un vehiculo compatible con tu carga.'
-                            : '$_recommendedVehicleName. Ideal para transportar tu carga de forma segura.',
+                            : '${vehicleGuide(_selectedVehicleType)?.title ?? _recommendedVehicleName}. ${vehicleGuide(_selectedVehicleType)?.description ?? ''}',
                         style: TextStyle(
                           color: AppTheme.slate600,
                           fontSize: 13,
@@ -1386,27 +1571,39 @@ class _FlowStepper extends StatelessWidget {
     final steps = [
       _FlowStep('Ruta', Icons.route_rounded, routeDone),
       _FlowStep('Carga', Icons.inventory_2_outlined, cargoDone),
+      _FlowStep('Vehículo', Icons.local_shipping_outlined, currentStep > 2),
       _FlowStep('Tiempo', Icons.schedule_rounded, timeDone),
       _FlowStep('Precio', Icons.payments_outlined, priceDone),
     ];
-    return Row(
-      children: [
-        for (var index = 0; index < steps.length; index++) ...[
+    return Semantics(
+      label:
+          'Paso ${currentStep + 1} de ${steps.length}: ${steps[currentStep].label}',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
           Expanded(
-            child: _FlowStepIndicator(
-              step: steps[index],
-              active: currentStep == index,
-              reached: currentStep > index,
-            ),
-          ),
-          if (index < steps.length - 1)
-            Container(
-              width: 15,
-              height: 2,
-              color: currentStep > index ? AppTheme.primary : AppTheme.slate200,
-            ),
-        ],
-      ],
+              child: Text(steps[currentStep].label,
+                  style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primary))),
+          Text('${currentStep + 1} de ${steps.length}',
+              style: const TextStyle(fontSize: 12, color: AppTheme.slate600)),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          for (var index = 0; index < steps.length; index++) ...[
+            Expanded(
+                child: Container(
+                    height: 3,
+                    decoration: BoxDecoration(
+                        color: currentStep >= index
+                            ? AppTheme.primary
+                            : AppTheme.slate200,
+                        borderRadius: BorderRadius.circular(2)))),
+            if (index < steps.length - 1) const SizedBox(width: 6),
+          ],
+        ]),
+      ]),
     );
   }
 }
@@ -1417,58 +1614,6 @@ class _FlowStep {
   final bool done;
 
   const _FlowStep(this.label, this.icon, this.done);
-}
-
-class _FlowStepIndicator extends StatelessWidget {
-  final _FlowStep step;
-  final bool active;
-  final bool reached;
-
-  const _FlowStepIndicator({
-    required this.step,
-    required this.active,
-    required this.reached,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final highlighted = active || reached || step.done;
-    final color = highlighted ? AppTheme.primary : AppTheme.slate400;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: highlighted
-                ? AppTheme.primary.withValues(alpha: 0.10)
-                : AppTheme.slate100,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: highlighted
-                  ? AppTheme.primary.withValues(alpha: 0.35)
-                  : AppTheme.slate200,
-            ),
-          ),
-          child: Icon(
-            (reached || step.done) ? Icons.check_rounded : step.icon,
-            size: 16,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          step.label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: highlighted ? FontWeight.w800 : FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _StepIntro extends StatelessWidget {
@@ -1485,7 +1630,7 @@ class _StepIntro extends StatelessWidget {
             title,
             style: const TextStyle(
               color: AppTheme.midnight,
-              fontSize: 25,
+              fontSize: 23,
               height: 1.12,
               fontWeight: FontWeight.w800,
             ),
@@ -1642,7 +1787,7 @@ class _CargoQuickAction extends StatelessWidget {
           child: Ink(
             // Leaves enough vertical room for Android font metrics at the
             // smallest supported text scale, avoiding a visual overflow.
-            height: 94,
+            height: 94 + (MediaQuery.textScalerOf(context).scale(13) - 13) * 6,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: selected
@@ -1734,12 +1879,12 @@ class _ServiceTypeGrid extends StatelessWidget {
       ),
     ];
     return GridView.count(
-      crossAxisCount: 2,
+      crossAxisCount: MediaQuery.textScalerOf(context).scale(13) > 18 ? 1 : 2,
       shrinkWrap: true,
       primary: false,
       mainAxisSpacing: 11,
       crossAxisSpacing: 11,
-      childAspectRatio: 1.55,
+      mainAxisExtent: 78 + MediaQuery.textScalerOf(context).scale(13) * 2.3,
       children: [
         for (final option in options)
           _ServiceOptionTile(
@@ -1787,7 +1932,9 @@ class _ServiceOptionTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(17),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -1831,7 +1978,9 @@ class _ServiceOptionTile extends StatelessWidget {
                     ),
                   ),
                   AnimatedOpacity(
-                    duration: const Duration(milliseconds: 180),
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
                     opacity: selected ? 1 : 0,
                     child: Container(
                       width: 20,
@@ -1898,7 +2047,9 @@ class _HelperChoice extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(15),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
@@ -1991,7 +2142,6 @@ class _TimeChoice extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(17),
         child: Ink(
-          height: 142,
           padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
             color: selected ? color.withValues(alpha: 0.07) : Colors.white,
@@ -2005,7 +2155,7 @@ class _TimeChoice extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: selected ? color : AppTheme.slate600, size: 23),
-              const Spacer(),
+              const SizedBox(height: 24),
               Text(
                 title,
                 style: TextStyle(

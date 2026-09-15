@@ -43,6 +43,10 @@ String? _trackRouteView(BuildContext _, GoRouterState state) {
   return null;
 }
 
+Page<void> _tabPage(GoRouterState state, Widget child) => kIsWeb
+    ? MaterialPage<void>(key: state.pageKey, child: child)
+    : NoTransitionPage<void>(key: state.pageKey, child: child);
+
 final _router = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/',
@@ -106,59 +110,59 @@ final _router = GoRouter(
     GoRoute(
       path: '/app/client',
       builder: (_, __) => const ClientHomeScreen(),
-    ),
-    GoRoute(
-      path: '/app/client/freights',
-      builder: (_, __) => const FreightListScreen(),
-    ),
-    GoRoute(
-      path: '/app/client/freights/:id',
-      builder: (_, state) => FreightDetailScreen(
-        freightId: int.parse(state.pathParameters['id']!),
-      ),
-    ),
-    GoRoute(
-      path: '/app/client/create-freight',
-      builder: (context, state) {
-        final q = state.uri.queryParameters;
-        return CreateFreightScreen(
-          destAddress: q['dest_address'],
-          destLat: double.tryParse(q['dest_lat'] ?? ''),
-          destLng: double.tryParse(q['dest_lng'] ?? ''),
-          originAddress: q['origin_address'],
-          originLat: double.tryParse(q['origin_lat'] ?? ''),
-          originLng: double.tryParse(q['origin_lng'] ?? ''),
-          initialUrgent: q['urgent'] == 'true',
-          initialServiceType: q['service'],
-        );
-      },
+      // Keep a real home page beneath each tab, including direct links.
+      routes: [
+        GoRoute(
+          path: 'freights',
+          pageBuilder: (_, state) => _tabPage(state, const FreightListScreen()),
+        ),
+        GoRoute(
+          path: 'freights/:id',
+          builder: (_, state) => FreightDetailScreen(
+            freightId: int.parse(state.pathParameters['id']!),
+          ),
+        ),
+        GoRoute(
+          path: 'create-freight',
+          builder: (context, state) {
+            final q = state.uri.queryParameters;
+            return CreateFreightScreen(
+              destAddress: q['dest_address'],
+              destLat: double.tryParse(q['dest_lat'] ?? ''),
+              destLng: double.tryParse(q['dest_lng'] ?? ''),
+              originAddress: q['origin_address'],
+              originLat: double.tryParse(q['origin_lat'] ?? ''),
+              originLng: double.tryParse(q['origin_lng'] ?? ''),
+              initialUrgent: q['urgent'] == 'true',
+              initialServiceType: q['service'],
+            );
+          },
+        ),
+        GoRoute(
+          path: 'account',
+          pageBuilder: (_, state) =>
+              _tabPage(state, const MuvvAccountHubScreen()),
+        ),
+        GoRoute(
+          path: 'payments',
+          pageBuilder: (_, state) => _tabPage(
+              state, const MuvvUtilityScreen(page: MuvvUtilityPage.payments)),
+        ),
+        GoRoute(
+          path: 'addresses',
+          builder: (_, __) =>
+              const MuvvUtilityScreen(page: MuvvUtilityPage.addresses),
+        ),
+        GoRoute(
+          path: 'promotions',
+          builder: (_, __) =>
+              const MuvvUtilityScreen(page: MuvvUtilityPage.promotions),
+        ),
+      ],
     ),
     GoRoute(
       path: '/app/profile',
       builder: (_, __) => const ProfileScreen(),
-    ),
-    GoRoute(
-      path: '/app/client/account',
-      builder: (_, __) => const MuvvAccountHubScreen(),
-    ),
-    GoRoute(
-      path: '/app/driver/account',
-      builder: (_, __) => const MuvvAccountHubScreen(driver: true),
-    ),
-    GoRoute(
-      path: '/app/client/payments',
-      builder: (_, __) =>
-          const MuvvUtilityScreen(page: MuvvUtilityPage.payments),
-    ),
-    GoRoute(
-      path: '/app/client/addresses',
-      builder: (_, __) =>
-          const MuvvUtilityScreen(page: MuvvUtilityPage.addresses),
-    ),
-    GoRoute(
-      path: '/app/client/promotions',
-      builder: (_, __) =>
-          const MuvvUtilityScreen(page: MuvvUtilityPage.promotions),
     ),
     GoRoute(
       path: '/app/chat/:id',
@@ -187,32 +191,40 @@ final _router = GoRouter(
     GoRoute(
       path: '/app/driver',
       builder: (_, __) => const DriverHomeScreen(),
-    ),
-    GoRoute(
-      path: '/app/driver/available',
-      builder: (_, __) => const AvailableFreightsScreen(),
-    ),
-    GoRoute(
-      path: '/app/driver/trips',
-      builder: (_, __) => const DriverTripsScreen(),
-    ),
-    GoRoute(
-      path: '/app/driver/freights/:id',
-      builder: (_, state) => DriverFreightDetailScreen(
-        freightId: int.parse(state.pathParameters['id']!),
-      ),
+      routes: [
+        GoRoute(
+          path: 'available',
+          builder: (_, __) => const AvailableFreightsScreen(),
+        ),
+        GoRoute(
+          path: 'trips',
+          pageBuilder: (_, state) => _tabPage(state, const DriverTripsScreen()),
+        ),
+        GoRoute(
+          path: 'freights/:id',
+          builder: (_, state) => DriverFreightDetailScreen(
+            freightId: int.parse(state.pathParameters['id']!),
+          ),
+        ),
+        GoRoute(
+          path: 'onboarding',
+          builder: (_, __) => const DriverOnboardingScreen(),
+        ),
+        GoRoute(
+          path: 'payouts',
+          pageBuilder: (_, state) =>
+              _tabPage(state, const DriverPayoutsScreen()),
+        ),
+        GoRoute(
+          path: 'account',
+          pageBuilder: (_, state) =>
+              _tabPage(state, const MuvvAccountHubScreen(driver: true)),
+        ),
+      ],
     ),
     GoRoute(
       path: '/app/driver/freights/:id/chat',
       redirect: (_, state) => '/app/chat/${state.pathParameters['id']}',
-    ),
-    GoRoute(
-      path: '/app/driver/onboarding',
-      builder: (_, __) => const DriverOnboardingScreen(),
-    ),
-    GoRoute(
-      path: '/app/driver/payouts',
-      builder: (_, __) => const DriverPayoutsScreen(),
     ),
 
     // Admin web.

@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../widgets/muvv_page_scaffold.dart';
 import 'freight_truck_loader.dart';
 
 class WebPageScaffold extends StatelessWidget {
@@ -30,6 +32,18 @@ class WebPageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!kIsWeb) {
+      return MuvvPageScaffold(
+        title: title,
+        subtitle: subtitle,
+        leading: leading,
+        actions: actions,
+        bottomNavigationBar: bottomNavigationBar,
+        floatingActionButton: floatingActionButton,
+        floatingActionButtonLocation: floatingActionButtonLocation,
+        child: child,
+      );
+    }
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
@@ -48,6 +62,7 @@ class WebPageScaffold extends StatelessWidget {
 }
 
 class WebPageBody extends StatelessWidget {
+  final ScrollController? controller;
   final List<Widget> children;
   final Future<void> Function()? onRefresh;
   final EdgeInsetsGeometry padding;
@@ -55,6 +70,7 @@ class WebPageBody extends StatelessWidget {
 
   const WebPageBody({
     super.key,
+    this.controller,
     required this.children,
     this.onRefresh,
     this.padding = const EdgeInsets.fromLTRB(20, 20, 20, 40),
@@ -72,6 +88,7 @@ class WebPageBody extends StatelessWidget {
             width: width,
             height: constraints.maxHeight,
             child: ListView(
+              controller: controller,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: padding,
               children: children,
@@ -126,19 +143,19 @@ class WebEmptyState extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
         child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: AppTheme.cardDecoration(),
+          padding: EdgeInsets.all(kIsWeb ? 24 : 20),
+          decoration: kIsWeb ? AppTheme.cardDecoration() : null,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 64,
-                height: 64,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(icon, size: 30, color: AppTheme.primary),
+                child: Icon(icon, size: 24, color: AppTheme.primary),
               ),
               const SizedBox(height: 16),
               Text(
@@ -146,8 +163,8 @@ class WebEmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppTheme.midnight,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
