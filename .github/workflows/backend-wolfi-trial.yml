@@ -1,0 +1,177 @@
+name: Wolfi runtime comparison (no deploy)
+
+on:
+  push:
+    branches:
+      - codex/mvp-supabase-rls-review
+    paths:
+      - backend/Dockerfile.wolfi
+      - .github/workflows/backend-wolfi-trial.yml
+      - backend/tests/test_wolfi_trial_config.py
+      - scripts/verify-protected-code.py
+      - backend/tests/test_protected_code.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wolfi-comparison-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Obtain pinned verification tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-wolfi-tools.XXXXXX")"
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64 --output "$tool_dir/cosign"
+          printf '%s  %s\n' '4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71' "$tool_dir/cosign" | sha256sum --check --strict
+          chmod 0755 "$tool_dir/cosign"
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            https://github.com/anchore/grype/releases/download/v0.118.0/grype_0.118.0_linux_amd64.tar.gz --output "$tool_dir/grype.tar.gz"
+          printf '%s  %s\n' '1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2' "$tool_dir/grype.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$tool_dir/grype.tar.gz" --directory "$tool_dir" grype
+          printf 'WOLFI_TOOL_DIR=%s\n' "$tool_dir" >> "$GITHUB_ENV"
+
+      - name: Verify both public base signatures before executing their code
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wolfi-signatures"
+          for role in build runtime; do
+            tag='cgr.dev/chainguard/python:latest'
+            if [[ "$role" = build ]]; then tag="${tag}-dev"; fi
+            docker pull "$tag"
+            digest="$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')"
+            [[ "$digest" =~ ^cgr\.dev/chainguard/python@sha256:[0-9a-f]{64}$ ]]
+            "$WOLFI_TOOL_DIR/cosign" verify \
+              --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+              --certificate-identity=https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main \
+              "$digest" > "$RUNNER_TEMP/wolfi-signatures/${role}.json"
+            printf 'WOLFI_%s_IMAGE=%s\n' "${role^^}" "$digest" >> "$GITHUB_ENV"
+            printf 'Verified %s base: `%s`\n' "$role" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Preserve signature evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wolfi-base-signatures
+          path: ${{ runner.temp }}/wolfi-signatures/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Scan the unmodified base before application compatibility work
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id="$(docker image inspect "$WOLFI_RUNTIME_IMAGE" --format '{{.Id}}')"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 32 --entrypoint python "$WOLFI_RUNTIME_IMAGE" -I -B -c \
+            'import json,sys,ssl,pyexpat,zlib; from pathlib import Path; db=Path("/lib/apk/db/installed").read_text(); assert "P:python" in db and "P:glibc" in db; print(json.dumps({"python":sys.version.split()[0],"expat":pyexpat.EXPAT_VERSION,"ssl":ssl.OPENSSL_VERSION,"zlib":zlib.ZLIB_RUNTIME_VERSION,"apk_package_count":sum(line.startswith("P:") for line in db.splitlines())}))'
+          "$WOLFI_TOOL_DIR/grype" "docker:${image_id}" --config scripts/grype-candidate.yaml \
+            --output json > "$RUNNER_TEMP/wolfi-base-report.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["distro"]["name"]=="wolfi", "Expected Wolfi detection"' "$RUNNER_TEMP/wolfi-base-report.json"
+          python3 scripts/report-image-audit.py "$RUNNER_TEMP/wolfi-base-report.json" \
+            --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+
+      - name: Build isolated application with unchanged dependency pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --file backend/Dockerfile.wolfi \
+            --build-arg "PYTHON_BUILD_IMAGE=$WOLFI_BUILD_IMAGE" \
+            --build-arg "PYTHON_RUNTIME_IMAGE=$WOLFI_RUNTIME_IMAGE" \
+            --tag muvv-backend:wolfi-trial backend
+
+      - name: Verify interpreter compatibility and real startup guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --pids-limit 32 \
+            --entrypoint python muvv-backend:wolfi-trial -B -c \
+            'import json,os,sys,ssl,pyexpat,zlib; from app.server import enforce_runtime_security; enforce_runtime_security(); assert os.geteuid()==65532; print(json.dumps({"python":sys.version.split()[0],"expat":pyexpat.EXPAT_VERSION,"ssl":ssl.OPENSSL_VERSION,"zlib":zlib.ZLIB_RUNTIME_VERSION}))'
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 32 --entrypoint python muvv-backend:wolfi-trial -m pip check
+
+      - name: Run application security regression tests offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 512m --cpus 2 --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+            --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" --env ACCESS_TOKEN_EXPIRE_MINUTES=1440 --env PYTHONPATH=/app \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/tests,dst=/workspace/backend/tests,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts,dst=/workspace/scripts,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/alembic,dst=/workspace/backend/alembic,readonly" \
+            --workdir /workspace/backend --entrypoint python muvv-backend:wolfi-trial \
+            -B -m unittest discover -s tests
+
+      - name: Check protected application and interpreter permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-protected-code.py,dst=/protected-code.py,readonly" \
+            --pids-limit 32 --entrypoint python muvv-backend:wolfi-trial -I -B /protected-code.py
+
+      - name: Check actual HTTP startup and clean shutdown without real credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          container="$(docker run --detach --network none --read-only --pids-limit 128 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false \
+            --env PORT=18080 --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" muvv-backend:wolfi-trial)"
+          trap 'docker rm --force "$container" > /dev/null 2>&1 || true' EXIT
+          docker exec --interactive "$container" python -B - <<'PY'
+          import json,time,urllib.request,urllib.error
+          for attempt in range(100):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:18080/',timeout=1) as response:
+                      assert response.status==200 and json.load(response)['status']=='ok'
+                  break
+              except (urllib.error.URLError,TimeoutError):
+                  time.sleep(0.1)
+          else:
+              raise SystemExit('Candidate startup did not become ready')
+          for route in ('/users/me','/drivers/me','/admin/users'):
+              try:
+                  urllib.request.urlopen('http://127.0.0.1:18080'+route,timeout=2)
+              except urllib.error.HTTPError as error:
+                  assert error.code==401
+              else:
+                  raise AssertionError('Unauthenticated access accepted')
+          print('HTTP startup and anonymous access checks passed')
+          PY
+          docker exec "$container" python -B -m alembic heads
+          docker stop --time 10 "$container" > /dev/null
+          exit_code="$(docker inspect "$container" --format '{{.State.ExitCode}}')"
+          case "$exit_code" in 0|143) ;; *) exit 1 ;; esac
+          shutdown_log="$(docker logs "$container" 2>&1)"
+          [[ "$shutdown_log" == *"Application shutdown complete."* ]]
+
+      - name: Scan the complete application with no Python dispositions
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id="$(docker image inspect muvv-backend:wolfi-trial --format '{{.Id}}')"
+          "$WOLFI_TOOL_DIR/grype" "docker:${image_id}" --config scripts/grype-candidate.yaml \
+            --output json > "$RUNNER_TEMP/wolfi-application-report.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["distro"]["name"]=="wolfi", "Expected Wolfi detection"' "$RUNNER_TEMP/wolfi-application-report.json"
+          python3 scripts/report-image-audit.py "$RUNNER_TEMP/wolfi-application-report.json" \
+            --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+          printf 'Isolated comparison only. No image push, deployment, paid subscription or production data access.\n' >> "$GITHUB_STEP_SUMMARY"
