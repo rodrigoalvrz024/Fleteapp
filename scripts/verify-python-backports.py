@@ -227,9 +227,17 @@ def collect_evidence():
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--github-annotation", action="store_true")
+    parser.add_argument("--image-id")
+    parser.add_argument("--commit")
+    parser.add_argument("--run-id")
     args = parser.parse_args(argv)
     try:
         result = collect_evidence()
+        if args.image_id or args.commit or args.run_id:
+            if not all((args.image_id, args.commit, args.run_id)):
+                raise ValueError("Incomplete CI identity")
+            result["ci_identity"] = {"image_id": args.image_id,
+                                     "commit": args.commit, "run_id": args.run_id}
     except Exception as error:
         # The runner must fail closed without printing input or exception payloads.
         print(f"Python backport verification incomplete: {type(error).__name__}")

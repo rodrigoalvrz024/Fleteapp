@@ -73,6 +73,12 @@ def configured_port():
     return port
 
 
+def websocket_options():
+    # Chat sockets carry authentication and small events, never uploaded images.
+    return {"ws": "websockets", "ws_max_size": 16 * 1024,
+            "ws_max_queue": 4, "ws_per_message_deflate": False}
+
+
 def main():
     try:
         port = configured_port()
@@ -85,7 +91,7 @@ def main():
     print("[startup] Non-root identity verified; Linux no_new_privs enabled.", flush=True)
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, **websocket_options())
     return 0
 
 

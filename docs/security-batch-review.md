@@ -1,5 +1,10 @@
 # Revision conjunta para desbloquear el piloto
 
+Seguimiento 2026-09-15: el propietario autorizo reconocer exclusivamente las tres
+correcciones Python verificadas. Implementacion, vigencia y condiciones en
+[reconocimiento acotado](approved-python-corrections.md). Las referencias a
+autorizacion pendiente mas abajo describen la ronda historica, no el estado actual.
+
 Actualizacion 2026-09-15: [seguridad de sesiones y chat](session-security-review.md)
 agrega correcciones locales de acceso. No modifica las disposiciones del escaner
 de esta revision ni autoriza despliegue. Las corridas citadas abajo son anteriores

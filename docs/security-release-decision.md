@@ -1,5 +1,8 @@
 # Decision de seguridad para el piloto Muvv
 
+Actualizacion: [autorizacion acotada de tres correcciones Python](approved-python-corrections.md).
+No autoriza los otros avisos, elimina los originales ni habilita despliegue.
+
 Seguimiento 2026-09-15: [sesiones y chat](session-security-review.md).
 Correcciones de sesiones, chat y limitacion de intentos verificadas localmente;
 segunda revision de sesiones/chat realizada. Candidata `e55defc` comprobada en

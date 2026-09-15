@@ -34,6 +34,8 @@ from sqlalchemy.engine import make_url
 from starlette.websockets import WebSocketDisconnect
 import uvicorn
 from websockets.sync.client import connect as websocket_connect
+from websockets.exceptions import ConnectionClosed
+from app.server import websocket_options
 
 
 URL = make_url(os.environ.get("DATABASE_URL", "sqlite://"))
@@ -901,9 +903,12 @@ class HttpPermissionTests(unittest.TestCase):
         port = listener.getsockname()[1]
         server = uvicorn.Server(uvicorn.Config(
             app, host="127.0.0.1", port=port, loop="asyncio", http="h11",
-            ws="websockets", access_log=False, log_level="error", timeout_graceful_shutdown=3,
+            **websocket_options(), access_log=False, log_level="error", timeout_graceful_shutdown=3,
         ))
         worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        log_guard = self.assertNoLogs("uvicorn.error", level="ERROR")
+        log_guard.__enter__()
+        self.addCleanup(log_guard.__exit__, None, None, None)
         worker.start()
 
         def request(method, path, body=None, token=None):
@@ -943,6 +948,19 @@ class HttpPermissionTests(unittest.TestCase):
                 self.assertEqual(json.loads(ws.recv(timeout=5))["type"], "ready")
                 ws.send(json.dumps({"type": "ping"}))
                 self.assertEqual(json.loads(ws.recv(timeout=5)), {"type": "pong"})
+                self.assertEqual(ws.protocol.extensions, [])
+                # Fragmentation must not bypass the aggregate transport limit.
+                ws.send(["x" * 8192, "x" * 8193])
+                with self.assertRaises(ConnectionClosed) as closed:
+                    ws.recv(timeout=5)
+                self.assertEqual(closed.exception.rcvd.code, 1009)
+            # Oversized first frames are rejected before JSON/authentication too.
+            with websocket_connect(f"ws://127.0.0.1:{port}/freights/101/chat/live",
+                                   open_timeout=5, close_timeout=3, proxy=None) as ws:
+                ws.send("x" * 16385)
+                with self.assertRaises(ConnectionClosed) as closed:
+                    ws.recv(timeout=5)
+                self.assertEqual(closed.exception.rcvd.code, 1009)
         finally:
             server.should_exit = True
             worker.join(timeout=8)

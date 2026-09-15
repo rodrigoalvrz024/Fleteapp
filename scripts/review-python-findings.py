@@ -51,6 +51,24 @@ def review(evidence):
     counts = Counter(row["severity"] for row in rows)
     require(set(counts) <= set(SEVERITIES))
     require({name: counts[name] for name in SEVERITIES} == audit["counts"])
+    validate_python_evidence(rows, annotations["Python backport checks"],
+                             annotations["XML execution trace (not approval)"], image_id)
+    return {
+        "run_url": run["html_url"], "commit": run["head_sha"], "image_id": image_id,
+        "status": "vendor_fixed_candidates_pending_approval",
+        "candidate_cves": list(REVIEWED_CVES),
+        "original_counts": audit["counts"],
+        "high_matches_after_separate_approval": counts["High"] - len(REVIEWED_CVES),
+        "remaining_high_cves": sorted({row["id"] for row in rows
+                                       if row["severity"] == "High" and row["id"] not in REVIEWED_CVES}),
+        "scanner_gate_changed": False, "deployment_approved": False,
+        "vendor_release": "https://www.python.org/downloads/release/python-31116/",
+        "limitations": "Same-run CI evidence, not independent attestation; no entropy-quality claim or general Python exemption.",
+    }
+
+
+def validate_python_evidence(rows, backport, trace, image_id):
+    """Validate exact findings and runtime evidence; confer no approval by itself."""
     for cve in REVIEWED_CVES:
         matches = [row for row in rows if row["id"] == cve]
         require(len(matches) == 1)
@@ -59,7 +77,6 @@ def review(evidence):
                 == ("High", "python", "3.11.16", "binary", "nvd:cpe"))
         require(row["matchers"] == ["stock-matcher"])
 
-    backport = annotations["Python backport checks"]
     require(backport["blocked"] is False and backport["scanner_findings_waived"] is False)
     require((backport["python"], backport["expat"]) == ("3.11.16", "2.8.3"))
     require(backport["cookie_controls_tested"] == 33)
@@ -75,7 +92,6 @@ def review(evidence):
     for name, digest in MODULE_HASHES.items():
         require(native["modules"][name]["sha256"] == digest)
 
-    trace = annotations["XML execution trace (not approval)"]
     require(trace["image_id"] == image_id and trace["scanner_findings_waived"] is False)
     require(trace["status"] == "synthetic_call_path_observed_not_security_approval")
     require(len(trace["checks"]) == 2)
@@ -85,20 +101,6 @@ def review(evidence):
         require((check["salt16_hits"], check["legacy_hits"], check["parse_successes"], check["exit_code"])
                 == (3, 0, 3, 0))
         require(check["modules"] == native["modules"])
-
-    return {
-        "run_url": run["html_url"], "commit": run["head_sha"], "image_id": image_id,
-        "status": "vendor_fixed_candidates_pending_approval",
-        "candidate_cves": list(REVIEWED_CVES),
-        "original_counts": audit["counts"],
-        "high_matches_after_separate_approval": counts["High"] - len(REVIEWED_CVES),
-        "remaining_high_cves": sorted({row["id"] for row in rows
-                                       if row["severity"] == "High" and row["id"] not in REVIEWED_CVES}),
-        "scanner_gate_changed": False, "deployment_approved": False,
-        "vendor_release": "https://www.python.org/downloads/release/python-31116/",
-        "limitations": "Same-run CI evidence, not independent attestation; no entropy-quality claim or general Python exemption.",
-    }
-
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)

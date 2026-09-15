@@ -74,11 +74,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          image_id="$(docker image inspect muvv-backend:candidate --format '{{.Id}}')"
+          mkdir -p "$RUNNER_TEMP/python-backport-evidence"
           timeout --signal=TERM --kill-after=5s 30s docker run --rm \
             --network none --read-only --cap-drop ALL --memory 256m --cpus 1 \
             --security-opt no-new-privileges --pids-limit 32 \
             --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-python-backports.py,dst=/python-backport-check.py,readonly" \
-            --entrypoint python muvv-backend:candidate -I -B /python-backport-check.py --github-annotation
+            --entrypoint python "$image_id" -I -B /python-backport-check.py \
+            --image-id "$image_id" --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" \
+            > "$RUNNER_TEMP/python-backport-evidence/report.json"
+          python3 - "$RUNNER_TEMP/python-backport-evidence/report.json" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          data = json.loads(Path(sys.argv[1]).read_text())
+          encoded = json.dumps(data, ensure_ascii=True).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print('::notice title=Python backport checks::' + encoded)
+          PY
+
+      - name: Preserve Python correction evidence without credentials
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: python-backport-evidence
+          path: ${{ runner.temp }}/python-backport-evidence/report.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Verify runtime permissions without a read-only filesystem masking them
         shell: bash
@@ -235,5 +255,8 @@ jobs:
           image_id="$(docker image inspect muvv-backend:candidate --format '{{.Id}}')"
           "$audit_dir/grype" "docker:${image_id}" \
             --config scripts/grype-candidate.yaml --output json > "$audit_dir/report.json"
-          python3 scripts/report-image-audit.py "$audit_dir/report.json" \
+          python3 scripts/evaluate-image-policy.py "$audit_dir/report.json" \
+            --backports "$RUNNER_TEMP/python-backport-evidence/report.json" \
+            --trace "$RUNNER_TEMP/xml-call-evidence/report.json" \
+            --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" \
             --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation

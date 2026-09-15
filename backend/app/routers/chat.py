@@ -489,7 +489,11 @@ async def freight_chat_live(websocket: WebSocket, freight_id: int):
     await websocket.accept()
     token = await _websocket_token(websocket)
     if not token:
-        await websocket.close(code=4401)
+        try:
+            await websocket.close(code=4401)
+        except (RuntimeError, WebSocketDisconnect):
+            # The transport may already have rejected an oversized first frame.
+            pass
         return
 
     try:

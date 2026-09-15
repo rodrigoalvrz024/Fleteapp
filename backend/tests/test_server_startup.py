@@ -186,7 +186,8 @@ called = []
 
 def run(application, **options):
     assert application == "app.main:app"
-    assert options == {"host": "0.0.0.0", "port": 18080}
+    assert options == {"host": "0.0.0.0", "port": 18080, "ws": "websockets",
+                       "ws_max_size": 16384, "ws_max_queue": 4, "ws_per_message_deflate": False}
     for descriptor in descriptors:
         try:
             os.fstat(descriptor)
@@ -248,7 +249,9 @@ class ServerStartupTests(unittest.TestCase):
                 with patch("builtins.__import__", side_effect=import_module):
                     self.assertEqual(server.main(), 0)
         self.assertEqual(events, ["guard", "uvicorn"])
-        uvicorn.run.assert_called_once_with("app.main:app", host="0.0.0.0", port=18080)
+        uvicorn.run.assert_called_once_with("app.main:app", host="0.0.0.0", port=18080,
+                                           ws="websockets", ws_max_size=16384,
+                                           ws_max_queue=4, ws_per_message_deflate=False)
 
     def test_failures_do_not_start_server_or_log_sensitive_values(self):
         failures = (server.StartupSecurityError, OSError, AttributeError, KeyError, ValueError)
