@@ -1,6 +1,7 @@
 """Run only via test-supabase-rls-isolated.py --http, never against an existing DB."""
 
 import importlib.util
+import hashlib
 import gc
 import http.client
 import json
@@ -13,6 +14,7 @@ import threading
 import time
 import unittest
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -21,11 +23,13 @@ from urllib.parse import urlsplit
 from alembic import command
 from alembic.config import Config
 from fastapi.responses import Response
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import jwt
 import httpx
 import psycopg2
-from sqlalchemy import inspect, text
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.orm import Session as OrmSession, sessionmaker
 from sqlalchemy.engine import make_url
 from starlette.websockets import WebSocketDisconnect
 import uvicorn
@@ -60,15 +64,17 @@ from app.core.config import settings
 from app.core.rate_limit import _BUCKETS
 from app.core.security import create_access_token, hash_password
 from app.database import Base, SessionLocal, engine
+from app import database
 from app.main import app
 from app.models.audit_event import AuditEvent
 from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus, FreightCargoPhoto, TripFeedback
 from app.models.freight_chat import FreightChatMessage
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
+from app.models.password_reset import PasswordResetToken
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle, VehicleType
-from app.routers import chat, feedback, freights
+from app.routers import auth, chat, feedback, freights
 from app.services import transbank_service
 
 
@@ -242,6 +248,222 @@ class HttpPermissionTests(unittest.TestCase):
     def test_claimed_admin_role_does_not_override_database_role(self):
         token = create_access_token({"sub": "1", "role": "admin"})
         self.assert_status(self.request("GET", "/admin/users", token=token), 403)
+
+    def reset_fixture_password(self, user_id):
+        raw = f"synthetic-reset-token-for-user-{user_id}-not-a-secret"
+        with SessionLocal() as db:
+            db.add(PasswordResetToken(user_id=user_id,
+                token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)))
+            db.commit()
+        return self.http.post("/auth/reset-password", json={
+            "token": raw, "new_password": "New-synthetic-password-935!"})
+
+    def test_password_recovery_revokes_previous_sessions_for_every_role(self):
+        for user_id in (1, 3, 5):
+            with self.subTest(role_user=user_id):
+                old = create_access_token({"sub": str(user_id)})
+                self.assert_status(self.reset_fixture_password(user_id), 200)
+                self.assert_status(self.request("GET", "/users/me", token=old), 401)
+                login = self.http.post("/auth/login", json={
+                    "email": f"fixture{user_id}@example.com", "password": "New-synthetic-password-935!"})
+                self.assert_status(login, 200)
+                new = login.json()["access_token"]
+                self.assert_status(self.request("GET", "/users/me", token=new), 200)
+                self.assert_status(self.request("GET", "/admin/users", token=new), 200 if user_id == 5 else 403)
+        self.assert_status(self.request("GET", "/users/me", user=2), 200)
+
+    def test_open_chat_rejects_suspended_account_before_pong(self):
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": create_access_token({"sub": "1"})})
+            self.assertEqual(ws.receive_json()["type"], "ready")
+            with SessionLocal() as db:
+                db.get(User, 1).is_active = False
+                db.commit()
+            ws.send_json({"type": "ping"})
+            with self.assertRaises(WebSocketDisconnect) as error:
+                ws.receive_json()
+            self.assertEqual(error.exception.code, 4401)
+
+    def test_open_chat_rechecks_participation_before_broadcast(self):
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": create_access_token({"sub": "3"})})
+            self.assertEqual(ws.receive_json()["type"], "ready")
+            with SessionLocal() as db:
+                db.get(FreightRequest, 101).driver_id = 40
+                db.commit()
+            self.assert_status(self.request("POST", "/freights/101/chat/messages", user=1,
+                json={"message_text": "Only the newly assigned driver may receive this"}), 201)
+            with self.assertRaises(WebSocketDisconnect) as error:
+                ws.receive_json()
+            self.assertEqual(error.exception.code, 4403)
+
+    def test_password_recovery_blocks_chat_broadcast_and_analytics(self):
+        old = create_access_token({"sub": "1"})
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": old})
+            self.assertEqual(ws.receive_json()["type"], "ready")
+            self.assert_status(self.reset_fixture_password(1), 200)
+            self.assert_status(self.request("POST", "/analytics/presence", token=old,
+                json={"screen": "/app/client"}), 401)
+            self.assert_status(self.request("POST", "/analytics/events", token=old,
+                json={"event_type": "app.screen_view", "entity_type": "screen", "entity_id": "/app/client"}), 401)
+            self.assert_status(self.request("POST", "/freights/101/chat/messages", user=3,
+                json={"message_text": "Revoked session must not receive this"}), 201)
+            with self.assertRaises(WebSocketDisconnect) as error:
+                ws.receive_json()
+            self.assertEqual(error.exception.code, 4401)
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": old})
+            with self.assertRaises(WebSocketDisconnect) as error:
+                ws.receive_json()
+            self.assertEqual(error.exception.code, 4401)
+
+    def test_idle_chat_closes_after_token_expires(self):
+        with patch.object(chat, "CHAT_SESSION_RECHECK_SECONDS", 0.05):
+            with self.http.websocket_connect("/freights/101/chat/live") as ws:
+                ws.send_json({"type": "auth", "token": create_access_token(
+                    {"sub": "1"}, expires_delta=timedelta(seconds=2))})
+                self.assertEqual(ws.receive_json()["type"], "ready")
+                with self.assertRaises(WebSocketDisconnect) as error:
+                    ws.receive_json()
+                self.assertEqual(error.exception.code, 4401)
+
+    def test_chat_event_limit_precedes_database_revalidation(self):
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": create_access_token({"sub": "1"})})
+            self.assertEqual(ws.receive_json()["type"], "ready")
+            with patch.object(chat, "check_rate_limit", side_effect=HTTPException(status_code=429)), \
+                 patch.object(chat, "_live_chat_access", side_effect=AssertionError("Must limit before DB access")) as query:
+                ws.send_json({"type": "ping"})
+                with self.assertRaises(WebSocketDisconnect) as error:
+                    ws.receive_json()
+                self.assertEqual(error.exception.code, 4429)
+                query.assert_not_called()
+
+    def test_concurrent_password_reset_is_single_use(self):
+        raw = "synthetic-concurrent-reset-not-a-secret"
+        with SessionLocal() as db:
+            db.add(PasswordResetToken(user_id=1, token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)))
+            db.commit()
+        start = threading.Barrier(2)
+
+        def reset(index):
+            start.wait(timeout=10)
+            return self.http.post("/auth/reset-password", json={
+                "token": raw, "new_password": f"Concurrent-test-password-{index}-935!"}).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(reset, (1, 2)))
+        self.assertEqual(sorted(results), [200, 400])
+        with SessionLocal() as db:
+            self.assertEqual(db.get(User, 1).session_version, 1)
+            self.assertEqual(db.query(AuditEvent).filter(AuditEvent.event_type == "user.password_reset").count(), 1)
+
+    def test_failed_reset_keeps_sessions_and_success_invalidates_other_links(self):
+        now = datetime.now(timezone.utc)
+        raw = "synthetic-expired-reset-not-a-secret"
+        other = "synthetic-other-reset-not-a-secret"
+        with SessionLocal() as db:
+            for token, expiry in ((raw, now - timedelta(seconds=1)), (other, now + timedelta(minutes=5))):
+                db.add(PasswordResetToken(user_id=1, token_hash=hashlib.sha256(token.encode()).hexdigest(), expires_at=expiry))
+            db.commit()
+        self.assert_status(self.http.post("/auth/reset-password", json={
+            "token": raw, "new_password": "Synthetic-test-password-935!"}), 400)
+        self.assert_status(self.request("GET", "/users/me", user=1), 200)
+        self.assert_status(self.reset_fixture_password(1), 200)
+        self.assert_status(self.http.post("/auth/reset-password", json={
+            "token": other, "new_password": "Synthetic-test-password-935!"}), 400)
+
+    def test_google_and_role_switch_issue_current_generation_without_escalation(self):
+        with SessionLocal() as db:
+            user = db.get(User, 1)
+            user.session_version = 3
+            user.account_roles = ["client", "driver"]
+            db.commit()
+        with patch.object(auth, "_verified_google_email", return_value="fixture1@example.com"):
+            response = self.http.post("/auth/google", json={"id_token": "synthetic-google-proof-for-test-only" * 4})
+        self.assert_status(response, 200)
+        token = response.json()["access_token"]
+        self.assertEqual(jwt.decode(token, options={"verify_signature": False})["session_version"], 3)
+        switched = self.request("POST", "/auth/switch-role", token=token, json={"role": "driver"})
+        self.assert_status(switched, 200)
+        switched_token = switched.json()["access_token"]
+        self.assert_status(self.request("GET", "/users/me", token=switched_token), 200)
+        self.assert_status(self.request("GET", "/admin/users", token=switched_token), 403)
+        self.assert_status(self.request("POST", "/auth/switch-role", token=switched_token, json={"role": "admin"}), 422)
+
+    def test_login_does_not_upgrade_a_session_revoked_during_issuance(self):
+        real_audit = auth.record_audit_event
+
+        def revoke_before_commit(db, **kwargs):
+            if kwargs["event_type"] == "auth.login_succeeded":
+                with SessionLocal() as other:
+                    user = other.get(User, 1)
+                    user.session_version += 1
+                    other.commit()
+            real_audit(db, **kwargs)
+
+        with patch.object(auth, "record_audit_event", side_effect=revoke_before_commit):
+            response = self.http.post("/auth/login", json={"email": "fixture1@example.com", "password": self.password})
+        self.assert_status(response, 200)
+        self.assert_status(self.request("GET", "/users/me", token=response.json()["access_token"]), 401)
+
+    def test_registration_does_not_inherit_revocation_after_first_commit(self):
+        with engine.begin() as connection:
+            connection.execute(text("SELECT setval(pg_get_serial_sequence('users', 'id'), 9)"))
+        real_refresh = OrmSession.refresh
+        revoked = set()
+
+        def refresh_after_revocation(db, instance, *args, **kwargs):
+            if isinstance(instance, User):
+                # inspect identity without loading expired attributes through this session.
+                identity = inspect(instance).identity
+                if identity and identity[0] > 9 and identity[0] not in revoked:
+                    revoked.add(identity[0])
+                    with SessionLocal() as other:
+                        other.get(User, identity[0]).session_version += 1
+                        other.commit()
+            return real_refresh(db, instance, *args, **kwargs)
+
+        for index, route in enumerate(("/auth/register", "/auth/google/register")):
+            data = {"full_name": "Synthetic New User", "phone": f"+5691234567{index}",
+                    "role": "client", "accepts_terms": True, "accepts_privacy": True}
+            if index == 0:
+                data.update(email="new-password@example.com", password=self.password)
+            else:
+                data["id_token"] = "synthetic-google-proof-for-test-only" * 4
+            with self.subTest(route=route), patch.object(settings, "PILOT_MODE", False), \
+                 patch.object(OrmSession, "refresh", new=refresh_after_revocation), \
+                 patch.object(auth, "_verified_google_identity", return_value=("new-google@example.com", "Synthetic New User")):
+                response = self.http.post(route, json=data)
+            self.assert_status(response, 201)
+            self.assert_status(self.request("GET", "/users/me", token=response.json()["access_token"]), 401)
+        self.assertEqual(len(revoked), 2)
+
+    def test_chat_delivers_text_images_and_receipts_with_one_database_connection(self):
+        small_engine = create_engine(URL, pool_size=1, max_overflow=0, pool_timeout=1)
+        self.addCleanup(small_engine.dispose)
+        sessions = sessionmaker(bind=small_engine, autoflush=False)
+        uploaded = SimpleNamespace(reference="freights/101/chat/synthetic.jpg", content_type="image/jpeg", size_bytes=4)
+        with patch.object(database, "SessionLocal", sessions), patch.object(chat, "SessionLocal", sessions):
+            with self.http.websocket_connect("/freights/101/chat/live") as ws:
+                ws.send_json({"type": "auth", "token": create_access_token({"sub": "3"})})
+                self.assertEqual(ws.receive_json()["type"], "ready")
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    responses = list(pool.map(lambda index: self.request("POST", "/freights/101/chat/messages",
+                        user=1, json={"message_text": f"Concurrent synthetic message {index}"}), (1, 2)))
+                for response in responses:
+                    self.assert_status(response, 201)
+                    self.assertEqual(ws.receive_json()["type"], "message")
+                with patch.object(chat, "upload_freight_chat_image", new_callable=AsyncMock, return_value=uploaded):
+                    self.assert_status(self.request("POST", "/freights/101/chat/images", user=1,
+                        files={"file": ("fixture.jpg", b"test", "image/jpeg")}), 201)
+                self.assertEqual(ws.receive_json()["message"]["message_type"], "image")
+                self.assert_status(self.request("POST", "/freights/101/chat/read", user=3), 200)
+                self.assertEqual(ws.receive_json()["type"], "read")
+            self.assertEqual(small_engine.pool.checkedout(), 0)
 
     def test_detail_and_lists_are_scoped_to_participants(self):
         for user in (1, 3, 5):

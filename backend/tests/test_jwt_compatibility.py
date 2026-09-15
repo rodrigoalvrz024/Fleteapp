@@ -84,6 +84,13 @@ class JwtCompatibilityTests(unittest.TestCase):
             claims[field] = value
             self.assert_denied(decode_token, jwt.encode(claims, FIXTURE_KEY, algorithm="HS256"), 401)
 
+    def test_session_generation_rejects_non_integer_and_negative_values(self):
+        for version in (True, False, "0", None, -1, 0.0, [], {}):
+            with self.subTest(version_type=type(version).__name__):
+                claims = self.claims()
+                claims["session_version"] = version
+                self.assert_denied(decode_token, jwt.encode(claims, FIXTURE_KEY, algorithm="HS256"), 401)
+
     def test_private_links_round_trip_and_cannot_authenticate(self):
         for create, decode, args, purpose in PRIVATE_CASES:
             with self.subTest(purpose=purpose):

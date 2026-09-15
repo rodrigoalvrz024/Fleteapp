@@ -1,5 +1,11 @@
 # Decision de seguridad para el piloto Muvv
 
+Seguimiento 2026-09-15: [sesiones y chat](session-security-review.md).
+Correcciones de sesiones, chat y limitacion de intentos verificadas localmente;
+segunda revision de sesiones/chat realizada. Requieren nueva candidata Linux
+antes de publicarse. No reducen
+por si mismos los hallazgos del sistema operativo enumerados en este documento.
+
 Fecha: 2026-09-14. Estado: BORRADOR PARA REVISION, NO AUTORIZA DESPLIEGUE.
 Segunda revision por agente: realizada; aprobador del riesgo: pendiente. No es un archivo
 VEX ni una lista de excepciones consumida por CI.

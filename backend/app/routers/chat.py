@@ -18,10 +18,11 @@ from fastapi import (
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.rate_limit import check_rate_limit
-from app.core.security import decode_token, get_current_user, require_role
+from app.core.security import authenticate_access_token, get_current_user, require_role
 from app.database import SessionLocal, get_db
 from app.models.freight import FreightRequest
 from app.models.freight_chat import FreightChatMessage
@@ -50,6 +51,7 @@ from app.services.storage_service import (
 
 router = APIRouter(prefix="/freights", tags=["Chat"])
 logger = logging.getLogger(__name__)
+CHAT_SESSION_RECHECK_SECONDS = 30
 
 
 def _freight_for_chat(db: Session, freight_id: int) -> FreightRequest:
@@ -166,13 +168,6 @@ def review_chat_for_compliance(
         messages=[_chat_message_response(message) for message in recent_messages],
         has_more=has_more,
     )
-
-
-def _message_event(message: FreightChatMessage) -> dict:
-    return {
-        "type": "message",
-        "message": _chat_message_response(message).model_dump(mode="json"),
-    }
 
 
 async def _notify_chat_recipient(
@@ -307,17 +302,21 @@ async def create_chat_message(
             "message_length": len(data.message_text),
         },
     )
+    response = _chat_message_response(message)
+    event = {"type": "message", "message": response.model_dump(mode="json")}
+    sender_name = (current_user.full_name or "Tu contacto").split(" ")[0]
     db.commit()
-    await freight_chat_connections.broadcast(freight.id, _message_event(message))
-    if not freight_chat_connections.has_active_user(freight.id, access.peer_user_id):
+    # Do not reload expired ORM objects while recipient checks need the pool.
+    await freight_chat_connections.broadcast(freight_id, event)
+    if not freight_chat_connections.has_active_user(freight_id, access.peer_user_id):
         background_tasks.add_task(
             _notify_chat_recipient,
             recipient_user_id=access.peer_user_id,
-            freight_id=freight.id,
-            sender_name=(current_user.full_name or "Tu contacto").split(" ")[0],
+            freight_id=freight_id,
+            sender_name=sender_name,
             message_type="text",
         )
-    return _chat_message_response(message)
+    return response
 
 
 @router.post(
@@ -381,6 +380,9 @@ async def create_chat_image(
                 "has_caption": bool(validated_caption),
             },
         )
+        response = _chat_message_response(message)
+        event = {"type": "message", "message": response.model_dump(mode="json")}
+        sender_name = (current_user.full_name or "Tu contacto").split(" ")[0]
         db.commit()
     except Exception:
         db.rollback()
@@ -390,16 +392,16 @@ async def create_chat_image(
             logger.warning("Could not clean up failed chat image upload")
         raise
 
-    await freight_chat_connections.broadcast(freight.id, _message_event(message))
-    if not freight_chat_connections.has_active_user(freight.id, access.peer_user_id):
+    await freight_chat_connections.broadcast(freight_id, event)
+    if not freight_chat_connections.has_active_user(freight_id, access.peer_user_id):
         background_tasks.add_task(
             _notify_chat_recipient,
             recipient_user_id=access.peer_user_id,
-            freight_id=freight.id,
-            sender_name=(current_user.full_name or "Tu contacto").split(" ")[0],
+            freight_id=freight_id,
+            sender_name=sender_name,
             message_type="image",
         )
-    return _chat_message_response(message)
+    return response
 
 
 @router.post("/{freight_id}/chat/read", response_model=ChatReadResponse)
@@ -421,12 +423,13 @@ async def mark_chat_messages_read(
         .update({FreightChatMessage.read_at: read_at}, synchronize_session=False)
     )
     if marked_count:
+        reader_user_id = current_user.id
         db.commit()
         await freight_chat_connections.broadcast(
-            freight.id,
+            freight_id,
             {
                 "type": "read",
-                "reader_user_id": current_user.id,
+                "reader_user_id": reader_user_id,
                 "read_at": read_at.isoformat(),
             },
         )
@@ -456,7 +459,7 @@ def _websocket_origin_allowed(websocket: WebSocket) -> bool:
     return not origin or origin in settings.cors_origins
 
 
-async def _websocket_user(websocket: WebSocket) -> User | None:
+async def _websocket_token(websocket: WebSocket) -> str | None:
     try:
         payload = await asyncio.wait_for(websocket.receive_json(), timeout=8)
     except (asyncio.TimeoutError, WebSocketDisconnect, ValueError, TypeError):
@@ -466,16 +469,15 @@ async def _websocket_user(websocket: WebSocket) -> User | None:
     token = payload.get("token")
     if not isinstance(token, str) or not 20 <= len(token) <= 4096:
         return None
-    try:
-        claims = decode_token(token)
-        user_id = int(claims.get("sub"))
-    except (HTTPException, TypeError, ValueError):
-        return None
-    db = SessionLocal()
-    try:
-        return db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
-    finally:
-        db.close()
+    return token
+
+
+def _live_chat_access(token: str, freight_id: int):
+    # A fresh transaction prevents an ORM identity cache retaining old permissions.
+    with SessionLocal() as db:
+        user = authenticate_access_token(token, db)
+        access = resolve_freight_chat_access(db, _freight_for_chat(db, freight_id), user)
+        return user.id, access
 
 
 @router.websocket("/{freight_id}/chat/live")
@@ -485,23 +487,41 @@ async def freight_chat_live(websocket: WebSocket, freight_id: int):
         return
 
     await websocket.accept()
-    current_user = await _websocket_user(websocket)
-    if not current_user:
+    token = await _websocket_token(websocket)
+    if not token:
         await websocket.close(code=4401)
         return
 
-    db = SessionLocal()
     try:
-        freight = _freight_for_chat(db, freight_id)
-        access = resolve_freight_chat_access(db, freight, current_user)
-    except HTTPException:
-        await websocket.close(code=4403)
+        user_id, access = await run_in_threadpool(_live_chat_access, token, freight_id)
+    except HTTPException as error:
+        await websocket.close(code=4401 if error.status_code == 401 else 4403)
         return
-    finally:
-        db.close()
+    except Exception:
+        logger.warning("Chat authorization unavailable")
+        await websocket.close(code=1011)
+        return
 
-    freight_chat_connections.add(freight_id, current_user.id, websocket)
+    async def authorize() -> bool:
+        try:
+            await run_in_threadpool(_live_chat_access, token, freight_id)
+            return True
+        except HTTPException as error:
+            code = 4401 if error.status_code == 401 else 4403
+        except Exception:
+            logger.warning("Chat authorization unavailable")
+            code = 1011
+        freight_chat_connections.remove(freight_id, websocket)
+        try:
+            await websocket.close(code=code)
+        except (RuntimeError, WebSocketDisconnect):
+            pass
+        return False
+
+    freight_chat_connections.add(freight_id, user_id, websocket, authorize)
     try:
+        if not await authorize():
+            return
         await websocket.send_json(
             {
                 "type": "ready",
@@ -510,10 +530,23 @@ async def freight_chat_live(websocket: WebSocket, freight_id: int):
             }
         )
         while True:
-            event = await websocket.receive_json()
+            try:
+                event = await asyncio.wait_for(websocket.receive_json(), timeout=CHAT_SESSION_RECHECK_SECONDS)
+            except asyncio.TimeoutError:
+                if not await authorize():
+                    break
+                continue
+            try:
+                check_rate_limit(websocket, scope="chat-live-events", identifier=str(user_id),
+                                 max_attempts=120, window_seconds=60)
+            except HTTPException:
+                await websocket.close(code=4429)
+                break
+            if not await authorize():
+                break
             if isinstance(event, dict) and event.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
-    except (WebSocketDisconnect, ValueError, TypeError):
+    except (WebSocketDisconnect, ValueError, TypeError, RuntimeError):
         pass
     finally:
         freight_chat_connections.remove(freight_id, websocket)

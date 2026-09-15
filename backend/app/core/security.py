@@ -59,6 +59,12 @@ def _invalid_token() -> HTTPException:
     )
 
 
+def create_user_access_token(user) -> str:
+    return create_access_token({
+        "sub": str(user.id), "role": user.role, "session_version": user.session_version,
+    })
+
+
 def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(
@@ -73,6 +79,9 @@ def decode_token(token: str) -> dict:
         raise _invalid_token()
     if payload.get("token_type") != "access":
         raise _invalid_token()
+    version = payload.get("session_version", 0)
+    if type(version) is not int or version < 0:
+        raise _invalid_token()
     return payload
 
 
@@ -80,15 +89,19 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
-    from app.models.user import User
-
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Autenticacion requerida",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    payload = decode_token(credentials.credentials)
+    return authenticate_access_token(credentials.credentials, db)
+
+
+def authenticate_access_token(token: str, db: Session):
+    from app.models.user import User
+
+    payload = decode_token(token)
     try:
         user_id = int(payload.get("sub"))
     except (TypeError, ValueError):
@@ -101,6 +114,9 @@ def get_current_user(
             detail="Sesion no disponible",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Legacy tokens are generation zero, never valid after a password recovery.
+    if payload.get("session_version", 0) != user.session_version:
+        raise _invalid_token()
     return user
 
 

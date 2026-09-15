@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import check_rate_limit
-from app.core.security import decode_token, get_current_user
+from app.core.security import authenticate_access_token, get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.schemas.analytics import (
@@ -63,17 +63,9 @@ def _optional_current_user(
     if not credentials:
         return None
     try:
-        payload = decode_token(credentials.credentials)
+        return authenticate_access_token(credentials.credentials, db)
     except HTTPException:
         return None
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-    try:
-        user_id = int(user_id)
-    except (TypeError, ValueError):
-        return None
-    return db.query(User).filter(User.id == user_id, User.is_active == True).first()  # noqa: E712
 
 
 def _clean_metadata(value: Any, depth: int = 0) -> Any:

@@ -1,5 +1,10 @@
 # Revision conjunta para desbloquear el piloto
 
+Actualizacion 2026-09-15: [seguridad de sesiones y chat](session-security-review.md)
+agrega correcciones locales de acceso. No modifica las disposiciones del escaner
+de esta revision ni autoriza despliegue. Las corridas citadas abajo son anteriores
+a esos cambios y no certifican la nueva candidata.
+
 Fecha: 2026-09-14. Estado: revision tecnica; no autoriza excepciones ni deploy.
 
 ## Resultado para el propietario

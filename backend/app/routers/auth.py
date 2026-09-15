@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.rate_limit import check_rate_limit
 from app.core.security import (
-    create_access_token,
+    create_user_access_token,
     get_current_user,
     hash_password,
     verify_password,
@@ -207,6 +207,8 @@ def register(
     )
     db.add(user)
     try:
+        db.flush()
+        token = create_user_access_token(user)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -229,7 +231,6 @@ def register(
     )
     db.commit()
 
-    token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=_user_response(db, user))
 
 
@@ -289,15 +290,15 @@ def _record_registration_consents(
 def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
     check_rate_limit(
         request,
-        scope="auth-login",
-        identifier=data.email.lower(),
-        max_attempts=8,
+        scope="auth-login-ip",
+        max_attempts=60,
         window_seconds=15 * 60,
     )
     check_rate_limit(
         request,
-        scope="auth-login-ip",
-        max_attempts=60,
+        scope="auth-login",
+        identifier=data.email.lower(),
+        max_attempts=8,
         window_seconds=15 * 60,
     )
     user = db.query(User).filter(User.email == data.email).first()
@@ -323,9 +324,10 @@ def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
         request=request,
         metadata={"source": "password"},
     )
+    # Capture the authenticated generation before commit can expire/reload User.
+    token = create_user_access_token(user)
     db.commit()
 
-    token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=_user_response(db, user))
 
 
@@ -395,6 +397,8 @@ def register_with_google(
     )
     db.add(user)
     try:
+        db.flush()
+        token = create_user_access_token(user)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -418,7 +422,6 @@ def register_with_google(
     )
     db.commit()
 
-    token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=_user_response(db, user))
 
 
@@ -467,9 +470,9 @@ def login_with_google(
         request=request,
         metadata={"source": "google"},
     )
+    token = create_user_access_token(user)
     db.commit()
 
-    token = create_access_token({"sub": str(user.id), "role": user.role})
     return TokenResponse(access_token=token, user=_user_response(db, user))
 
 
@@ -508,9 +511,9 @@ def switch_active_role(
             after_data={"role": requested_role.value},
             request=request,
         )
-        db.commit()
 
-    token = create_access_token({"sub": str(current_user.id), "role": current_user.role})
+    token = create_user_access_token(current_user)
+    db.commit()
     return TokenResponse(access_token=token, user=_user_response(db, current_user))
 
 
@@ -595,7 +598,7 @@ def forgot_password(
         window_seconds=60 * 60,
     )
     generic = "Si el correo existe, enviaremos instrucciones para recuperar la contraseña."
-    user = db.query(User).filter(User.email == data.email).first()
+    user = db.query(User).filter(User.email == data.email).with_for_update().first()
     if not user or not user.is_active:
         return MessageResponse(message=generic)
 
@@ -656,15 +659,24 @@ def reset_password(
             detail="El enlace es inválido o expiró.",
         )
 
-    user = db.query(User).filter(User.id == reset_token.user_id).first()
+    # Serialize requests per account, including simultaneous reset-link issuance.
+    user = db.query(User).filter(User.id == reset_token.user_id).with_for_update().first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El enlace es inválido o expiró.",
         )
 
+    db.refresh(reset_token)
+    now = datetime.now(timezone.utc)
+    if reset_token.used_at is not None or _is_expired(reset_token.expires_at, now):
+        raise HTTPException(status_code=400, detail="El enlace es inválido o expiró.")
     user.hashed_password = hash_password(data.new_password)
-    reset_token.used_at = now
+    user.session_version += 1
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).update({"used_at": now}, synchronize_session="fetch")
     user.last_modified_by = user.id
     record_audit_event(
         db,

@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 import sys
 import unittest
+from contextlib import contextmanager
+from time import monotonic
 from datetime import datetime, timezone
 
 from alembic import command
@@ -14,6 +16,7 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 
 
 URL = make_url(os.environ.get("DATABASE_URL", "sqlite://"))
@@ -46,6 +49,48 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MigrationChainTests(unittest.TestCase):
+    @contextmanager
+    def session_migration_fixture(self):
+        # This suite already verifies a newly created, disposable local database.
+        with engine.begin() as conn:
+            conn.exec_driver_sql("CREATE SCHEMA session_migration_test")
+            conn.exec_driver_sql("CREATE TABLE session_migration_test.users (id integer PRIMARY KEY)")
+            conn.exec_driver_sql("INSERT INTO session_migration_test.users VALUES (1)")
+        try:
+            yield ScriptDirectory.from_config(self.config).get_revision("a7d2e9c1f630").module
+        finally:
+            with engine.begin() as conn:
+                conn.exec_driver_sql("DROP SCHEMA session_migration_test CASCADE")
+
+    def test_session_generation_backfills_zero_and_preserves_revocations(self):
+        with self.session_migration_fixture() as migration:
+            with engine.begin() as conn:
+                conn.exec_driver_sql("SET LOCAL search_path = session_migration_test")
+                with Operations.context(MigrationContext.configure(conn)):
+                    migration.upgrade()
+                    self.assertEqual(conn.exec_driver_sql("SELECT session_version FROM users").scalar_one(), 0)
+                    conn.exec_driver_sql("UPDATE users SET session_version=7 WHERE id=1")
+                    migration.upgrade()
+                    conn.exec_driver_sql("INSERT INTO users (id) VALUES (2)")
+                    self.assertEqual(conn.exec_driver_sql("SELECT session_version FROM users ORDER BY id").scalars().all(), [7, 0])
+
+    def test_session_migration_sets_own_bounded_lock_timeout(self):
+        with self.session_migration_fixture() as migration:
+            with engine.connect() as blocker:
+                blocker.exec_driver_sql("SELECT * FROM session_migration_test.users")
+                with engine.connect() as contender:
+                    contender.exec_driver_sql("SET LOCAL search_path = session_migration_test")
+                    contender.exec_driver_sql("SET LOCAL lock_timeout = '0'")
+                    contender.exec_driver_sql("SET LOCAL statement_timeout = '10s'")
+                    started = monotonic()
+                    with self.assertRaises(DBAPIError) as error:
+                        with Operations.context(MigrationContext.configure(contender)):
+                            migration.upgrade()
+                    self.assertEqual(error.exception.orig.pgcode, "55P03")
+                    self.assertLess(monotonic() - started, 9)
+                    contender.rollback()
+                blocker.rollback()
+
     @classmethod
     def setUpClass(cls):
         cls.addClassCleanup(engine.dispose)
@@ -210,7 +255,8 @@ class MigrationChainTests(unittest.TestCase):
                       for table in Base.metadata.sorted_tables}
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()
-                migration.downgrade()
+                with self.assertRaisesRegex(RuntimeError, "Session revocation cannot be discarded"):
+                    migration.downgrade()
             after = {table.name: conn.execute(select(table).order_by(table.c.id)).all()
                      for table in Base.metadata.sorted_tables}
             self.assertEqual(after, before)

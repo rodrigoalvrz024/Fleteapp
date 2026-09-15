@@ -17,6 +17,7 @@ class User(Base):
     phone = Column(String, unique=True, nullable=False)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     # ``role`` is the active operating mode. ``account_roles`` preserves all
     # modes granted to the same identity, so a person never needs two accounts.
     role = Column(Enum(UserRole), default=UserRole.client, nullable=False)
