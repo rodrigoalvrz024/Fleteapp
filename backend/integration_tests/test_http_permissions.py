@@ -1,5 +1,6 @@
 """Run only via test-supabase-rls-isolated.py --http, never against an existing DB."""
 
+import asyncio
 import importlib.util
 import hashlib
 import gc
@@ -466,6 +467,38 @@ class HttpPermissionTests(unittest.TestCase):
                 self.assert_status(self.request("POST", "/freights/101/chat/read", user=3), 200)
                 self.assertEqual(ws.receive_json()["type"], "read")
             self.assertEqual(small_engine.pool.checkedout(), 0)
+
+    def test_stalled_chat_transport_preserves_message_and_notification(self):
+        async def blocked_send(_):
+            await asyncio.Event().wait()
+
+        manager = chat.freight_chat_connections
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": create_access_token({"sub": "3"})})
+            self.assertEqual(ws.receive_json()["type"], "ready")
+            sockets = [socket for socket, connection in manager._connections[101].items()
+                       if connection.user_id == 3]
+            self.assertEqual(len(sockets), 1)
+            with patch.object(sockets[0], "send_json", side_effect=blocked_send), \
+                 patch("app.services.chat_connections.CHAT_SEND_TIMEOUT_SECONDS", 0.01):
+                response = self.request("POST", "/freights/101/chat/messages", user=1,
+                    json={"message_text": "Synthetic message retained after slow transport"})
+            self.assert_status(response, 201)
+            with self.assertRaises(WebSocketDisconnect) as error:
+                ws.receive_json()
+            self.assertEqual(error.exception.code, 1013)
+            self.assertFalse(manager.has_active_user(101, 3))
+        self.push.assert_awaited_once()
+        self.assertEqual(self.push.call_args.kwargs["recipient_user_id"], 3)
+        history = self.request("GET", "/freights/101/chat/messages", user=3)
+        self.assert_status(history, 200)
+        self.assertIn(response.json()["id"], [message["id"] for message in history.json()])
+        self.assert_status(self.request("GET", "/freights/101/chat/messages", user=4), 403)
+        with self.http.websocket_connect("/freights/101/chat/live") as ws:
+            ws.send_json({"type": "auth", "token": create_access_token({"sub": "3"})})
+            self.assertEqual(ws.receive_json()["type"], "ready")
+            ws.send_json({"type": "ping"})
+            self.assertEqual(ws.receive_json()["type"], "pong")
 
     def test_detail_and_lists_are_scoped_to_participants(self):
         for user in (1, 3, 5):
