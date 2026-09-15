@@ -73,4 +73,35 @@ El arranque directo mediante otro comando Uvicorn no hereda estas opciones.
 
 No se cambiaron la APK, splash, diseno, datos reales, servicios ni sus planes.
 Solo se usa la cuota existente de GitHub Actions y un artefacto JSON pequeno.
-La comprobacion Linux nueva se registra al terminar, sin anticipar aprobacion.
+
+## Resultado Linux
+
+Commit `cc6c6ddf4cefd3e5bd63a99e0c2f1c1b18b6ec83`.
+[Corrida 34933644977](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34933644977).
+Imagen: `sha256:b615b89519725faa9980976135b5a4b41f6ec2ab878455749b175b0479aa67c6`.
+Grype 0.118.0, Debian 13.7, escaneo `2026-09-15T05:42:06.998825266Z`.
+
+Construccion, unitarias Linux, descriptores, backports, permisos, arranque,
+rechazo de root, inventario y traza XML aprobados. Artefacto de backports
+conservado correctamente. El control final reconocio las tres filas exactas:
+
+| Severidad | Originales | Pendientes |
+| --- | ---: | ---: |
+| Critical | 0 | 0 |
+| High | 45 | 42 |
+| Medium | 49 | 49 |
+| Low | 9 | 9 |
+| Negligible | 44 | 44 |
+| Unknown | 8 | 8 |
+
+Los 155 hallazgos originales siguen conservados en anotaciones. Cero alertas
+de paquete/EOL. La corrida termina bloqueada por los pendientes, no por falta
+de evidencia o fallo de construccion. No hay despliegue ni aprobacion del MVP.
+Gitleaks del lote preparado: 26.21 KB, sin secretos detectados.
+
+Proximo frente: diez avisos altos diferentes del sistema operativo, ademas de
+los medios y condiciones del hosting. Debian mantiene sin corregir en trixie
+[ACL](https://security-tracker.debian.org/tracker/CVE-2026-54369),
+[util-linux](https://security-tracker.debian.org/tracker/CVE-2026-76642) y
+[zlib](https://security-tracker.debian.org/tracker/CVE-2026-85091), reconsultados
+el 2026-09-15. No mezclar paquetes de sid ni convertir mitigaciones en parches.
