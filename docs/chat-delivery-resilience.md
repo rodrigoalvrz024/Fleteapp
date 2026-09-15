@@ -71,7 +71,8 @@ Referencia del comportamiento de cancelacion y espera:
   falta mejorar/probar la recuperacion automatica en el dispositivo. Reabrir el
   chat carga el historial. No se declara solucionada la entrega exactamente una vez.
 - No demuestra entrega push real: el proveedor esta sustituido en las pruebas.
-- No corrige ni exceptua los 42 avisos altos pendientes de la imagen actual.
+- No corrige ni exceptua los avisos altos pendientes de la imagen actual
+  (44 en la nueva corrida, frente a 42 en la anterior; comparacion abajo).
   Tampoco aprueba la base Wolfi ni modifica Docker, la politica de CI o produccion.
 
 ## Archivos
@@ -81,5 +82,31 @@ Referencia del comportamiento de cancelacion y espera:
 - backend/integration_tests/test_http_permissions.py
 - docs/chat-delivery-resilience.md
 
-La revision Linux de esta nueva candidata debe documentarse despues del push;
-los resultados locales no sustituyen esa corrida ni las pruebas del hosting.
+## Resultado de la candidata Linux
+
+Commit `73f327f218bd7650d5fbd00e5e346e65d9c2e2ca`.
+[Corrida 34966575276](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/34966575276).
+Imagen `sha256:c6d2c767ab76ec6c8b822d2696b75fc6b1bfedf15fc280e51f4b05d6cf41bea5`.
+Grype 0.118.0; Debian 13.7; escaneo `2026-09-15T12:04:54.187728141Z`.
+
+Construccion, unitarias Linux, dependencias, guard de descriptores, permisos,
+arranque HTTP, rechazo root, apagado e inventario pasaron. Solo fallo el escaneo
+de vulnerabilidades, con reporte valido: Critical 0, High 47, Medium 51, Low 9,
+Negligible 44, Unknown 4. Los 155 hallazgos originales permanecen visibles.
+Las mismas tres correcciones Python autorizadas se verificaron contra esta
+imagen; quedan 44 High. No se reconocieron otros arreglos ni se aprobo deploy.
+
+Comparacion estructurada contra la corrida anterior 34935117789, por ID,
+paquete, version y tipo: siguen los mismos 155 registros, sin altas/bajas.
+La diferencia de severidad es:
+
+| Aviso | Paquetes y version | Antes | Ahora |
+| --- | --- | --- | --- |
+| CVE-2026-19499 | libc-bin y libc6 2.41-12+deb13u4 | Unknown (2) | High (2) |
+| CVE-2026-19542 | libc-bin y libc6 2.41-12+deb13u4 | Unknown (2) | Medium (2) |
+
+Esto explica el cambio de 42 a 44 High pendientes; no son paquetes nuevos
+introducidos por el arreglo del chat. Los registros reclasificados requieren
+revision, no se omiten ni se atribuyen a un fallo funcional de Muvv.
+No hubo despliegue, cambio de proveedor, pago de planes, modificacion visual
+ni instalacion de APK. La corrida utilizo la cuota de Actions autorizada.
