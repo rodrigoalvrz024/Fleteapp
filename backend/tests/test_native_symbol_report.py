@@ -85,6 +85,45 @@ class NativeSymbolReportTests(unittest.TestCase):
         self.assertIn("dlsym", reporter.SYMBOL_GROUPS["dynamic_lookup"])
         self.assertIn("gz_vacate", reporter.WATCHED)
 
+    def test_monetary_symbols_include_versioned_imports_and_provider_aliases(self):
+        class Symbol(dict):
+            def __init__(self, name, index):
+                super().__init__(st_shndx=index)
+                self.name = name
+
+        class Section(dict):
+            def iter_symbols(self):
+                return iter([
+                    Symbol("strfmon@GLIBC_2.2.5", "SHN_UNDEF"),
+                    Symbol("strfmon_l", "SHN_UNDEF"),
+                    Symbol("__strfmon", 12),
+                    Symbol("__strfmon_l", 12),
+                    Symbol("__vstrfmon_l", 12),
+                    Symbol("strftime", "SHN_UNDEF"),
+                ])
+
+        evidence = reporter.symbol_evidence([Section(sh_type="SHT_DYNSYM")])
+        self.assertEqual(evidence["imports"], ["strfmon", "strfmon_l"])
+        self.assertEqual(evidence["exports"], ["__strfmon", "__strfmon_l", "__vstrfmon_l"])
+
+    def test_monetary_inventory_does_not_approve_or_count_provider_as_caller(self):
+        evidence = {"imports": ["strfmon_l"], "exports": [], "needed": []}
+        with patch.object(reporter, "inspect_elf", return_value=evidence):
+            report = self.collect([("usr/local/lib/consumer.so", ELF)])
+        report["files"].append({"path": "/usr/lib/libc.so", "imports": [], "exports": ["strfmon_l"]})
+        report["counts"]["elf_files"] = 2
+        self.assertIn("strfmon_l", report["symbol_groups"]["monetary_format"])
+        self.assertEqual(report["status"], "evidence_only_not_security_approval")
+        self.assertIn("monetary_format: 1 files", reporter.summary(report))
+        self.assertIn("not their formats, widths or buffer sizes", reporter.summary(report))
+        with patch.object(reporter.sys, "stdout", new_callable=io.StringIO) as output:
+            reporter.annotations(report)
+        line = next(line for line in output.getvalue().splitlines() if '"group": "monetary_format"' in line)
+        payload = json.loads(line.split("::", 2)[2])
+        self.assertEqual(payload["image_id"], IMAGE)
+        self.assertEqual(payload["caller_files"], 1)
+        self.assertEqual(payload["callers"], [{"path": "/usr/local/lib/consumer.so", "imports": ["strfmon_l"]}])
+
     def test_xml_provider_export_is_not_reported_as_a_caller(self):
         symbol = "XML_SetHashSalt16Bytes"
         report = {"image_id": IMAGE, "counts": {"elf_files": 2}, "files": [
