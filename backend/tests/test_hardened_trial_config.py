@@ -64,12 +64,12 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         for forbidden in ("--only-fixed", "--vex", "continue-on-error"):
             self.assertNotIn(forbidden, self.raw)
 
-    def test_source_only_cloudinary_is_hash_pinned_and_builder_only(self):
+    def test_removed_storage_provider_is_not_installed_or_built(self):
         build, runtime = self.dockerfile.split("FROM ${PYTHON_RUNTIME_IMAGE} AS trial", 1)
-        self.assertIn("cloudinary==1.40.0", (ROOT / "backend/requirements.txt").read_text())
-        self.assertIn("cloudinary-1.40.0.tar.gz#sha256=fe1a5309734814b481de637ab3041e8699995387df965ec0f2d8f767db7067a2", build)
-        self.assertIn("pip wheel --no-cache-dir --no-deps --no-build-isolation --wheel-dir /wheels", build)
-        self.assertIn("--only-binary=:all: --find-links=/wheels -r requirements.txt", build)
+        self.assertNotIn("cloudinary", (ROOT / "backend/requirements.txt").read_text().lower())
+        self.assertNotIn("cloudinary", self.dockerfile.lower())
+        self.assertNotIn("pip wheel", build)
+        self.assertIn("--only-binary=:all: -r requirements.txt", build)
         self.assertNotIn("/wheels", runtime)
         self.assertNotIn("pip install", runtime)
         self.assertNotIn("--no-binary=:all:", self.dockerfile)
