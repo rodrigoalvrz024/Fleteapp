@@ -10,6 +10,7 @@ import '../../models/freight_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/driver_live_location_service.dart';
 import '../../widgets/muvv_mobile_ui.dart';
+import '../../widgets/freight_cargo_safety_notice.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -579,8 +580,15 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       return;
     }
 
-    final accepted =
-        await ref.read(driverProvider.notifier).acceptFreight(freight.id);
+    final confirmed = await confirmFreightCargoSafety(context, freight);
+    if (!mounted || !confirmed) {
+      _incomingOverlayOpen = false;
+      return;
+    }
+    final accepted = await ref.read(driverProvider.notifier).acceptFreight(
+          freight.id,
+          cargoSafetyAcknowledged: needsCargoSafetyNotice(freight),
+        );
     _incomingOverlayOpen = false;
     if (!mounted) return;
     if (accepted) {
@@ -616,8 +624,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
         freight: freight,
         onAccept: () async {
           Navigator.pop(context);
-          final ok =
-              await ref.read(driverProvider.notifier).acceptFreight(freight.id);
+          final confirmed = await confirmFreightCargoSafety(context, freight);
+          if (!mounted || !confirmed) return;
+          final ok = await ref.read(driverProvider.notifier).acceptFreight(
+                freight.id,
+                cargoSafetyAcknowledged: needsCargoSafetyNotice(freight),
+              );
           if (ok && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

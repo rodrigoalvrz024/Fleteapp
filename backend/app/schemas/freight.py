@@ -103,6 +103,7 @@ class FreightAcceptRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     vehicle_id: Optional[int] = Field(default=None, gt=0)
+    cargo_safety_acknowledged: bool = Field(default=False, strict=True)
 
 
 class FreightCreateResponse(BaseModel):

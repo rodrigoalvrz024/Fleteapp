@@ -35,7 +35,11 @@ from app.schemas.freight import (
 )
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
-from app.services.freight_matching_service import compatible_vehicles, driver_matches_freight
+from app.services.freight_matching_service import (
+    compatible_vehicles,
+    driver_matches_freight,
+    requires_cargo_safety_acknowledgement,
+)
 from app.services.freight_service import (
     PRICING_VERSION,
     can_transition,
@@ -928,9 +932,26 @@ def accept_freight(
         if not vehicle:
             raise HTTPException(status_code=403, detail="El vehiculo elegido no es compatible")
     else:
+        # Keep older apps working with an eligible enclosed vehicle, without
+        # silently assigning a pickup that needs the new safety confirmation.
+        if not (data and data.cargo_safety_acknowledged):
+            candidates_without_notice = [
+                item for item in candidates
+                if not requires_cargo_safety_acknowledgement(item, freight_candidate)
+            ]
+            if candidates_without_notice:
+                candidates = candidates_without_notice
         vehicle = min(
             candidates,
             key=lambda item: (float(item.max_weight_kg or 0), item.id),
+        )
+
+    safety_notice_required = requires_cargo_safety_acknowledgement(vehicle, freight_candidate)
+    if safety_notice_required and not (data and data.cargo_safety_acknowledged):
+        raise HTTPException(
+            status_code=409,
+            detail="Antes de aceptar, revisa y confirma el aviso de proteccion de carga. "
+                   "Si no aparece, actualiza la app.",
         )
 
     if (
@@ -990,7 +1011,11 @@ def accept_freight(
             "accepted_at": accepted_at.isoformat(),
             "actual_vehicle_id": vehicle.id,
         },
-        metadata={"driver_profile_id": driver.id},
+        metadata={
+            "driver_profile_id": driver.id,
+            "cargo_safety_acknowledged": bool(data and data.cargo_safety_acknowledged),
+            "cargo_safety_notice_version": "pickup_home_office_v1" if safety_notice_required else None,
+        },
     )
     record_audit_event(
         db,

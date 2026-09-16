@@ -44,7 +44,8 @@ class FreightService {
       'requires_helpers': requiresHelpers,
       'is_urgent': isUrgent,
       if (cargoPhotoRefs.isNotEmpty) 'cargo_photo_refs': cargoPhotoRefs,
-      if (scheduledAt != null) 'scheduled_at': scheduledAt.toIso8601String(),
+      if (scheduledAt != null)
+        'scheduled_at': scheduledAt.toUtc().toIso8601String(),
     });
     return FreightModel.fromJson(res.data);
   }
@@ -92,8 +93,10 @@ class FreightService {
     );
   }
 
-  Future<FreightModel> acceptFreight(int id) async {
-    final res = await _api.put('${ApiConstants.freights}/$id/accept');
+  Future<FreightModel> acceptFreight(int id,
+      {bool cargoSafetyAcknowledged = false}) async {
+    final res = await _api.put('${ApiConstants.freights}/$id/accept',
+        cargoSafetyAcknowledged ? {'cargo_safety_acknowledged': true} : null);
     return FreightModel.fromJson(res.data);
   }
 

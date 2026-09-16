@@ -16,7 +16,7 @@ VEHICLE_ORDER = {
 SERVICE_VEHICLE_TYPES = {
     "package": {"pickup", "van", "truck_small", "truck_medium", "truck_large"},
     "urgent": {"pickup", "van", "truck_small", "truck_medium", "truck_large"},
-    "home_office": {"van", "truck_small", "truck_medium", "truck_large"},
+    "home_office": {"pickup", "van", "truck_small", "truck_medium", "truck_large"},
     "moving": {"truck_medium", "truck_large"},
 }
 
@@ -75,6 +75,13 @@ def compatible_vehicles(driver, freight) -> list[Vehicle]:
         for vehicle in driver.vehicles
         if vehicle_supports_freight(vehicle, freight)
     ]
+
+
+def requires_cargo_safety_acknowledgement(vehicle: Vehicle, freight) -> bool:
+    return (
+        _value(vehicle.type) == "pickup"
+        and getattr(freight, "service_type", None) == "home_office"
+    )
 
 
 def driver_matches_freight(driver, freight) -> bool:

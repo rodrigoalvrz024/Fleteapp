@@ -10,6 +10,7 @@ import '../../utils/api_error_message.dart';
 import '../../utils/image_file_picker.dart';
 import '../../widgets/muvv_mobile_ui.dart';
 import '../../widgets/freight_chat_access_button.dart';
+import '../../widgets/freight_cargo_safety_notice.dart';
 import '../../widgets/trip_feedback_dialog.dart';
 import '../shared/web_layout.dart';
 import 'widgets/driver_app_bar_actions.dart';
@@ -89,10 +90,14 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
   }
 
   Future<void> _accept() async {
+    final freight = _freight;
+    if (_actionLoading || freight == null) return;
     setState(() {
       _actionLoading = true;
     });
     try {
+      final confirmed = await confirmFreightCargoSafety(context, freight);
+      if (!mounted || !confirmed) return;
       final locationReady =
           await DriverLiveLocationService.instance.ensurePermission();
       if (!locationReady) {
@@ -102,7 +107,8 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
         );
         return;
       }
-      await _service.acceptFreight(widget.freightId);
+      await _service.acceptFreight(widget.freightId,
+          cargoSafetyAcknowledged: needsCargoSafetyNotice(freight));
       final trackingStarted =
           await DriverLiveLocationService.instance.start(widget.freightId);
       await _load();
@@ -123,9 +129,11 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
             backgroundColor: AppTheme.error));
       }
     } finally {
-      setState(() {
-        _actionLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _actionLoading = false;
+        });
+      }
     }
   }
 
@@ -415,6 +423,10 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
               else
                 _CargoPhotoGallery(
                     urls: _cargoPhotoUrls, count: f.cargoPhotoCount),
+            ],
+            if (needsCargoSafetyNotice(f)) ...[
+              const SizedBox(height: 12),
+              const FreightCargoSafetyNotice(),
             ],
           ]),
           const SizedBox(height: 12),

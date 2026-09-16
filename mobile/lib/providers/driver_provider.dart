@@ -210,7 +210,8 @@ class DriverNotifier extends StateNotifier<DriverState> {
 
   // ── Aceptar flete ───────────────────────────────────────
 
-  Future<bool> acceptFreight(int id) async {
+  Future<bool> acceptFreight(int id,
+      {bool cargoSafetyAcknowledged = false}) async {
     try {
       final locationReady =
           await DriverLiveLocationService.instance.ensurePermission();
@@ -220,7 +221,8 @@ class DriverNotifier extends StateNotifier<DriverState> {
         );
         return false;
       }
-      final freight = await _service.acceptFreight(id);
+      final freight = await _service.acceptFreight(id,
+          cargoSafetyAcknowledged: cargoSafetyAcknowledged);
       final trackingStarted =
           await DriverLiveLocationService.instance.start(freight.id);
       if (!trackingStarted) {

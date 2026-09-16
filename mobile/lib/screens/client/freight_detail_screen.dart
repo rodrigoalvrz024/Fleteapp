@@ -20,15 +20,21 @@ import 'widgets/freight_widgets.dart';
 
 class FreightDetailScreen extends StatefulWidget {
   final int freightId;
+  final FreightService? freightService;
 
-  const FreightDetailScreen({super.key, required this.freightId});
+  const FreightDetailScreen({
+    super.key,
+    required this.freightId,
+    this.freightService,
+  });
 
   @override
   State<FreightDetailScreen> createState() => _FreightDetailScreenState();
 }
 
-class _FreightDetailScreenState extends State<FreightDetailScreen> {
-  final _service = FreightService();
+class _FreightDetailScreenState extends State<FreightDetailScreen>
+    with WidgetsBindingObserver {
+  late final FreightService _service;
   final _paymentService = PaymentService();
   final _ratingService = RatingService();
   FreightModel? _freight;
@@ -36,10 +42,13 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
   Timer? _locationRefreshTimer;
   bool _loading = true;
   bool _actionLoading = false;
+  int _loadVersion = 0;
 
   @override
   void initState() {
     super.initState();
+    _service = widget.freightService ?? FreightService();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _locationRefreshTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -50,8 +59,16 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _locationRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_load());
+    }
   }
 
   void _showPaymentResult() {
@@ -59,7 +76,7 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
     if (!fragment.contains('?')) return;
     final result = Uri.tryParse(fragment)?.queryParameters['payment'];
     if (result == 'success') {
-      _showMessage('Pago confirmado. Tu flete ya puede ser visto por conductores.');
+      _showMessage('Consultando el estado del pago con Muvv.');
     } else if (result == 'cancelled') {
       _showMessage('Pago cancelado. Puedes intentarlo nuevamente.',
           error: true);
@@ -70,16 +87,18 @@ class _FreightDetailScreenState extends State<FreightDetailScreen> {
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     try {
       final freight = await _service.getFreight(widget.freightId);
-      if (!mounted) return;
+      // A delayed response from before checkout must not replace fresh state.
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _freight = freight;
         _loading = false;
       });
       unawaited(_refreshDriverLocation());
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || version != _loadVersion) return;
       setState(() => _loading = false);
     }
   }

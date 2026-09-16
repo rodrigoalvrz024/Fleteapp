@@ -224,7 +224,7 @@ class FreightModel {
         estimatedPrice: (j['estimated_price'] as num?)?.toDouble(),
         finalPrice: (j['final_price'] as num?)?.toDouble(),
         status: j['status'],
-        createdAt: DateTime.parse(j['created_at']),
+        createdAt: DateTime.parse(j['created_at']).toLocal(),
         isUrgent: j['is_urgent'] ?? false,
         mode: j['mode'],
         clientPays: (j['client_pays'] as num?)?.toDouble(),
@@ -232,7 +232,7 @@ class FreightModel {
         platformFee: (j['platform_fee'] as num?)?.toDouble(),
         helpersCost: (j['helpers_cost'] as num?)?.toDouble(),
         scheduledAt: j['scheduled_at'] != null
-            ? DateTime.parse(j['scheduled_at'])
+            ? DateTime.parse(j['scheduled_at']).toLocal()
             : null,
         hasPickupPhoto: j['has_pickup_photo'] ?? false,
         hasDeliveryPhoto: j['has_delivery_photo'] ?? false,
