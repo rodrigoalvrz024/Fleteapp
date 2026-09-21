@@ -1,6 +1,27 @@
 # Estado actual de seguridad de la imagen
 
-## Resultado vigente 2026-09-21 (7d9a4a4)
+## Resultado vigente 2026-09-21 (78ba41a)
+
+Se completo la comparacion autorizada, sin modificar produccion ni main.
+Ambos candidatos aprobaron los pasos de aplicacion y protecciones Linux;
+ambas ejecuciones quedaron bloqueadas por el analisis de seguridad.
+
+| Candidato | Critical | High | Medium | Resultado |
+| --- | --- | --- | --- | --- |
+| [Clasico 3.11](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35633803150) | 0 | 45 | 55 | Bloqueado, sin cambios en los recuentos |
+| [Trial 3.14](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35633803365) | 0 | 44 | 51 | Bloqueado por componentes del sistema operativo |
+
+La comparacion completa no encontro High de Python en el trial; desaparece
+CVE-2026-82049, ademas de cuatro Medium y un Negligible de Python. No se
+aplicaron excepciones. Los 44 High restantes agrupan 11 CVE del SO; no se
+descuentan por haber pasado las pruebas funcionales. Python 3.14 conserva
+otros avisos de menor severidad.
+
+Ver [identidades de imagen, diferencias y limites](python314-linux-trial.md).
+Siguiente: evaluar los componentes del SO sin repetir esta misma construccion
+sin cambios, ni presentar la compatibilidad como aprobacion para desplegar.
+
+## Resultado anterior 2026-09-21 (7d9a4a4)
 
 Commit autorizado y subido solo a `codex/mvp-supabase-rls-review`.
 [Linux #35](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35629859122)
