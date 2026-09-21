@@ -180,3 +180,50 @@ class TransbankRestTests(unittest.TestCase):
             webpay.commit_webpay_transaction(TOKEN)
         self.assertNotIn(TOKEN, " ".join(logs.output))
         self.assertNotIn("Tbk-Api-Key", " ".join(logs.output))
+
+    def test_status_is_read_only_get_and_validates_checkout_session(self):
+        self.response = httpx.Response(200, json={**COMMIT, "session_id": CREATE["session_id"]})
+        result = webpay.get_webpay_transaction_status(TOKEN)
+        request = self.requests[0]
+        self.assertEqual((request.method, request.url.path, request.content),
+                         ("GET", webpay._TRANSACTIONS_PATH + "/" + TOKEN, b""))
+        self.assertEqual((result.status, result.session_id, result.amount), ("AUTHORIZED", "fixture-session", 12000))
+        self.assertFalse(hasattr(result, "card_detail"))
+
+    def test_initialized_status_does_not_invent_authorization(self):
+        self.response = httpx.Response(200, json={
+            "status": "INITIALIZED", "amount": 12000, "buy_order": CREATE["buy_order"],
+            "session_id": CREATE["session_id"],
+        })
+        result = webpay.get_webpay_transaction_status(TOKEN)
+        self.assertIsNone(result.response_code)
+        self.assertIsNone(result.authorization_code)
+
+    def test_status_missing_identity_and_malformed_values_are_rejected(self):
+        for changes in ({}, {"session_id": ""}, {"session_id": 1},
+                        {"session_id": "fixture-session", "amount": "12000"},
+                        {"session_id": "fixture-session", "response_code": False},
+                        {"session_id": "fixture-session", "authorization_code": "x" * 7}):
+            self.response = httpx.Response(200, json={**COMMIT, **changes})
+            self.deny(lambda: webpay.get_webpay_transaction_status(TOKEN), 503)
+
+    def test_status_invalid_token_cannot_contact_provider(self):
+        for token in (None, "", "../other", "a" * 65, "abc?token=other"):
+            self.deny(lambda: webpay.get_webpay_transaction_status(token), 400)
+        self.factory.assert_not_called()
+
+    def test_status_timeout_and_http_errors_never_retry_or_change_method(self):
+        for response in (httpx.ReadTimeout("private " + TOKEN),
+                         httpx.Response(404, text=TOKEN), httpx.Response(503, text=TOKEN),
+                         httpx.Response(302, headers={"Location": "https://untrusted.example"})):
+            self.response = response
+            before = len(self.requests)
+            self.deny(lambda: webpay.get_webpay_transaction_status(TOKEN), 503)
+            self.assertEqual(len(self.requests), before + 1)
+        self.assertTrue(all(request.method == "GET" for request in self.requests))
+
+    def test_status_logs_do_not_expose_payment_token(self):
+        self.response = httpx.Response(200, json={**COMMIT, "session_id": "fixture-session"})
+        with self.assertLogs("httpx", level="INFO") as logs:
+            webpay.get_webpay_transaction_status(TOKEN)
+        self.assertNotIn(TOKEN, " ".join(logs.output))

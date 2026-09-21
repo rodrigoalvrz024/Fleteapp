@@ -5,6 +5,8 @@ from typing import List, Literal, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
+from starlette.concurrency import run_in_threadpool
+from app.services.row_lock_service import lock_first
 
 from app.core.config import settings
 from app.core.rate_limit import check_rate_limit
@@ -730,7 +732,7 @@ def generate_delivery_pin(
         max_attempts=10,
         window_seconds=15 * 60,
     )
-    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    freight = lock_first(db.query(FreightRequest).filter(FreightRequest.id == freight_id))
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
     if freight.client_id != current_user.id:
@@ -799,8 +801,35 @@ async def upload_evidence(
         )
 
     ref_field, uploaded_at_field = fields
-    previous_ref = getattr(freight, ref_field)
     evidence_ref = await upload_freight_evidence(file, freight.id, kind)
+    return await run_in_threadpool(
+        _store_uploaded_evidence, db, current_user, request, freight_id,
+        kind, expected_status, ref_field, uploaded_at_field, evidence_ref,
+    )
+
+
+def _store_uploaded_evidence(
+    db, current_user, request, freight_id, kind, expected_status,
+    ref_field, uploaded_at_field, evidence_ref,
+):
+    # Storage can be slow: acquire the row lock only after uploading, and
+    # refresh the ORM object before deciding whether the evidence still applies.
+    try:
+        freight = lock_first(db.query(FreightRequest).filter(FreightRequest.id == freight_id)
+                             .populate_existing())
+        if not freight:
+            raise HTTPException(status_code=404, detail="Flete no encontrado")
+        _require_assigned_driver(freight, db, current_user)
+        if freight.status != expected_status:
+            raise HTTPException(status_code=409, detail="El flete cambio de estado durante la carga")
+    except HTTPException:
+        db.rollback()
+        try:
+            delete_private_document(evidence_ref)
+        except Exception:
+            pass
+        raise
+    previous_ref = getattr(freight, ref_field)
     uploaded_at = datetime.now(timezone.utc)
     setattr(freight, ref_field, evidence_ref)
     setattr(freight, uploaded_at_field, uploaded_at)
@@ -1088,7 +1117,8 @@ def update_status(
         max_attempts=30,
         window_seconds=15 * 60,
     )
-    freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
+    # Serialize PIN attempts and terminal transitions with payment callbacks.
+    freight = lock_first(db.query(FreightRequest).filter(FreightRequest.id == freight_id))
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no encontrado")
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 from app.models.payment import PaymentStatus, PaymentMethod
 
@@ -26,3 +26,14 @@ class WebpayInitResponse(BaseModel):
     token: str
     url: str
     redirect_url: str
+
+
+class PaymentReconcileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PaymentReconcileResponse(BaseModel):
+    payment_id: int
+    freight_id: int
+    status: PaymentStatus
+    result: Literal["resolved", "pending", "review_required", "unchanged"]

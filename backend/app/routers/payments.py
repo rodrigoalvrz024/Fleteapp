@@ -1,15 +1,21 @@
 import html
 import re
 import uuid
+from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+from app.services.row_lock_service import lock_first
 from datetime import datetime, timezone
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.freight import FreightRequest, FreightStatus
 from app.models.payment import Payment, PaymentStatus, PaymentMethod
-from app.schemas.payment import PaymentCreate, PaymentResponse, WebpayInitResponse
+from app.schemas.payment import (
+    PaymentCreate, PaymentResponse, WebpayInitResponse,
+    PaymentReconcileRequest, PaymentReconcileResponse,
+)
 from app.core.rate_limit import check_rate_limit
 from app.core.security import get_current_user, require_role
 from app.core.config import settings
@@ -21,6 +27,7 @@ from app.services.pricing_history_service import record_pricing_snapshot
 from app.services.transbank_service import (
     commit_webpay_transaction,
     create_webpay_transaction,
+    get_webpay_transaction_status,
 )
 router = APIRouter(prefix="/payments", tags=["Pagos"])
 
@@ -30,6 +37,31 @@ def _frontend_payment_result(freight_id: int, result: str) -> str:
         f"{settings.FRONTEND_URL.rstrip('/')}/#/app/client/freights/"
         f"{freight_id}?payment={result}"
     )
+
+
+def _clp_amount(value) -> int:
+    try:
+        amount = Decimal(str(value))
+        if (not amount.is_finite() or amount <= 0
+                or amount != amount.to_integral_value() or amount >= 10 ** 17):
+            raise ValueError("Invalid CLP amount")
+    except (InvalidOperation, ValueError, TypeError):
+        raise HTTPException(status_code=409, detail="El monto del pago requiere revision") from None
+    return int(amount)
+
+
+def _checkout_response(token: str, base_url: str, webpay_url: str | None = None) -> WebpayInitResponse:
+    simulated = token.startswith("SANDBOX_TOKEN_")
+    url = webpay_url or payment_redirect_url()
+    if simulated and webpay_url is None:
+        url += f"?token_ws={token}"
+    return WebpayInitResponse(
+        token=token,
+        url=url,
+        redirect_url=(f"{base_url}/payments/callback?token_ws={token}"
+                      if simulated else f"{base_url}/payments/webpay/{token}"),
+    )
+
 
 @router.post("/initiate", response_model=WebpayInitResponse)
 def initiate_payment(
@@ -58,22 +90,42 @@ def initiate_payment(
             status_code=400,
             detail="Por ahora solo Webpay esta habilitado para pagos en app",
         )
-    freight = db.query(FreightRequest).filter(
+    freight = lock_first(db.query(FreightRequest).filter(
         FreightRequest.id == data.freight_id,
         FreightRequest.client_id == current_user.id,
         FreightRequest.status != FreightStatus.cancelled,
-    ).first()
+    ))
     if not freight:
         raise HTTPException(status_code=404, detail="Flete no disponible para pago")
 
-    if freight.payment and freight.payment.status == PaymentStatus.authorized:
+    # Lock the freight even when no payment exists, then its payment. Callbacks
+    # and completion use the same order so they cannot replace each other's state.
+    payment = lock_first(db.query(Payment).filter(Payment.freight_id == freight.id))
+    if payment and payment.status == PaymentStatus.authorized:
         raise HTTPException(status_code=400, detail="Este flete ya fue pagado")
+    if payment and payment.status == PaymentStatus.refunded:
+        raise HTTPException(status_code=409, detail="Este pago fue reembolsado y no puede reiniciarse")
+
+    amount = _clp_amount(freight.final_price if freight.final_price is not None else freight.estimated_price)
+    base_url = (
+        settings.PUBLIC_API_URL.rstrip("/")
+        if settings.PUBLIC_API_URL
+        else str(request.base_url).rstrip("/")
+    )
+    if payment and payment.status == PaymentStatus.pending and (payment.webpay_token or payment.buy_order):
+        token = payment.webpay_token
+        if (payment.method != PaymentMethod.webpay or not payment.buy_order
+                or not token or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", token)
+                or _clp_amount(payment.amount) != amount
+                or (token.startswith("SANDBOX_TOKEN_") and not settings.ALLOW_SIMULATED_PAYMENTS)):
+            raise HTTPException(status_code=409, detail="El pago pendiente requiere revision antes de reintentar")
+        return _checkout_response(token, base_url)
 
     buy_order = f"FLETE-{freight.id}-{uuid.uuid4().hex[:8].upper()}"
-    amount = int(freight.final_price or freight.estimated_price)
-
     # Simulation and the Webpay REST integration share the same payment record.
-    payment = freight.payment or Payment(freight_id=freight.id)
+    if payment is None:
+        payment = Payment(freight_id=freight.id)
+        db.add(payment)
     payment.amount = amount
     payment.method = data.method
     payment.buy_order = buy_order
@@ -83,15 +135,8 @@ def initiate_payment(
     payment.transaction_id = None
     payment.paid_at = None
     payment.last_modified_by = current_user.id
-    if not freight.payment:
-        db.add(payment)
     db.flush()
 
-    base_url = (
-        settings.PUBLIC_API_URL.rstrip("/")
-        if settings.PUBLIC_API_URL
-        else str(request.base_url).rstrip("/")
-    )
     return_url = f"{base_url}/payments/callback"
     if settings.ALLOW_SIMULATED_PAYMENTS:
         webpay_token = f"SANDBOX_TOKEN_{buy_order}"
@@ -110,11 +155,6 @@ def initiate_payment(
         webpay_url = webpay.url
 
     payment.webpay_token = webpay_token
-    redirect_url = (
-        f"{return_url}?token_ws={webpay_token}"
-        if settings.ALLOW_SIMULATED_PAYMENTS and webpay_token.startswith("SANDBOX_TOKEN_")
-        else f"{base_url}/payments/webpay/{webpay_token}"
-    )
     record_audit_event(
         db,
         actor=current_user,
@@ -130,11 +170,7 @@ def initiate_payment(
     )
     db.commit()
 
-    return WebpayInitResponse(
-        token=payment.webpay_token,
-        url=webpay_url,
-        redirect_url=redirect_url,
-    )
+    return _checkout_response(payment.webpay_token, base_url, webpay_url)
 
 
 @router.get("/webpay/{token_ws}", response_class=HTMLResponse)
@@ -178,6 +214,18 @@ async def _process_payment_callback(
             raise HTTPException(status_code=400, detail="Retorno de pago invalido")
         callback_data[key] = values[0] if values else None
 
+    return await run_in_threadpool(_apply_payment_callback, request, callback_data, db, background_tasks)
+
+
+def _apply_payment_callback(request, callback_data, db, background_tasks):
+    try:
+        return _apply_payment_callback_locked(request, callback_data, db, background_tasks)
+    finally:
+        # Release locks on early returns/errors before the worker is released.
+        db.rollback()
+
+
+def _apply_payment_callback_locked(request, callback_data, db, background_tasks):
     token_ws = callback_data["token_ws"]
     aborted_token = callback_data["TBK_TOKEN"]
     aborted_order = callback_data["TBK_ORDEN_COMPRA"]
@@ -202,8 +250,14 @@ async def _process_payment_callback(
     query = db.query(Payment).filter(Payment.webpay_token == (aborted_token or token_ws))
     if aborted_token:
         query = query.filter(Payment.buy_order == aborted_order)
-    # Serialize callbacks for this payment before checking its persisted state.
-    payment = query.with_for_update().first()
+    freight_id = query.with_entities(Payment.freight_id).scalar()
+    if freight_id is None:
+        raise HTTPException(status_code=404, detail="Pago no encontrado")
+    # Match initiation/completion lock order; recheck the token after waiting.
+    freight = lock_first(db.query(FreightRequest).filter(FreightRequest.id == freight_id))
+    if not freight:
+        raise HTTPException(status_code=404, detail="Flete no encontrado")
+    payment = lock_first(query)
     if not payment:
         raise HTTPException(status_code=404, detail="Pago no encontrado")
 
@@ -232,9 +286,9 @@ async def _process_payment_callback(
         db.commit()
         return RedirectResponse(_frontend_payment_result(payment.freight_id, result), status_code=303)
 
-    status_before = payment.status.value if hasattr(payment.status, "value") else str(payment.status)
     if token_ws.startswith("SANDBOX_TOKEN_"):
-        if not settings.ALLOW_SIMULATED_PAYMENTS:
+        if (not settings.ALLOW_SIMULATED_PAYMENTS
+                or settings.TRANSBANK_ENVIRONMENT.lower() == "production"):
             raise HTTPException(status_code=403, detail="Pagos simulados deshabilitados")
         commit = {
             "status": "AUTHORIZED",
@@ -256,17 +310,31 @@ async def _process_payment_callback(
             "raw": tbk_commit.raw,
         }
 
+    authorized = _apply_verified_payment_outcome(db, payment, commit, request, background_tasks)
+    return RedirectResponse(
+        _frontend_payment_result(payment.freight_id, "success" if authorized else "failed"),
+        status_code=303,
+    )
+
+
+def _apply_verified_payment_outcome(db, payment, commit, request, background_tasks):
+    status_before = payment.status.value
     try:
         response_code = int(commit["response_code"])
     except (TypeError, ValueError):
         response_code = None
     transbank_status = str(commit["status"] or "").upper()
-    authorized = (
-        transbank_status == "AUTHORIZED"
-        and response_code == 0
-        and commit["buy_order"] == payment.buy_order
-        and int(float(commit["amount"] or 0)) == int(payment.amount)
-    )
+    try:
+        matching_amount = _clp_amount(commit["amount"]) == _clp_amount(payment.amount)
+    except HTTPException:
+        matching_amount = False
+    authorized = transbank_status == "AUTHORIZED" and response_code == 0 and bool((commit["authorization_code"] or "").strip())
+    declined = transbank_status == "FAILED" and response_code is not None and response_code < 0
+    if (commit["buy_order"] != payment.buy_order or not matching_amount
+            or not (authorized or declined)):
+        # An inconsistent response is not proof of failure: retain the checkout
+        # for reconciliation rather than permit a replacement charge.
+        raise HTTPException(status_code=503, detail="El pago requiere verificacion antes de reintentar")
     payment.status = PaymentStatus.authorized if authorized else PaymentStatus.failed
     notification = None
     if authorized:
@@ -346,15 +414,76 @@ async def _process_payment_callback(
             )
         else:
             background_tasks.add_task(notify_available_drivers, **notification)
-    if not authorized:
-        return RedirectResponse(
-            _frontend_payment_result(payment.freight_id, "failed"),
-            status_code=303,
+    return authorized
+
+
+@router.post("/{payment_id}/reconcile", response_model=PaymentReconcileResponse)
+def reconcile_payment(
+    payment_id: int,
+    data: PaymentReconcileRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("client", "admin")),
+):
+    check_rate_limit(request, scope="payment-reconcile-user", identifier=str(current_user.id),
+                     max_attempts=20, window_seconds=15 * 60)
+    query = (db.query(Payment.freight_id).join(FreightRequest, Payment.freight_id == FreightRequest.id)
+             .filter(Payment.id == payment_id))
+    if current_user.role != UserRole.admin:
+        query = query.filter(FreightRequest.client_id == current_user.id)
+    freight_id = query.scalar()
+    if freight_id is None:
+        raise HTTPException(status_code=404, detail="Pago no encontrado")
+    check_rate_limit(request, scope="payment-reconcile", identifier=str(payment_id),
+                     max_attempts=6, window_seconds=15 * 60)
+    try:
+        freight = lock_first(db.query(FreightRequest).filter(FreightRequest.id == freight_id))
+        if not freight or (current_user.role != UserRole.admin and freight.client_id != current_user.id):
+            raise HTTPException(status_code=404, detail="Pago no encontrado")
+        payment = lock_first(db.query(Payment).filter(Payment.id == payment_id, Payment.freight_id == freight_id))
+        if not payment:
+            raise HTTPException(status_code=404, detail="Pago no encontrado")
+        if payment.status != PaymentStatus.pending:
+            return PaymentReconcileResponse(payment_id=payment.id, freight_id=freight.id,
+                                            status=payment.status, result="unchanged")
+        if (payment.method != PaymentMethod.webpay or not payment.buy_order or not payment.webpay_token
+                or payment.webpay_token.startswith("SANDBOX_TOKEN_")):
+            raise HTTPException(status_code=409, detail="Este pago requiere revision manual")
+        outcome = get_webpay_transaction_status(payment.webpay_token)
+        try:
+            matching_amount = _clp_amount(outcome.amount) == _clp_amount(payment.amount)
+        except HTTPException:
+            matching_amount = False
+        if (outcome.buy_order != payment.buy_order
+                or outcome.session_id != f"user-{freight.client_id}"
+                or not matching_amount):
+            raise HTTPException(status_code=503, detail="No se pudo verificar la identidad del pago")
+        authorized = outcome.status == "AUTHORIZED" and outcome.response_code == 0 and bool((outcome.authorization_code or "").strip())
+        declined = outcome.status == "FAILED" and outcome.response_code is not None and outcome.response_code < 0
+        result = "resolved" if authorized or declined else (
+            "pending" if outcome.status == "INITIALIZED" else "review_required"
         )
-    return RedirectResponse(
-        _frontend_payment_result(payment.freight_id, "success"),
-        status_code=303,
-    )
+        if authorized and freight.status == FreightStatus.cancelled:
+            result = "review_required"
+        record_audit_event(
+            db, actor=current_user, entity_type="payment", entity_id=payment.id,
+            event_type="payment.reconciled", before_data={"status": payment.status.value},
+            after_data={"result": result, "provider_confirmed": bool(authorized or declined)},
+            request=request,
+        )
+        if authorized or declined:
+            _apply_verified_payment_outcome(db, payment, {
+                "status": outcome.status, "response_code": outcome.response_code,
+                "buy_order": outcome.buy_order, "amount": outcome.amount,
+                "authorization_code": outcome.authorization_code, "transaction_id": outcome.accounting_date,
+            }, request, background_tasks)
+        else:
+            db.commit()
+        return PaymentReconcileResponse(payment_id=payment.id, freight_id=freight.id,
+                                        status=payment.status, result=result)
+    finally:
+        db.rollback()
 
 
 @router.get("/callback", operation_id="payment_callback_get")

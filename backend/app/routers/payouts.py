@@ -11,6 +11,7 @@ from app.models.driver_payout import DriverPayout, DriverPayoutStatus
 from app.models.user import User
 from app.schemas.payout import DriverPayoutResponse, DriverPayoutUpdate
 from app.services.audit_service import record_audit_event
+from app.services.row_lock_service import lock_first
 
 
 router = APIRouter(prefix="/payouts", tags=["Liquidaciones conductores"])
@@ -71,7 +72,7 @@ def update_payout(
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_role("admin")),
 ):
-    payout = db.query(DriverPayout).filter(DriverPayout.id == payout_id).first()
+    payout = lock_first(db.query(DriverPayout).filter(DriverPayout.id == payout_id))
     if not payout:
         raise HTTPException(status_code=404, detail="Liquidacion no encontrada")
     if data.status == payout.status:

@@ -61,6 +61,13 @@ class _CommitResponse(BaseModel):
     accounting_date: str | None = None
 
 
+class WebpayStatusResult(_CommitResponse):
+    response_code: int | None = None
+    session_id: str = Field(min_length=1, max_length=61)
+    authorization_code: str | None = Field(default=None, max_length=6)
+    accounting_date: str | None = Field(default=None, max_length=4)
+
+
 @dataclass
 class WebpayCreateResult:
     token: str
@@ -178,3 +185,13 @@ def commit_webpay_transaction(token_ws: str) -> WebpayCommitResult:
         transaction_id=response.accounting_date,
         raw=data,
     )
+
+
+def get_webpay_transaction_status(token_ws: str) -> WebpayStatusResult:
+    if not isinstance(token_ws, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", token_ws):
+        raise HTTPException(status_code=400, detail="Token de pago invalido")
+    data = _request("GET", suffix=f"/{token_ws}")
+    try:
+        return WebpayStatusResult.model_validate(data)
+    except ValidationError:
+        raise _provider_error() from None

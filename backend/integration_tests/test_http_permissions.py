@@ -18,7 +18,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, PropertyMock, patch
 from urllib.parse import urlsplit
 
 from alembic import command
@@ -74,10 +74,11 @@ from app.models.driver import Driver, DriverStatus
 from app.models.freight import FreightRequest, FreightStatus, FreightCargoPhoto, TripFeedback, TripStatusHistory
 from app.models.freight_chat import FreightChatMessage
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
+from app.models.driver_payout import DriverPayout, DriverPayoutStatus
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User, UserRole
 from app.models.vehicle import Vehicle, VehicleType
-from app.routers import auth, chat, feedback, freights
+from app.routers import auth, chat, feedback, freights, payments
 from app.services import transbank_service
 
 
@@ -893,7 +894,7 @@ class HttpPermissionTests(unittest.TestCase):
         self.assert_status(response, 400)
         self.assertIn("maximum size", response.json()["detail"])
 
-    def webpay_transport(self, *, commit_updates=None, timeout=False):
+    def webpay_transport(self, *, commit_updates=None, status_updates=None, timeout=False):
         self.enterContext(patch.object(settings, "ALLOW_SIMULATED_PAYMENTS", False))
         self.enterContext(patch.object(settings, "TRANSBANK_ENVIRONMENT", "integration"))
         requests = []
@@ -911,7 +912,8 @@ class HttpPermissionTests(unittest.TestCase):
             return httpx.Response(200, json={
                 "status": "AUTHORIZED", "response_code": 0, "amount": created["amount"],
                 "buy_order": created["buy_order"], "authorization_code": "123456",
-                "accounting_date": "0910", **(commit_updates or {}),
+                "session_id": created["session_id"], "accounting_date": "0910",
+                **((status_updates if request.method == "GET" else commit_updates) or {}),
             })
 
         def client(**kwargs):
@@ -919,6 +921,190 @@ class HttpPermissionTests(unittest.TestCase):
 
         self.enterContext(patch.object(transbank_service.httpx, "Client", side_effect=client))
         return requests, token
+
+    def prepare_webpay_reconciliation(self, **transport_options):
+        requests, token = self.webpay_transport(**transport_options)
+        self.assert_status(self.request("POST", "/payments/initiate", user=1,
+                                        json={"freight_id": 104, "method": "webpay"}), 200)
+        with SessionLocal() as db:
+            payment_id = db.query(Payment).filter(Payment.freight_id == 104).one().id
+        return requests, token, f"/payments/{payment_id}/reconcile"
+
+    def test_reconciliation_requires_owner_or_admin_before_provider_access(self):
+        requests, token, path = self.prepare_webpay_reconciliation()
+        for user, expected in ((None, 401), (2, 404), (3, 403), (4, 403)):
+            self.assert_status(self.request("POST", path, user=user, json={}), expected)
+        self.assert_status(self.request("POST", path, user=1, json={"amount": 1, "status": "authorized"}), 422)
+        self.assertEqual(len(requests), 1)
+        response = self.request("POST", path, user=1, json={})
+        self.assert_status(response, 200)
+        self.assertEqual((response.json()["status"], response.json()["result"]), ("authorized", "resolved"))
+        self.assertNotIn(token, response.text)
+        self.assertEqual([request.method for request in requests], ["POST", "GET"])
+        self.assert_status(self.request("POST", path, user=1, json={}), 200)
+        self.assertEqual(len(requests), 2)
+
+    def test_admin_reconciles_using_customer_session_not_admin_session(self):
+        requests, _, path = self.prepare_webpay_reconciliation()
+        self.assert_status(self.request("POST", path, user=5, json={}), 200)
+        self.assertEqual([request.method for request in requests], ["POST", "GET"])
+        with SessionLocal() as db:
+            event_row = db.query(AuditEvent).filter(AuditEvent.event_type == "payment.reconciled").one()
+            self.assertEqual(event_row.actor_user_id, 5)
+            self.assertEqual(db.query(Payment).filter(Payment.freight_id == 104).one().status, PaymentStatus.authorized)
+
+    def test_reconciliation_identity_mismatches_never_change_payment(self):
+        changes = {}
+        requests, token, path = self.prepare_webpay_reconciliation(status_updates=changes)
+        for update in ({"buy_order": "other-order"}, {"session_id": "user-2"}, {"amount": 1}, {"amount": 0}):
+            changes.clear()
+            changes.update(update)
+            self.expected_backend_errors += 1
+            self.assert_status(self.request("POST", path, user=1, json={}), 503)
+            with SessionLocal() as db:
+                payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+                self.assertEqual((payment.status, payment.webpay_token), (PaymentStatus.pending, token))
+                self.assertIsNone(payment.paid_at)
+                self.assertEqual(db.query(AuditEvent).filter(AuditEvent.event_type == "payment.authorized").count(), 0)
+        self.assertEqual([request.method for request in requests], ["POST", "GET", "GET", "GET", "GET"])
+
+    def test_reconciliation_unresolved_states_do_not_enable_another_checkout(self):
+        changes = {}
+        requests, token, path = self.prepare_webpay_reconciliation(status_updates=changes)
+        for update in ({"status": "INITIALIZED", "response_code": None},
+                       {"status": "REVERSED"}, {"status": "PARTIALLY_NULLIFIED"},
+                       {"status": "FAILED", "response_code": 1}, {"authorization_code": None},
+                       {"authorization_code": "   "}):
+            changes.clear()
+            changes.update(update)
+            response = self.request("POST", path, user=1, json={})
+            self.assert_status(response, 200)
+            self.assertEqual(response.json()["status"], "pending")
+            self.assertEqual(response.json()["result"],
+                             "pending" if update.get("status") == "INITIALIZED" else "review_required")
+            checkout = self.request("POST", "/payments/initiate", user=1,
+                                    json={"freight_id": 104, "method": "webpay"})
+            self.assert_status(checkout, 200)
+            self.assertEqual(checkout.json()["token"], token)
+        self.assertEqual(sum(request.method == "POST" for request in requests), 1)
+
+    def test_reconciliation_timeout_preserves_pending_checkout(self):
+        requests, token, path = self.prepare_webpay_reconciliation(timeout=True)
+        self.expected_backend_errors = 1
+        response = self.request("POST", path, user=1, json={})
+        self.assert_status(response, 503)
+        self.assertNotIn(token, response.text)
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            self.assertEqual((payment.status, payment.webpay_token), (PaymentStatus.pending, token))
+        self.assertEqual([request.method for request in requests], ["POST", "GET"])
+
+    def test_reconciliation_confirmed_decline_allows_explicit_new_checkout(self):
+        requests, _, path = self.prepare_webpay_reconciliation(
+            status_updates={"status": "FAILED", "response_code": -1},
+        )
+        original_order = json.loads(requests[0].content)["buy_order"]
+        response = self.request("POST", path, user=1, json={})
+        self.assert_status(response, 200)
+        self.assertEqual((response.json()["status"], response.json()["result"]), ("failed", "resolved"))
+        self.assertEqual([request.method for request in requests], ["POST", "GET"])
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            self.assertIsNone(payment.paid_at)
+            self.assertEqual(db.query(DriverPayout).count(), 0)
+        self.assert_status(self.request("POST", "/payments/initiate", user=1,
+                                        json={"freight_id": 104, "method": "webpay"}), 200)
+        self.assertNotEqual(json.loads(requests[-1].content)["buy_order"], original_order)
+
+    def test_reconciliation_can_recover_lost_callback_confirmation_without_second_commit(self):
+        requests, _, path = self.prepare_webpay_reconciliation()
+        with patch.object(payments, "commit_webpay_transaction",
+                          side_effect=HTTPException(status_code=503, detail="Synthetic lost confirmation")) as commit:
+            self.expected_backend_errors = 1
+            self.assert_status(self.http.post("/payments/callback", data={"token_ws": "c" * 64}), 503)
+            response = self.request("POST", path, user=1, json={})
+            self.assert_status(response, 200)
+            self.assertEqual(response.json()["status"], "authorized")
+            self.assertEqual(commit.call_count, 1)
+        self.assertEqual([request.method for request in requests], ["POST", "GET"])
+
+    def test_reconciliation_final_states_and_simulated_tokens_do_not_contact_provider(self):
+        requests, _, path = self.prepare_webpay_reconciliation()
+        for state in (PaymentStatus.authorized, PaymentStatus.refunded, PaymentStatus.failed):
+            with SessionLocal() as db:
+                db.query(Payment).filter(Payment.freight_id == 104).update({"status": state})
+                db.commit()
+            response = self.request("POST", path, user=1, json={})
+            self.assert_status(response, 200)
+            self.assertEqual((response.json()["status"], response.json()["result"]), (state.value, "unchanged"))
+        with SessionLocal() as db:
+            db.query(Payment).filter(Payment.freight_id == 104).update({
+                "status": PaymentStatus.pending, "webpay_token": "SANDBOX_TOKEN_fixture",
+            })
+            db.commit()
+        self.assert_status(self.request("POST", path, user=1, json={}), 409)
+        self.assertEqual(len(requests), 1)
+
+    def test_reconciliation_is_rate_limited_without_provider_retry(self):
+        requests, _, path = self.prepare_webpay_reconciliation(status_updates={"status": "INITIALIZED"})
+        for _ in range(6):
+            self.assert_status(self.request("POST", path, user=1, json={}), 200)
+        self.assert_status(self.request("POST", path, user=5, json={}), 429)
+        self.assertEqual(len(requests), 7)
+
+    def test_reconciliation_user_limit_cannot_be_bypassed_by_changing_ids(self):
+        requests, _ = self.webpay_transport()
+        for payment_id in range(900001, 900021):
+            self.assert_status(self.request("POST", f"/payments/{payment_id}/reconcile", user=1, json={}), 404)
+        self.assert_status(self.request("POST", "/payments/900021/reconcile", user=1, json={}), 429)
+        self.assertEqual(requests, [])
+
+    def test_reconciliation_schedules_notification_only_on_first_authorization(self):
+        requests, token, path = self.prepare_webpay_reconciliation()
+        with patch.object(type(settings), "firebase_push_configured", new_callable=PropertyMock, return_value=True), \
+                patch.object(settings, "NOTIFICATION_TASKS_ENABLED", False), \
+                patch.object(payments, "notify_available_drivers") as notify:
+            self.assert_status(self.request("POST", path, user=1, json={}), 200)
+            self.assert_status(self.request("POST", path, user=1, json={}), 200)
+            self.assert_status(self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False), 303)
+            self.assertEqual(notify.call_count, 1)
+            self.assertEqual(notify.call_args.kwargs["freight_id"], 104)
+        self.assertEqual([request.method for request in requests], ["POST", "GET"])
+
+    def test_reconciliation_and_callback_finalize_once_under_concurrency(self):
+        requests, token, path = self.prepare_webpay_reconciliation()
+        with SessionLocal() as db:
+            db.query(FreightRequest).filter(FreightRequest.id == 104).update(
+                {"status": FreightStatus.completed, "driver_id": 30})
+            db.commit()
+        start = threading.Barrier(2)
+
+        def finalize(reconcile):
+            start.wait(timeout=5)
+            if reconcile:
+                return self.request("POST", path, user=1, json={})
+            return self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(finalize, (True, False)))
+        self.assert_status(responses[0], 200)
+        self.assert_status(responses[1], 303)
+        self.assertEqual(len(requests), 2)
+        with SessionLocal() as db:
+            self.assertEqual(db.query(DriverPayout).filter(DriverPayout.freight_id == 104).count(), 1)
+            self.assertEqual(db.query(AuditEvent).filter(AuditEvent.event_type == "payment.authorized").count(), 1)
+
+    def test_reconciliation_does_not_reopen_cancelled_freight(self):
+        requests, _, path = self.prepare_webpay_reconciliation()
+        with SessionLocal() as db:
+            db.query(FreightRequest).filter(FreightRequest.id == 104).update({"status": FreightStatus.cancelled})
+            db.commit()
+        response = self.request("POST", path, user=1, json={})
+        self.assert_status(response, 200)
+        self.assertEqual((response.json()["status"], response.json()["result"]), ("authorized", "review_required"))
+        with SessionLocal() as db:
+            self.assertEqual(db.get(FreightRequest, 104).status, FreightStatus.cancelled)
+            self.assertEqual(db.query(DriverPayout).count(), 0)
 
     def test_webpay_permissions_backend_amount_and_callback_are_preserved(self):
         requests, token = self.webpay_transport()
@@ -941,16 +1127,270 @@ class HttpPermissionTests(unittest.TestCase):
         self.assert_status(self.http.get("/payments/callback", params={"token_ws": token}, follow_redirects=False), 303)
         self.assertEqual(len(requests), 2)
 
+    def test_payment_repeated_initiation_preserves_one_checkout(self):
+        requests, _ = self.webpay_transport()
+        data = {"freight_id": 104, "method": "webpay"}
+        first = self.request("POST", "/payments/initiate", user=1, json=data)
+        self.assert_status(first, 200)
+        with SessionLocal() as db:
+            original_order = db.query(Payment).filter(Payment.freight_id == 104).one().buy_order
+        second = self.request("POST", "/payments/initiate", user=1, json=data)
+        self.assert_status(second, 200)
+        self.assertEqual(first.json(), second.json())
+        self.assertEqual(len(requests), 1)
+        with SessionLocal() as db:
+            self.assertEqual(db.query(Payment).filter(Payment.freight_id == 104).one().buy_order, original_order)
+            self.assertEqual(db.query(AuditEvent).filter(AuditEvent.event_type == "payment.initiated").count(), 1)
+
+    def test_concurrent_initiation_without_payment_creates_one_checkout(self):
+        requests, _ = self.webpay_transport()
+        with SessionLocal() as db:
+            db.query(Payment).filter(Payment.freight_id == 104).delete()
+            db.commit()
+        start = threading.Barrier(2)
+
+        def initiate(_):
+            start.wait(timeout=5)
+            return self.request("POST", "/payments/initiate", user=1,
+                                json={"freight_id": 104, "method": "webpay"})
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(initiate, range(2)))
+        for response in responses:
+            self.assert_status(response, 200)
+        self.assertEqual(responses[0].json(), responses[1].json())
+        self.assertEqual(len(requests), 1)
+        with SessionLocal() as db:
+            self.assertEqual(db.query(Payment).filter(Payment.freight_id == 104).count(), 1)
+
+    def test_refunded_payment_cannot_be_reinitialized(self):
+        requests, _ = self.webpay_transport()
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            payment.status = PaymentStatus.refunded
+            payment.buy_order = "refunded-order"
+            payment.authorization_code = "original-auth"
+            db.commit()
+        self.assert_status(self.request("POST", "/payments/initiate", user=1,
+                                        json={"freight_id": 104, "method": "webpay"}), 409)
+        self.assertEqual(requests, [])
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            self.assertEqual((payment.status, payment.buy_order, payment.authorization_code),
+                             (PaymentStatus.refunded, "refunded-order", "original-auth"))
+
+    def test_invalid_server_price_never_reaches_payment_provider(self):
+        requests, _ = self.webpay_transport()
+        for price in (0, -1, 12000.75, float("inf"), float("nan")):
+            with self.subTest(price=price):
+                with SessionLocal() as db:
+                    db.query(FreightRequest).filter(FreightRequest.id == 104).update({"final_price": price})
+                    db.commit()
+                self.assert_status(self.request("POST", "/payments/initiate", user=1,
+                                                json={"freight_id": 104, "method": "webpay"}), 409)
+        self.assertEqual(requests, [])
+
+    def test_pending_payment_price_change_does_not_replace_checkout(self):
+        requests, token = self.webpay_transport()
+        data = {"freight_id": 104, "method": "webpay"}
+        self.assert_status(self.request("POST", "/payments/initiate", user=1, json=data), 200)
+        with SessionLocal() as db:
+            db.query(FreightRequest).filter(FreightRequest.id == 104).update({"estimated_price": 15000})
+            db.commit()
+        self.assert_status(self.request("POST", "/payments/initiate", user=1, json=data), 409)
+        self.assertEqual(len(requests), 1)
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            self.assertEqual(payment.webpay_token, token)
+            self.assertEqual(payment.amount, 12000)
+
+    def test_concurrent_callbacks_authorize_and_create_payout_once(self):
+        requests, token = self.webpay_transport()
+        with SessionLocal() as db:
+            db.query(FreightRequest).filter(FreightRequest.id == 104).update(
+                {"status": FreightStatus.completed, "driver_id": 30})
+            db.commit()
+        self.assert_status(self.request("POST", "/payments/initiate", user=1,
+                                        json={"freight_id": 104, "method": "webpay"}), 200)
+        start = threading.Barrier(2)
+
+        def callback(_):
+            start.wait(timeout=5)
+            return self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(callback, range(2)))
+        for response in responses:
+            self.assert_status(response, 303)
+        self.assertEqual(len(requests), 2)
+        with SessionLocal() as db:
+            self.assertEqual(db.query(DriverPayout).filter(DriverPayout.freight_id == 104).count(), 1)
+            self.assertEqual(db.query(AuditEvent).filter(AuditEvent.event_type == "payment.authorized").count(), 1)
+
+    def test_parallel_wrong_delivery_pins_cannot_lose_failed_attempts(self):
+        with SessionLocal() as db:
+            db.query(FreightRequest).filter(FreightRequest.id == 101).update({
+                "status": FreightStatus.in_progress, "delivery_photo_ref": "freights/101/evidence/test.jpg",
+                "delivery_pin_hash": hash_password("9876"), "delivery_pin_failed_attempts": 0,
+            })
+            db.commit()
+        start = threading.Barrier(8)
+
+        def complete(_):
+            start.wait(timeout=10)
+            return self.request("PUT", "/freights/101/status", user=3,
+                                json={"status": "completed", "confirmation_pin": "0000"})
+
+        with patch.object(freights, "verify_password", wraps=freights.verify_password) as verify:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                responses = list(pool.map(complete, range(8)))
+            self.assertEqual(verify.call_count, 5)
+        for response in responses:
+            self.assert_status(response, 400)
+        with SessionLocal() as db:
+            freight = db.get(FreightRequest, 101)
+            self.assertEqual(freight.delivery_pin_failed_attempts, 5)
+            self.assertEqual(freight.status, FreightStatus.in_progress)
+            self.assertEqual(db.query(DriverPayout).count(), 0)
+
+    def test_delivery_upload_cannot_replace_evidence_after_completion(self):
+        old_ref = "freights/101/evidence/original.jpg"
+        new_ref = "freights/101/evidence/replacement.jpg"
+        with SessionLocal() as db:
+            db.query(FreightRequest).filter(FreightRequest.id == 101).update({
+                "status": FreightStatus.in_progress, "delivery_photo_ref": old_ref,
+                "delivery_pin_hash": hash_password("9876"), "delivery_pin_failed_attempts": 0,
+            })
+            db.commit()
+        uploading, release = threading.Event(), threading.Event()
+
+        async def slow_upload(*args):
+            uploading.set()
+            if not await asyncio.to_thread(release.wait, 15):
+                raise RuntimeError("Synthetic upload timed out")
+            return new_ref
+
+        with patch.object(freights, "upload_freight_evidence", side_effect=slow_upload), \
+                patch.object(freights, "delete_private_document") as delete:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pending = pool.submit(self.request, "POST", "/freights/101/evidence/delivery", user=3,
+                                      files={"file": ("synthetic.jpg", b"fixture", "image/jpeg")})
+                try:
+                    self.assertTrue(uploading.wait(10))
+                    completed = self.request("PUT", "/freights/101/status", user=3,
+                                             json={"status": "completed", "confirmation_pin": "9876"})
+                    self.assert_status(completed, 200)
+                finally:
+                    release.set()
+                self.assert_status(pending.result(timeout=15), 409)
+            delete.assert_called_once_with(new_ref)
+        with SessionLocal() as db:
+            freight = db.get(FreightRequest, 101)
+            self.assertEqual((freight.status, freight.delivery_photo_ref), (FreightStatus.completed, old_ref))
+            self.assertEqual(db.query(DriverPayout).filter(DriverPayout.freight_id == 101).count(), 1)
+
+    def test_evidence_upload_remains_available_only_to_assigned_driver(self):
+        with patch.object(freights, "upload_freight_evidence", new=AsyncMock(return_value="freights/101/new.jpg")) as upload, \
+                patch.object(freights, "delete_private_document"):
+            for user, expected in ((None, 401), (1, 403), (4, 403), (5, 403), (3, 200)):
+                self.assert_status(self.request("POST", "/freights/101/evidence/pickup", user=user,
+                    files={"file": ("synthetic.jpg", b"fixture", "image/jpeg")}), expected)
+            self.assertEqual(upload.await_count, 1)
+
     def test_webpay_mismatched_amount_does_not_authorize(self):
         requests, token = self.webpay_transport(commit_updates={"amount": 1})
         self.assert_status(self.request("POST", "/payments/initiate", user=1,
                                         json={"freight_id": 104, "method": "webpay"}), 200)
-        self.assert_status(self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False), 303)
+        self.expected_backend_errors = 1
+        self.assert_status(self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False), 503)
         with SessionLocal() as db:
             payment = db.query(Payment).filter(Payment.freight_id == 104).one()
-            self.assertEqual(payment.status, PaymentStatus.failed)
+            self.assertEqual(payment.status, PaymentStatus.pending)
             self.assertIsNone(payment.paid_at)
         self.assertEqual(len(requests), 2)
+
+    def test_callback_lock_wait_is_bounded_and_does_not_block_health(self):
+        requests, token = self.webpay_transport()
+        self.assert_status(self.request("POST", "/payments/initiate", user=1,
+                                        json={"freight_id": 104, "method": "webpay"}), 200)
+        waiting = threading.Event()
+
+        def observe(conn, cursor, statement, parameters, context, executemany):
+            if "FOR UPDATE" in statement:
+                waiting.set()
+
+        with SessionLocal() as holder:
+            holder.query(FreightRequest).filter(FreightRequest.id == 104).with_for_update().one()
+            event.listen(engine, "before_cursor_execute", observe)
+            try:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    callback = pool.submit(self.http.post, "/payments/callback", data={"token_ws": token},
+                                           follow_redirects=False)
+                    try:
+                        self.assertTrue(waiting.wait(5))
+                        health = pool.submit(self.http.get, "/health")
+                        self.assert_status(health.result(timeout=2), 200)
+                        self.assert_status(callback.result(timeout=8), 409)
+                    finally:
+                        holder.rollback()
+            finally:
+                event.remove(engine, "before_cursor_execute", observe)
+                holder.rollback()
+        self.assertEqual(len(requests), 1)
+        with SessionLocal() as db:
+            self.assertEqual(db.query(Payment).filter(Payment.freight_id == 104).one().status, PaymentStatus.pending)
+
+    def test_evidence_lock_timeout_cleans_new_file_and_preserves_original(self):
+        new_ref = "freights/101/evidence/new-pickup.jpg"
+        with SessionLocal() as holder:
+            freight = holder.query(FreightRequest).filter(FreightRequest.id == 101).with_for_update().one()
+            original = freight.pickup_photo_ref
+            with patch.object(freights, "upload_freight_evidence", new=AsyncMock(return_value=new_ref)), \
+                    patch.object(freights, "delete_private_document") as delete:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    upload = pool.submit(self.request, "POST", "/freights/101/evidence/pickup", user=3,
+                                         files={"file": ("synthetic.jpg", b"fixture", "image/jpeg")})
+                    try:
+                        self.assert_status(upload.result(timeout=10), 409)
+                    finally:
+                        holder.rollback()
+                delete.assert_called_once_with(new_ref)
+            holder.rollback()
+        with SessionLocal() as db:
+            self.assertEqual(db.get(FreightRequest, 101).pickup_photo_ref, original)
+
+    def test_admin_payout_updates_are_serialized_and_role_restricted(self):
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 106).one()
+            payout = DriverPayout(payment_id=payment.id, freight_id=106, driver_id=30,
+                                  amount=10000, status=DriverPayoutStatus.pending)
+            db.add(payout)
+            db.commit()
+            payout_id = payout.id
+        path = f"/payouts/{payout_id}"
+        data = {"status": "paid", "transfer_reference": "synthetic-reference"}
+        for user, expected in ((None, 401), (1, 403), (3, 403), (4, 403)):
+            self.assert_status(self.request("PUT", path, user=user, json=data), expected)
+        start = threading.Barrier(2)
+
+        def mark_paid(_):
+            start.wait(timeout=5)
+            return self.request("PUT", path, user=5, json=data)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(mark_paid, range(2)))
+        for response in responses:
+            self.assert_status(response, 200)
+        self.assert_status(self.request("PUT", path, user=5,
+                                        json={"status": "failed", "note": "synthetic late update"}), 400)
+        with SessionLocal() as db:
+            payout = db.get(DriverPayout, payout_id)
+            self.assertEqual((payout.status, payout.transfer_reference),
+                             (DriverPayoutStatus.paid, "synthetic-reference"))
+            self.assertIsNotNone(payout.paid_at)
+            self.assertEqual(db.query(AuditEvent).filter(
+                AuditEvent.event_type == "driver_payout.paid", AuditEvent.entity_id == str(payout_id),
+            ).count(), 1)
 
     def test_webpay_timeout_keeps_payment_pending_without_retry(self):
         requests, token = self.webpay_transport(timeout=True)
@@ -966,18 +1406,43 @@ class HttpPermissionTests(unittest.TestCase):
             self.assertIsNone(payment.paid_at)
         self.assertEqual(len(requests), 2)
 
-    def test_webpay_wrong_order_or_decline_does_not_authorize(self):
-        for updates in ({"buy_order": "other-fixture-order"},
-                        {"status": "FAILED", "response_code": -1}, {"response_code": 1}):
-            requests, token = self.webpay_transport(commit_updates=updates)
-            self.assert_status(self.request("POST", "/payments/initiate", user=1,
-                                            json={"freight_id": 104, "method": "webpay"}), 200)
-            self.assert_status(self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False), 303)
+    def test_webpay_uncertain_response_preserves_pending_checkout(self):
+        updates = {}
+        requests, token = self.webpay_transport(commit_updates=updates)
+        data = {"freight_id": 104, "method": "webpay"}
+        first = self.request("POST", "/payments/initiate", user=1, json=data)
+        self.assert_status(first, 200)
+        for change in ({"buy_order": "other-fixture-order"}, {"response_code": 1},
+                       {"status": "INITIALIZED"}, {"status": "FAILED", "response_code": 0},
+                       {"status": "FAILED", "response_code": 1}, {"authorization_code": "   "}):
+            updates.clear()
+            updates.update(change)
+            self.expected_backend_errors += 1
+            self.assert_status(self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False), 503)
             with SessionLocal() as db:
                 payment = db.query(Payment).filter(Payment.freight_id == 104).one()
-                self.assertEqual(payment.status, PaymentStatus.failed)
+                self.assertEqual(payment.status, PaymentStatus.pending)
                 self.assertIsNone(payment.paid_at)
-            self.assertEqual(len(requests), 2)
+            repeated = self.request("POST", "/payments/initiate", user=1, json=data)
+            self.assert_status(repeated, 200)
+            self.assertEqual(first.json(), repeated.json())
+        self.assertEqual(sum(request.method == "POST" for request in requests), 1)
+
+    def test_webpay_confirmed_decline_allows_new_checkout(self):
+        requests, token = self.webpay_transport(commit_updates={"status": "FAILED", "response_code": -1})
+        data = {"freight_id": 104, "method": "webpay"}
+        self.assert_status(self.request("POST", "/payments/initiate", user=1, json=data), 200)
+        self.assert_status(self.http.post("/payments/callback", data={"token_ws": token}, follow_redirects=False), 303)
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            self.assertEqual(payment.status, PaymentStatus.failed)
+            original_order = payment.buy_order
+        self.assert_status(self.request("POST", "/payments/initiate", user=1, json=data), 200)
+        self.assertEqual(len(requests), 3)
+        with SessionLocal() as db:
+            payment = db.query(Payment).filter(Payment.freight_id == 104).one()
+            self.assertEqual(payment.status, PaymentStatus.pending)
+            self.assertNotEqual(payment.buy_order, original_order)
 
     def test_webpay_order_only_timeout_cannot_change_payment(self):
         for state in (PaymentStatus.pending, PaymentStatus.authorized, PaymentStatus.refunded):
