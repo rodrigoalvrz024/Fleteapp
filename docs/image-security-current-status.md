@@ -1,5 +1,60 @@
 # Estado actual de seguridad de la imagen
 
+## Avance local de compatibilidad 2026-09-21 (sin nueva imagen)
+
+Se preparo SQLAlchemy 2.0.54 y se corrigio un falso negativo del verificador
+de cookies. Python 3.11 y 3.14.7 aprobaron, cada uno, 373 tests unitarios
+(2 omitidos por requerir Linux) y 83 de integracion PostgreSQL aislada.
+pip-audit reviso 83 dependencias: cero avisos conocidos y cero omitidas.
+Ver [evidencia y limites](python314-compatibility.md).
+
+El propietario autorizo commit/push de este lote a la rama de pruebas.
+No cambia el resultado de imagen #34 debajo, no aprueba Python 3.14 para
+produccion y no amplia excepciones. El push ejecutara el candidato Linux
+actual (Python 3.11), no una imagen 3.14. No autoriza despliegue.
+
+## Resultado vigente 2026-09-21 (04591c3)
+
+[Linux #34](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35624670986)
+termino con bloqueo de seguridad, no con fallo de las pruebas de aplicacion.
+Imagen: `sha256:e248ce9101e7a64ec6eba5749b87efb60fe9fc7ff858abc64ca12df8dbe132f3`.
+Escaneo Grype 0.118.0: `2026-09-21T16:20:07.776096996Z`, Debian 13.7.
+
+- 0 Critical, 45 High, 55 Medium, 7 Low, 44 Negligible, 1 Unknown.
+- 358 tests en Linux: 355 aprobados y 3 skips. Incluye las tres nuevas pruebas
+  de regresion AnyIO. Desaparecieron un Critical y un Medium respecto de #33.
+- No se aplico ninguna excepcion ni descuento de hallazgos.
+- Solo corrio Linux: los filtros de rutas de Hardened y Wolfi no incluyen
+  requirements.txt. Sus resultados anteriores NO validan este nuevo commit.
+
+La tabla contiene 44 coincidencias High del sistema operativo y una de Python,
+CVE-2026-82049. Las tres CVE de la autorizacion anterior (3644, 4224 y 7210 de
+2026) ya no figuran. Por tanto, el primer rechazo en la politica actual es que
+no existe el conjunto exacto autorizado; ocurre ANTES de comprobar los hashes.
+El hash distinto de pyexpat sigue siendo otra incompatibilidad independiente
+con aquella evidencia, pero no debe presentarse como el primer fallo de #34.
+No restar tres a 45: no hay tres hallazgos reconocidos en este escaneo.
+
+El [aviso oficial Python del 14 de septiembre](https://mail.python.org/archives/list/security-announce@python.org/thread/EFJWGAZJA56AKSBR2WHMHQZO7RRLZPRH/)
+describe CVE-2026-82049 como un bypass de los filtros TAR mediante enlaces.
+La busqueda local de tarfile, unpack_archive, extractall y .extract( no encontro
+llamadas en backend/app ni en los Dockerfiles revisados. Esto no cubre codigo
+de dependencias ni rutas dinamicas, y NO permite descartar la vulnerabilidad.
+El arreglo publicado para otra rama de Python no acredita un arreglo en 3.11.16.
+
+Se preparo localmente un diagnostico mas claro del control: codigos fijos para
+conjunto de hallazgos distinto y hash distinto; el resto conserva el error
+generico. No imprime evidencia no confiable, mantiene exit 2 y todos los avisos
+originales, sin reconocer correcciones ni cambiar hashes, fechas o condiciones.
+Pruebas de politica y revision: 21 aprobadas. Suite completa local: 371 aprobadas,
+2 skips (373 total). Incluye controles de hashes maliciosos, avisos ausentes o
+duplicados y aprobacion vencida. Este diagnostico forma parte del lote
+autorizado para commit/push descrito arriba.
+
+Siguiente: evaluar una base mantenida con Python corregido y las bibliotecas
+del sistema pendientes, antes de proponer otra construccion. No relanzar sin
+cambios, no retocar la lista autorizada para obtener verde y no desplegar.
+
 ## Nuevas corridas de CI 2026-09-21 (180b11b)
 
 Estado: BLOQUEADA. Las tres corridas terminaron; no se desplego en Railway.

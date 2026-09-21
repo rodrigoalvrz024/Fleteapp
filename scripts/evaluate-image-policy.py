@@ -90,10 +90,19 @@ def main(argv=None):
                              f"remaining High: {policy['remaining_counts']['High']}.\n\n")
                 stream.write("Policy: " + ("BLOCKED" if policy["blocked"] else "No remaining High/Critical")
                              + ". No deployment approval. Medium and other findings require review.\n")
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        # Emit only fixed reason codes; never echo untrusted evidence or paths.
+        if isinstance(error, reviewer.ModuleHashMismatch):
+            reason = "reviewed_python_module_hash_mismatch"
+        elif isinstance(error, reviewer.ReviewedFindingSetMismatch):
+            reason = "reviewed_python_finding_set_mismatch"
+        else:
+            reason = "invalid_missing_or_expired_evidence"
         print("Image policy evidence invalid, missing or expired; not approved.")
+        print("Validation reason: " + reason)
         if args.github_annotation:
-            annotation("Image policy validation", {"blocked": True, "deployment_approved": False}, "error")
+            annotation("Image policy validation", {"blocked": True, "deployment_approved": False,
+                                                   "reason": reason}, "error")
         return 2
     print(json.dumps({"policy": policy}, indent=2, ensure_ascii=True))
     if args.github_annotation:

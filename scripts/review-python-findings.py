@@ -19,6 +19,14 @@ COLUMNS = ["severity", "id", "package", "version", "type", "fix_state",
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Negligible", "Unknown")
 
 
+class ModuleHashMismatch(ValueError):
+    """The runtime no longer matches the narrowly approved binary evidence."""
+
+
+class ReviewedFindingSetMismatch(ValueError):
+    """The scan no longer contains exactly one of each reviewed finding."""
+
+
 def require(condition):
     if not condition:
         raise ValueError("Evidence does not meet the reviewed conditions")
@@ -71,7 +79,8 @@ def validate_python_evidence(rows, backport, trace, image_id):
     """Validate exact findings and runtime evidence; confer no approval by itself."""
     for cve in REVIEWED_CVES:
         matches = [row for row in rows if row["id"] == cve]
-        require(len(matches) == 1)
+        if len(matches) != 1:
+            raise ReviewedFindingSetMismatch("Reviewed Python finding set mismatch")
         row = matches[0]
         require((row["severity"], row["package"], row["version"], row["type"], row["namespace"])
                 == ("High", "python", "3.11.16", "binary", "nvd:cpe"))
@@ -90,7 +99,8 @@ def validate_python_evidence(rows, backport, trace, image_id):
     require(native["parse_checks"] == {"pyexpat": True, "_elementtree": True})
     require(set(native["modules"]) == set(MODULE_HASHES))
     for name, digest in MODULE_HASHES.items():
-        require(native["modules"][name]["sha256"] == digest)
+        if native["modules"][name]["sha256"] != digest:
+            raise ModuleHashMismatch("Reviewed Python module hash mismatch")
 
     require(trace["image_id"] == image_id and trace["scanner_findings_waived"] is False)
     require(trace["status"] == "synthetic_call_path_observed_not_security_approval")

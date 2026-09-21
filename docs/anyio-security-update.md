@@ -1,8 +1,9 @@
 # AnyIO security update - 2026-09-21
 
-Status: local correction verified. The owner authorized a scoped commit and push
-to `codex/mvp-supabase-rls-review` for CI on 2026-09-21. Linux image verification
-remains pending; this authorization does not include a production deployment.
+Status: committed and pushed as 04591c3 to `codex/mvp-supabase-rls-review` with
+owner authorization. Linux verification completed: the Critical finding is gone,
+but the image remains blocked by separate findings and approval-evidence checks.
+No production deployment was authorized or performed.
 
 ## Findings and scoped change
 
@@ -61,7 +62,10 @@ The tool recommends fully hashed dependencies. No vulnerabilities were ignored.
 
 ## Remaining gates
 
-- Rebuild and scan the exact candidate after authorized commit/push.
+- [Linux run 35624670986](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35624670986)
+  built the candidate and passed 355 unit tests with 3 skips (358 total).
+  Image `sha256:e248ce9101e7a64ec6eba5749b87efb60fe9fc7ff858abc64ca12df8dbe132f3`
+  has 0 Critical, 45 High and 55 Medium findings. No finding was waived.
 - Retain the separate container OS findings and the Python evidence mismatch
   documented in [current image status](image-security-current-status.md).
 - Do not treat clean Python pins or passing functionality as approval of the

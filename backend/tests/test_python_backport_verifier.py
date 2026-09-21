@@ -123,6 +123,7 @@ class PythonBackportVerifierTests(unittest.TestCase):
         for implementation, version, level, expat in (
             ("cpython", (3, 11, 15), "final", (2, 8, 3)),
             ("cpython", (3, 12, 16), "final", (2, 8, 3)),
+            ("cpython", (3, 14, 7), "final", (2, 8, 3)),
             ("pypy", (3, 11, 16), "final", (2, 8, 3)),
             ("cpython", (3, 11, 16), "candidate", (2, 8, 3)),
             ("cpython", (3, 11, 16), "final", (2, 7, 0)),
@@ -141,6 +142,30 @@ class PythonBackportVerifierTests(unittest.TestCase):
             results = checker.cookie_checks()
         self.assertFalse(results["merge"])
         self.assertTrue(results["valid_cookie_preserved"])
+
+    def test_cookie_javascript_accepts_both_complete_formats(self):
+        expected = "session=synthetic; HttpOnly; Path=/"
+        for expression in (checker.json.dumps(expected),
+                           f'decodeURIComponent({checker.json.dumps(checker.quote(expected, safe=""))})'):
+            output = ('<script type="text/javascript">\n<!-- begin hiding\n'
+                      f'document.cookie = {expression};\n// end hiding -->\n</script>')
+            self.assertTrue(checker.valid_cookie_javascript(output, expected))
+
+    def test_cookie_javascript_rejects_missing_altered_or_extra_content(self):
+        expected = "session=synthetic; HttpOnly; Path=/"
+        template = ('<script type="text/javascript">\n<!-- begin hiding\n'
+                    'document.cookie = %s;\n// end hiding -->\n</script>')
+        for output in (
+            "", expected, template % '"session=changed; HttpOnly; Path=/"',
+            template % '"session=synthetic"',
+            template % 'decodeURIComponent("session%3Dsynthetic")',
+            template % 'decodeURIComponent("session%3Dsynthetic"',
+            template % checker.json.dumps(expected) + '\nextra();',
+            template % ('decodeURIComponent(' + checker.json.dumps(
+                checker.quote(expected.replace("Path=/", "Path=/changed"), safe="")) + ')'),
+        ):
+            with self.subTest(output=output):
+                self.assertFalse(checker.valid_cookie_javascript(output, expected))
 
     def test_cookie_probe_only_accepts_the_expected_exception(self):
         morsel = Mock()

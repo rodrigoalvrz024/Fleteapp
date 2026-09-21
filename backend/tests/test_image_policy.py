@@ -146,6 +146,7 @@ class ImagePolicyTests(unittest.TestCase):
             self.assertEqual(result, 2)
             self.assertNotIn("never-print", captured.getvalue())
             self.assertIn('"blocked": true', captured.getvalue())
+            self.assertIn('"reason": "invalid_missing_or_expired_evidence"', captured.getvalue())
 
     def test_cli_preserves_raw_annotations_and_blocks_unresolved(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -165,12 +166,18 @@ class ImagePolicyTests(unittest.TestCase):
             self.assertIn("title=Approved Python corrections::", captured.getvalue())
 
     def test_valid_scan_survives_missing_wrong_or_expired_approval_evidence(self):
-        for failure in ("missing", "hash", "expired"):
+        for failure in ("missing", "hash", "elementtree_hash", "expired",
+                        "absent_findings", "duplicate_finding", "absent_and_hash"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 paths = [Path(directory) / f"{i}.json" for i in range(3)]
                 values = inputs()
-                if failure == "hash":
-                    values[1]["xml_native_evidence"]["modules"]["pyexpat"]["sha256"] = "c" * 64
+                if failure in ("hash", "elementtree_hash", "absent_and_hash"):
+                    module = "_elementtree" if failure == "elementtree_hash" else "pyexpat"
+                    values[1]["xml_native_evidence"]["modules"][module]["sha256"] = "never-print\n::error::injected"
+                if failure in ("absent_findings", "absent_and_hash"):
+                    values[0]["matches"] = values[0]["matches"][-1:]
+                if failure == "duplicate_finding":
+                    values[0]["matches"].append(copy.deepcopy(values[0]["matches"][0]))
                 for path, value in zip(paths, values):
                     path.write_text(json.dumps(value), encoding="utf-8")
                 if failure == "missing":
@@ -186,6 +193,15 @@ class ImagePolicyTests(unittest.TestCase):
                 self.assertIn("title=Image vulnerability audit::", captured.getvalue())
                 self.assertIn("CVE-unresolved", captured.getvalue())
                 self.assertNotIn("title=Approved Python corrections::", captured.getvalue())
+                expected_reason = ("reviewed_python_module_hash_mismatch"
+                                   if failure in ("hash", "elementtree_hash")
+                                   else "invalid_missing_or_expired_evidence")
+                if failure in ("absent_findings", "duplicate_finding", "absent_and_hash"):
+                    expected_reason = "reviewed_python_finding_set_mismatch"
+                self.assertIn(f'"reason": "{expected_reason}"', captured.getvalue())
+                self.assertIn('"deployment_approved": false', captured.getvalue())
+                self.assertNotIn("never-print", captured.getvalue())
+                self.assertNotIn("::error::injected", captured.getvalue())
 
 
 class PolicyWorkflowTests(unittest.TestCase):

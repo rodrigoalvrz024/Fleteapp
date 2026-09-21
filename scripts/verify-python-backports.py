@@ -10,6 +10,7 @@ import operator
 from pathlib import Path
 import pyexpat
 import sys
+from urllib.parse import quote
 
 
 COOKIE_CASES = (
@@ -150,6 +151,19 @@ def cookie_rejects(case, character):
     return False
 
 
+def valid_cookie_javascript(output, expected):
+    # Compare the complete synthetic assignment without executing JavaScript.
+    lines = [line.strip() for line in output.strip().splitlines()]
+    assignments = (
+        f"document.cookie = {json.dumps(expected)};",
+        f"document.cookie = decodeURIComponent({json.dumps(quote(expected, safe=''))});",
+    )
+    return any(lines == [
+        '<script type="text/javascript">', '<!-- begin hiding', assignment,
+        '// end hiding -->', '</script>',
+    ] for assignment in assignments)
+
+
 def cookie_checks():
     results = {case: all(cookie_rejects(case, char) for char in CONTROL_CHARACTERS)
                for case in COOKIE_CASES}
@@ -162,8 +176,8 @@ def cookie_checks():
     jar["session"] = valid
     results["valid_cookie_preserved"] = (
         valid["path"] == "/" and valid["httponly"] is True
-        and "session=synthetic" in jar.output()
-        and "session=synthetic" in jar.js_output()
+        and jar.output() == "Set-Cookie: session=synthetic; HttpOnly; Path=/"
+        and valid_cookie_javascript(jar.js_output(), "session=synthetic; HttpOnly; Path=/")
     )
     return results
 
