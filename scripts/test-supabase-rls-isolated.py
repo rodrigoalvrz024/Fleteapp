@@ -59,12 +59,17 @@ def python_worker_environment(environment):
 
 
 def verify_worker_python():
-    result = subprocess.run(
-        [sys.executable, "-I", "-B", "-c", "import ssl, psycopg2, sqlalchemy, cryptography"],
-        env=python_worker_environment(os.environ), stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", "import ssl, psycopg2, sqlalchemy, cryptography"],
+            env=python_worker_environment(os.environ), stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Isolated Python worker preflight timed out; no cluster created") from None
+    except OSError:
+        raise RuntimeError("Isolated Python worker preflight could not start; no cluster created") from None
     if result.returncode:
         raise RuntimeError("Isolated Python worker preflight failed; no cluster created")
 

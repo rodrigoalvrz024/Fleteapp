@@ -135,3 +135,71 @@ Los timeouts o cancelaciones forzadas del job pueden impedir ejecutar el finally
 del interprete. La comprobacion always detecta restos pero no garantiza apagar
 un proceso ante esas senales; el runner hospedado es desechable. No usar este
 workflow como procedimiento de limpieza garantizada de un servidor persistente.
+
+## Resultado Linux autorizado
+
+Commit subido: `1efdd8a23c2e33ada9b76c910cdafc4a8558bda0`, solo a
+`codex/mvp-supabase-rls-review`. `main` se mantuvo en
+`590e8fec432f094619355dad89dcb068c4bd649f`. Los otros cambios locales quedaron
+fuera del commit. No hubo despliegue ni operaciones sobre datos reales.
+
+[Job PostgreSQL 106499399990](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35649892597/job/106499399990):
+**SUCCESS**, en Ubuntu 24.04, Python 3.14.7 y PostgreSQL major 16 verificado.
+Pasaron preparacion, aislamiento/permisos POSIX, integracion HTTP/WebSocket,
+pagos y TLS, migracion desde vacio, migracion desde modelos legados y el control
+final de ausencia de clusters temporales. La confirmacion registrada procede
+del estado de cada paso de la API de GitHub, no de inferir la compatibilidad
+desde las pruebas Windows. No se equipara este host con la imagen final.
+
+Las dos corridas de imagen terminaron bloqueadas por el escaneo; sus pasos de
+aplicacion y arranque pasaron. No se ocultaron avisos:
+
+| Corrida | Critical | High | Medium | Resultado |
+| --- | ---: | ---: | ---: | --- |
+| [3.11 / 35649892723](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35649892723) | 0 | 45 | 55 | Bloqueada |
+| [3.14 / 35649892597](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35649892597) | 0 | 44 | 51 | Imagen bloqueada; job PostgreSQL aprobado |
+
+Imagen 3.11: `sha256:82531228b41dbc80101986d8c17a9dcbc5dc08a271a3e95dac6383767f5885c0`.
+Imagen 3.14: `sha256:84fa4f1d876eb325421c712cf1b28afaa9c4d7479aaa7763ab4430dc52a59844`.
+Grype 0.118.0, escaneos UTC del 2026-09-21 a las 20:17:45 y 20:17:11.
+El diagnostico nuevo 3.11 confirmo en CI tres avisos revisados ausentes y
+`pyexpat` cambiado; no se reconocio ninguna excepcion nueva.
+
+Antes del push, la suite local final tuvo 409 casos: 406 aprobados y tres
+omitidos por plataforma; preflight real Python 3.14 Windows aprobado. Revision
+independiente estatica sin P1/P2 pendientes en el diff acotado. No es una
+auditoria global ni garantia de ausencia de otros riesgos.
+
+Quedan pendientes la imagen de produccion, la validacion del hosting real y
+el resto de condiciones del piloto. Este resultado cierra la primera ejecucion
+de estas pruebas PostgreSQL en Linux; no cierra el bloqueo de vulnerabilidades.
+
+## Seguimiento local: errores del preflight
+
+El preflight descarta stdout/stderr del worker y convierte TimeoutExpired y
+OSError en errores acotados, sin encadenar detalles del comando o rutas. No
+cambia permisos de usuarios, logica de pagos, migraciones ni configuracion de
+produccion. Es endurecimiento de la herramienta de pruebas, no una correccion
+de los avisos High de la imagen.
+
+Se agrego una regresion con errores sinteticos que comprueba el traceback
+mostrado y la ausencia de directorios de cluster. Los mocks no prueban un
+timeout real en todas las plataformas.
+
+Resultados locales posteriores al cambio, 2026-09-21:
+
+- Suite Python 3.11: 410 casos, 407 aprobados, 3 omitidos por plataforma.
+- Suite especifica del runner: 13 casos, 12 aprobados, 1 omitido por POSIX.
+- PostgreSQL temporal con Python 3.14 en Windows: 9 RLS, 5 TLS,
+  11 migraciones desde vacio y 84 HTTP/WebSocket: 109 aprobados.
+- El primer intento en el sandbox no pudo iniciar initdb por el token
+  restringido de Windows. La ejecucion local autorizada fuera del sandbox
+  paso; no se desactivaron las protecciones PostgreSQL para lograrlo.
+- Cluster detenido y eliminado; directorio temporal comprobado vacio.
+- Segunda revision estatica: sin P1/P2 en el diff acotado. No ejecutada por el
+  revisor ni equivalente a una auditoria global.
+
+No se repitio la migracion desde modelos legados en esta ejecucion. Los
+resultados Linux anteriores corresponden al commit 1efdd8a; este ajuste local
+no se ha subido ni ejecutado en Actions. No hubo acceso a bases externas,
+cobros reales, cambios de APK ni despliegue.

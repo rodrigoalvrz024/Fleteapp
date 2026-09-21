@@ -106,3 +106,46 @@ El propietario autorizo commit/push y las dos ejecuciones de GitHub Actions
 el 2026-09-21. No autoriza despliegue ni cambios de produccion.
 Las dos ejecuciones finalizaron y se revisaron sin autorizar despliegue.
 El candidato clasico conserva 45 High; la alternativa Python 3.14 tiene 44 High.
+
+## Inventario nativo preparado, pendiente de ejecucion
+
+El 2026-09-21 se preparo un paso adicional para obtener evidencia de la misma
+imagen Python 3.14 construida y escaneada. No se puede usar el inventario de
+DHI/Python 3.11 para afirmar ausencia de componentes en esta candidata.
+
+Se reutiliza `scripts/report-native-symbols.py`, sin cambiar su analisis:
+
+- Docker crea un contenedor sin red y no lo inicia. Se exporta su filesystem
+  efectivo a un TAR temporal; el analizador lee archivos ELF sin ejecutarlos
+  ni extraer el archivo sobre el filesystem del runner.
+- Herramienta en virtualenv separado, dependencia fijada con hash y sin deps
+  adicionales. No se instala en la aplicacion ni modifica la candidata.
+- Exportacion limitada a 60 segundos y analisis a 180; job conserva 15 minutos.
+- Se registran ID de imagen, hashes, imports, exports y componentes por nombre.
+  El informe conserva sus limites: enlaces no resueltos, posibles copias
+  renombradas, llamadas dinamicas y enlaces estaticos impiden inferir
+  inalcanzabilidad solo a partir de imports ausentes.
+- Se publica SOLO `python314-native-symbol-evidence/report.json` durante
+  14 dias. No se publica el TAR, virtualenv, codigo ni datos de usuarios.
+  Ese plazo solo aplica al artefacto; las anotaciones y el resumen tambien
+  contienen metadatos y siguen la retencion de la corrida de GitHub.
+  El contenedor temporal se elimina al salir del paso; los archivos de trabajo
+  quedan en RUNNER_TEMP del runner hospedado desechable.
+- La subida del informe precede al escaneo. El escaneo conserva su condicion
+  always tras build exitoso, incluso si el inventario o su subida fallan.
+  No hay `continue-on-error`, excepcion nueva ni aprobacion de despliegue.
+
+Verificacion local: 12 pruebas de configuracion y 20 del analizador aprobadas;
+sintaxis Bash del paso nuevo validada. Suite completa: 412 casos, 409 aprobados
+y 3 omitidos por plataforma. La configuracion aun no se ha ejecutado en Linux.
+No hubo push ni nueva corrida de Actions en esta preparacion.
+Segunda revision estatica sin P1/P2 en el diff acotado. Las pruebas de
+configuracion no demuestran tiempos reales, ejecucion Docker ni limpieza
+efectiva en Linux; esos resultados siguen pendientes.
+
+La proxima corrida tendria una finalidad distinta de repetir un contador:
+obtener este inventario faltante, ligado al ID de imagen de esa corrida, para
+revisar exposicion por CVE. No se espera que agregar diagnostico repare los
+44 registros High. Un inventario vacio o fallido no es evidencia de ausencia.
+Antes de publicar la preparacion, separar los cambios propios de web/mobile y
+confirmar autorizacion de commit/push a pruebas y consumo de Actions.

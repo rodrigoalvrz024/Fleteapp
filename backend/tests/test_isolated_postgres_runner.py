@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import traceback
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -118,6 +119,32 @@ class IsolatedPostgresRunnerTests(unittest.TestCase):
             self.assertIn("-I", execute.call_args.args[0])
             self.assertEqual(execute.call_args.kwargs["env"], {})
             self.assertEqual(execute.call_args.kwargs["timeout"], 30)
+            self.assertEqual(execute.call_args.kwargs["stdout"], subprocess.DEVNULL)
+            self.assertEqual(execute.call_args.kwargs["stderr"], subprocess.DEVNULL)
+
+    def test_preflight_launch_errors_are_sanitized_without_creating_cluster(self):
+        failures = (
+            (subprocess.TimeoutExpired("never-print-command", 30,
+                                       output=b"never-print-output", stderr=b"never-print-error"),
+             "timed out"),
+            (OSError(13, "never-print-error", "never-print-path"), "could not start"),
+        )
+        for failure, message in failures:
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as directory, \
+                 patch.object(runner, "ROOT", Path(directory)), \
+                 patch.object(runner.sys, "argv", ["runner", "--pg-bin", directory]), \
+                 patch.object(runner.os, "geteuid", return_value=1000, create=True), \
+                 patch.object(runner, "python_worker_environment", return_value={}), \
+                 patch.object(runner.subprocess, "run", side_effect=failure):
+                try:
+                    runner.main()
+                except RuntimeError as error:
+                    self.assertIn(message, str(error))
+                    self.assertIn("no cluster created", str(error))
+                    self.assertNotIn("never-print", traceback.format_exc())
+                else:
+                    self.fail("Preflight did not stop the test runner")
+                self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_config_binds_only_loopback_and_disables_shared_sockets(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -89,6 +89,39 @@ class Python314TrialConfigurationTests(unittest.TestCase):
         for forbidden in ("evaluate-image-policy.py", "review-python-findings.py", "verify-python-backports.py"):
             self.assertNotIn(forbidden, self.raw)
 
+    def test_native_inventory_uses_candidate_without_running_or_extracting_it(self):
+        step = self.step("Inspect complete Python 3.14")
+        self.assertNotIn("continue-on-error", step)
+        command = step["run"]
+        for required in ("set -euo pipefail", "umask 077", "--require-hashes",
+                         "--only-binary=:all: --no-deps", "scripts/native-audit-requirements.txt",
+                         "docker image inspect muvv-backend:python314-trial",
+                         '^sha256:[0-9a-f]{64}$', 'docker create --network none "$image_id"',
+                         'docker export --output "$audit_dir/rootfs.tar" "$container"',
+                         'scripts/report-native-symbols.py "$audit_dir/rootfs.tar" --image-id "$image_id"',
+                         "timeout --signal=TERM --kill-after=5s 60s",
+                         "timeout --signal=TERM --kill-after=5s 180s",
+                         'trap \'docker rm "$container"',
+                         "not a CVE exemption or deployment approval"):
+            self.assertIn(required, command)
+        for forbidden in ("docker start", "docker run", "docker exec", "tar --extract",
+                          "extractall", "--privileged", "docker.sock", "sudo "):
+            self.assertNotIn(forbidden, command)
+
+    def test_only_metadata_is_preserved_before_unmodified_scan_gate(self):
+        native = self.step("Inspect complete Python 3.14")
+        upload = self.step("Preserve Python 3.14")
+        scan = self.step("Scan complete")
+        self.assertEqual(upload["uses"],
+                         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a")
+        self.assertEqual(upload["with"], {
+            "name": "python314-native-symbol-evidence",
+            "path": "${{ runner.temp }}/python314-native-symbol-evidence/report.json",
+            "if-no-files-found": "error", "retention-days": "14"})
+        self.assertLess(self.steps.index(native), self.steps.index(upload))
+        self.assertLess(self.steps.index(upload), self.steps.index(scan))
+        self.assertEqual(scan["if"], "${{ always() && steps.build.outcome == 'success' && !cancelled() }}")
+
 
 class PostgresIntegrationConfigurationTests(unittest.TestCase):
     @classmethod
