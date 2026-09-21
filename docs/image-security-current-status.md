@@ -1,6 +1,45 @@
 # Estado actual de seguridad de la imagen
 
-## Seguimiento 2026-09-21
+## Nuevas corridas de CI 2026-09-21 (180b11b)
+
+Estado: BLOQUEADA. Las tres corridas terminaron; no se desplego en Railway.
+Estos resultados reemplazan el estado vigente del seguimiento anterior, que
+se conserva debajo como historial.
+
+| Candidato | Resultado original del escaner | Alcance |
+| --- | --- | --- |
+| [Linux #33](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35622327545) | 1 Critical, 45 High, 56 Medium, 7 Low, 44 Negligible, 1 Unknown | Imagen de la aplicacion. |
+| [Hardened #9](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35622327577) | 1 Critical, 30 High, 37 Medium, 2 Low, 20 Negligible | Imagen de la aplicacion; puede haber coincidencias duplicadas entre fuentes. |
+| [Wolfi #3](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35622327688) | 0 Critical, 1 High, 5 Medium, 1 Low | Solo imagen base: bloqueo antes de construir Muvv. |
+
+Las cantidades son coincidencias, no vulnerabilidades distintas ni ataques
+demostrados. Linux y Hardened ejecutaron 355 tests, con resultado OK y 3 skips.
+Los 15 tests de configuracion de workflows/Dockerfiles del repositorio no se
+ejecutan dentro de la imagen: dos clases se omiten al no montar esos archivos.
+No confundir este resultado con el total de pruebas locales.
+
+Linux: `sha256:b8aa026aedb9cec075e9c2ae1dc6117b876b085472f0f7825b8f667abbd17bae`,
+escaneo `2026-09-21T15:58:55.21420749Z`. La politica termino con exit 2:
+`Image policy evidence invalid, missing or expired; not approved.`
+El hash de pyexpat observado fue
+`09cda70b60a3ffd5f17efbafbf65bc26d6e32c264a78eaebdf154b9b4845d749`,
+distinto del aprobado
+`27e28ee2600c7d6347130227616e4fd5ae1c59800ad01fa12e1f23c6f41f34e3`.
+La revision estatica independiente confirma que esa diferencia basta para
+bloquear; no prueba que sea el unico motivo ni que el binario sea vulnerable.
+No se descuentan las tres correcciones Python de los 45 High y no se cambia
+la evidencia autorizada para hacer pasar el control.
+
+Wolfi verifico firmas y escaneo la base runtime
+`cgr.dev/chainguard/python@sha256:1206ffee8644e6338b3fc8b6e5dc384b03d91ad1df1d6b74fa4255544ac51ad2`.
+El High es CVE-2026-19499 en `glibc-2.44 2.44-r6`. La desaparicion del aviso
+anterior de zlib no aprueba esta base ni demuestra compatibilidad con Muvv.
+
+El Critical nuevo de las imagenes de aplicacion corresponde a AnyIO. Se preparo
+una [correccion local y pruebas de regresion](anyio-security-update.md), aun
+sin una nueva imagen Linux verificada. Produccion sigue sin cambios.
+
+## Seguimiento previo 2026-09-21
 
 Consulta de fuentes oficiales, no un nuevo escaneo. El ultimo resultado de CI
 registrado corresponde a `171c757`, imagen
