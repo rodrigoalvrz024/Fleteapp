@@ -4,6 +4,9 @@ Fecha: 2026-09-21. Estado: compatibilidad local comprobada, NO aprobacion de
 imagen ni de despliegue. No se cambiaron Dockerfiles, workflows ni produccion.
 El propietario autorizo commit y push de este lote a la rama de pruebas.
 La autorizacion no incluye desplegar ni cambiar el runtime de produccion.
+Commit/push completados: `7d9a4a4`. Linux #35 aprobo las pruebas y los controles
+de arranque, pero termino bloqueado por el analisis de imagen. Esa imagen sigue
+usando Python 3.11.16; no constituye una validacion Linux de Python 3.14.
 
 ## Problemas encontrados y correcciones
 
@@ -75,9 +78,10 @@ Desde la raiz, repetir para cada interprete:
 3. Escanear la imagen completa, sin trasladar excepciones de Python 3.11.
 4. Resolver o evaluar formalmente cada aviso bloqueante; no descontar avisos
    por estas pruebas locales ni mezclar paquetes de distribuciones inestables.
-5. Revisar el resultado de CI del commit/push autorizado. No desplegar.
+5. Conservar el bloqueo observado en CI #35 hasta validar un candidato seguro.
+   No desplegar.
 
 El ultimo escaneo de la imagen sigue siendo el documentado en
 [estado de seguridad](image-security-current-status.md): 0 Critical y 45 High.
 No hubo una nueva corrida de GitHub Actions durante esta evaluacion local;
-la siguiente corrida corresponde al push autorizado, no a una prueba 3.14 Linux.
+posteriormente el push autorizado ejecuto #35, no una prueba 3.14 Linux.

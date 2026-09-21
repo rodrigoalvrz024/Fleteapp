@@ -1,5 +1,44 @@
 # Estado actual de seguridad de la imagen
 
+## Resultado vigente 2026-09-21 (7d9a4a4)
+
+Commit autorizado y subido solo a `codex/mvp-supabase-rls-review`.
+[Linux #35](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35629859122)
+finalizo en 2m23s con bloqueo de seguridad. Main sigue en 590e8fec.
+No hubo despliegue, nueva suscripcion ni ejecucion Hardened/Wolfi para este lote.
+
+- Construccion, consistencia de dependencias, suite de aplicacion y controles
+  Linux de descriptores, permisos, arranque no privilegiado y rechazo de root:
+  aprobados. Las anotaciones confirman cierre limpio por SIGTERM y comprobaciones
+  de seis rutas sin autenticacion. No inferir una prueba completa de produccion.
+- Imagen: `sha256:7c7151a4b7e4391ed89ac5e87dc5a0fa1276510da99ad0ce8d5ff13cf339fea4`.
+- Grype 0.118.0, Debian 13.7, `2026-09-21T17:08:42.644706036Z`:
+  0 Critical, 45 High, 55 Medium, 7 Low, 44 Negligible, 1 Unknown.
+  Las cantidades no cambiaron respecto de #34. Ningun aviso fue descontado.
+- El nuevo diagnostico funciona: exit 2 con
+  `reviewed_python_finding_set_mismatch`, sin declarar aprobacion ni imprimir
+  evidencia arbitraria. Las tres CVE de la excepcion anterior siguen ausentes;
+  no se debe modificar la autorizacion para forzar un resultado verde.
+
+Los 45 High son coincidencias en paquetes, agrupadas en 12 CVE:
+
+| Grupo | CVE | Coincidencias |
+| --- | --- | --- |
+| util-linux y paquetes relacionados | 2026-76642, 2026-78408, 2026-78409, 2026-78410 | 32 |
+| ncurses | 2025-69720 | 4 |
+| glibc | 2026-19499, 2026-5435 | 4 |
+| libacl | 2026-54369, 2026-54370 | 2 |
+| Python | 2026-82049 | 1 |
+| zlib | 2026-85091 | 1 |
+| perl-base | 2026-9538 | 1 |
+
+El escaner marca Python como fixed en otra version, zlib como not-fixed y
+los restantes como wont-fix para esta fuente/distribucion. Estas etiquetas
+no son excepciones ni prueban explotabilidad o ausencia de riesgo en Muvv.
+La siguiente evaluacion debe centrarse en una imagen Linux mantenida y minima
+con Python actualizado, conservando las protecciones y el escaneo completo.
+Las pruebas Windows de Python 3.14 no sustituyen esa evaluacion.
+
 ## Avance local de compatibilidad 2026-09-21 (sin nueva imagen)
 
 Se preparo SQLAlchemy 2.0.54 y se corrigio un falso negativo del verificador
@@ -9,11 +48,11 @@ pip-audit reviso 83 dependencias: cero avisos conocidos y cero omitidas.
 Ver [evidencia y limites](python314-compatibility.md).
 
 El propietario autorizo commit/push de este lote a la rama de pruebas.
-No cambia el resultado de imagen #34 debajo, no aprueba Python 3.14 para
-produccion y no amplia excepciones. El push ejecutara el candidato Linux
-actual (Python 3.11), no una imagen 3.14. No autoriza despliegue.
+Se completo como 7d9a4a4 y ejecuto #35, descrito arriba. No aprueba Python 3.14
+para produccion y no amplia excepciones. Se probo el candidato Linux actual
+(Python 3.11), no una imagen 3.14. No autoriza despliegue.
 
-## Resultado vigente 2026-09-21 (04591c3)
+## Resultado anterior 2026-09-21 (04591c3)
 
 [Linux #34](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35624670986)
 termino con bloqueo de seguridad, no con fallo de las pruebas de aplicacion.
