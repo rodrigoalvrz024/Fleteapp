@@ -1,0 +1,156 @@
+name: Python 3.14 Linux compatibility (no deploy)
+
+on:
+  push:
+    branches:
+      - codex/mvp-supabase-rls-review
+    paths:
+      - backend/**
+      - scripts/**
+      - .github/workflows/backend-python314-trial.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python314-trial-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve official base and build isolated candidate
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='python:3.14.7-slim-trixie'
+          docker pull --platform linux/amd64 "$base"
+          digest="$(docker image inspect "$base" --format '{{index .RepoDigests 0}}')"
+          [[ "$digest" =~ ^python@sha256:[0-9a-f]{64}$ ]]
+          docker build --platform linux/amd64 --file backend/Dockerfile.python314 \
+            --build-arg "PYTHON_IMAGE=$digest" --tag muvv-backend:python314-trial backend
+          printf 'Official base: `%s`\nCommit: `%s`\n' "$digest" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          docker image inspect muvv-backend:python314-trial --format 'Candidate: {{.Id}}' >> "$GITHUB_STEP_SUMMARY"
+          test "$(docker image inspect muvv-backend:python314-trial --format '{{.Config.User}}')" = app
+
+      - name: Verify interpreter and dependency consistency offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 32 --entrypoint python muvv-backend:python314-trial -I -B -c \
+            'import sys; assert sys.version_info[:3] == (3,14,7) and sys.version_info.releaselevel == "final"; print(sys.version)'
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 32 --entrypoint python muvv-backend:python314-trial -m pip check
+
+      - name: Run all application and Linux security tests offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          timeout --signal=TERM --kill-after=5s 180s docker run --rm \
+            --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --memory 768m --cpus 2 --pids-limit 256 --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+            --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" --env ACCESS_TOKEN_EXPIRE_MINUTES=1440 --env PYTHONPATH=/app \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/tests,dst=/workspace/backend/tests,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts,dst=/workspace/scripts,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/alembic,dst=/workspace/backend/alembic,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/Dockerfile.python314,dst=/workspace/backend/Dockerfile.python314,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/.github/workflows/backend-python314-trial.yml,dst=/workspace/.github/workflows/backend-python314-trial.yml,readonly" \
+            --workdir /workspace/backend --entrypoint python muvv-backend:python314-trial \
+            -B -m unittest discover -s tests
+
+      - name: Verify permissions without read-only filesystem masking them
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/verify-runtime-image.py,dst=/runtime-check.py,readonly" \
+            --entrypoint python muvv-backend:python314-trial -B /runtime-check.py --github-annotation
+
+      - name: Verify actual startup without hosting privilege flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          container="$(docker run --detach --network none --read-only --pids-limit 256 \
+            --memory 768m --cpus 2 --tmpfs /tmp:rw,noexec,nosuid,size=128m \
+            --env APP_ENV=test --env RUN_STARTUP_MIGRATIONS=false --env PORT=18080 \
+            --env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:1/muvv_test \
+            --env "SECRET_KEY=$test_key" muvv-backend:python314-trial)"
+          trap 'docker rm --force "$container" > /dev/null 2>&1 || true' EXIT
+          docker exec --interactive "$container" python -B - <<'PY'
+          import json,time,urllib.request,urllib.error
+          from pathlib import Path
+          for attempt in range(100):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:18080/',timeout=1) as response:
+                      assert response.status == 200 and json.load(response)['status'] == 'ok'
+                  break
+              except (urllib.error.URLError,TimeoutError):
+                  time.sleep(0.1)
+          else:
+              raise SystemExit('Candidate did not start')
+          assert Path('/proc/1/comm').read_text().strip() == 'python'
+          status = dict(line.split(':',1) for line in Path('/proc/1/status').read_text().splitlines() if ':' in line)
+          assert int(status['NoNewPrivs']) == 1
+          for field in ('CapInh','CapPrm','CapEff','CapAmb'):
+              assert int(status[field].strip(),16) == 0
+          for field in ('Uid','Gid','Groups'):
+              assert 0 not in map(int,status[field].split())
+          for route in ('/users/me','/drivers/me','/admin/users'):
+              for headers in ({},{'Authorization':'Bearer invalid-test-token'}):
+                  try:
+                      urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:18080'+route,headers=headers),timeout=2)
+                  except urllib.error.HTTPError as error:
+                      assert error.code == 401
+                  else:
+                      raise AssertionError('Protected route accepted anonymous or invalid credentials')
+          print('Real PID 1 startup and six authentication checks passed')
+          PY
+          docker exec "$container" python -B -m alembic heads
+          docker stop --time 10 "$container" > /dev/null
+          exit_code="$(docker inspect "$container" --format '{{.State.ExitCode}}')"
+          case "$exit_code" in 0|143) ;; *) exit 1 ;; esac
+          shutdown_log="$(docker logs "$container" 2>&1)"
+          [[ "$shutdown_log" == *"Application shutdown complete."* ]]
+
+      - name: Verify root startup is rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(timeout --signal=TERM --kill-after=5s 15s docker run --rm \
+            --network none --read-only --cap-drop ALL --user 0:0 --pids-limit 32 \
+            muvv-backend:python314-trial 2>&1)"
+          code=$?
+          set -e
+          test "$code" -eq 1
+          test "$output" = '[startup] Security checks failed; server not started.'
+
+      - name: Scan complete candidate with no backport exceptions
+        if: ${{ always() && steps.build.outcome == 'success' && !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-python314-audit.XXXXXX")"
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            https://github.com/anchore/grype/releases/download/v0.118.0/grype_0.118.0_linux_amd64.tar.gz --output "$audit_dir/grype.tar.gz"
+          printf '%s  %s\n' '1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2' "$audit_dir/grype.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$audit_dir/grype.tar.gz" --directory "$audit_dir" grype
+          image_id="$(docker image inspect muvv-backend:python314-trial --format '{{.Id}}')"
+          "$audit_dir/grype" "docker:${image_id}" --config scripts/grype-candidate.yaml --output json > "$audit_dir/report.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["distro"]["name"]=="debian" and r["distro"]["version"].split(".")[0]=="13"' "$audit_dir/report.json"
+          python3 scripts/report-image-audit.py "$audit_dir/report.json" \
+            --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+          printf 'Compatibility evaluation only; no image push, production access or deployment approval.\n' >> "$GITHUB_STEP_SUMMARY"

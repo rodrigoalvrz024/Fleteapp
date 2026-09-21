@@ -1,0 +1,28 @@
+# Isolated compatibility candidate; not the production Dockerfile.
+# CI resolves the official tag once and supplies its immutable digest.
+ARG PYTHON_IMAGE=python:3.14.7-slim-trixie
+FROM ${PYTHON_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get purge -y --no-auto-remove mount \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN python -m pip install --no-cache-dir --upgrade pip==26.2.1 setuptools==84.0.0 wheel==0.48.0 \
+    && python -m pip install --no-cache-dir --only-binary=:all: -r requirements.txt
+
+RUN addgroup --system app && adduser --system --ingroup app app
+COPY --chown=root:root app ./app
+COPY --chown=root:root alembic ./alembic
+COPY --chown=root:root alembic.ini .
+COPY --chown=root:root --chmod=0444 certs/supabase-root-2021.crt ./certs/supabase-root-2021.crt
+RUN chmod -R go-w /app /usr/local \
+    && rm -- /usr/bin/infocmp /usr/bin/nsenter \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
+
+USER app
+CMD ["python", "-m", "app.server"]
