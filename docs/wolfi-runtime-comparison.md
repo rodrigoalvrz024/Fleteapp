@@ -124,6 +124,11 @@ imagen o evidencia nueva. Se mantiene la candidata actual sin deploy.
 
 ## Consulta propuesta al proveedor (no enviada)
 
+Nota del 2026-09-21: el siguiente borrador historico requiere actualizacion.
+La receta de zlib ya incluye un parche y la tabla publica de Python ahora
+muestra un High de glibc, no el anterior de zlib. No enviar esta consulta como
+si describiera el estado actual. Ver [seguimiento actualizado](image-security-current-status.md).
+
 Title: Public Python Starter image: zlib fixed version availability
 
 We verified the signatures of both public Python Starter variants with the

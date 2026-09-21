@@ -33,6 +33,53 @@ def load_module(name, path):
     return module
 
 
+def prepare_tls_fixture(data):
+    from datetime import datetime, timedelta, timezone
+    import ipaddress
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+
+    now = datetime.now(timezone.utc)
+
+    def certificate(subject, issuer, public_key, signing_key, *, ca, extensions=()):
+        builder = (x509.CertificateBuilder().subject_name(subject).issuer_name(issuer)
+                   .public_key(public_key).serial_number(x509.random_serial_number())
+                   .not_valid_before(now - timedelta(minutes=5))
+                   .not_valid_after(now + timedelta(days=1))
+                   .add_extension(x509.BasicConstraints(ca=ca, path_length=0 if ca else None), critical=True))
+        for extension in extensions:
+            builder = builder.add_extension(extension, critical=False)
+        return builder.sign(signing_key, hashes.SHA256())
+
+    def name(label):
+        return x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, label)])
+
+    ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    ca_name = name("Muvv disposable test CA")
+    ca = certificate(ca_name, ca_name, ca_key.public_key(), ca_key, ca=True)
+    wrong_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    wrong_name = name("Muvv unrelated test CA")
+    wrong_ca = certificate(wrong_name, wrong_name, wrong_key.public_key(), wrong_key, ca=True)
+    server_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    server = certificate(name("muvv-fixture.invalid"), ca_name, server_key.public_key(), ca_key, ca=False,
+                         extensions=(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+                                     x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH])))
+    for filename, cert in (("test-ca.crt", ca), ("wrong-ca.crt", wrong_ca), ("server.crt", server)):
+        (data / filename).write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    key_file = data / "server.key"
+    key_file.write_bytes(server_key.private_bytes(serialization.Encoding.PEM,
+                                                serialization.PrivateFormat.PKCS8,
+                                                serialization.NoEncryption()))
+    key_file.chmod(0o600)
+    # These relative paths resolve inside the newly created, disposable PGDATA.
+    with (data / "postgresql.conf").open("a", encoding="ascii") as config:
+        config.write("\nssl = on\nssl_cert_file = 'server.crt'\nssl_key_file = 'server.key'\n"
+                     "ssl_min_protocol_version = 'TLSv1.2'\n")
+
+
 migration = load_module(
     "rls_migration",
     ROOT / "backend/alembic/versions/f2a4b6c8d010_harden_freight_table_access.py",
@@ -163,6 +210,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pg-bin", required=True, type=Path)
     parser.add_argument("--http", action="store_true", help="Also test real HTTP routes and the complete model schema with synthetic data.")
+    parser.add_argument("--tls", action="store_true", help="Also verify real TLS handshakes using disposable test certificates.")
     parser.add_argument("--migrations", action="store_true", help="Also validate the complete Alembic history on a new, empty database.")
     parser.add_argument("--migration-start", choices=("empty", "models"), default="empty",
                         help="Test Alembic from empty, or simulate the legacy model-created schema on a fresh DB.")
@@ -202,6 +250,8 @@ def main():
     try:
         pg("initdb.exe", "-D", data, "-U", "muvv_test_superuser", "--auth=scram-sha-256",
            "--pwfile", password_file, "--encoding=UTF8", "--locale=C")
+        if args.tls:
+            prepare_tls_fixture(data)
         pg("pg_ctl.exe", "-D", data, "-l", run_dir / "server.log", "-o",
            f"-h 127.0.0.1 -p {port}", "-w", "-t", "30", "start")
         options = dict(host="127.0.0.1", port=port, dbname="postgres",
@@ -242,8 +292,29 @@ def main():
         )
         if not result.wasSuccessful():
             return 1
+        if args.tls:
+            tls_env = {key: value for key, value in os.environ.items()
+                       if key.upper() in {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP"}}
+            tls_env.update(
+                PYTHONIOENCODING="utf-8", MUVV_ISOLATED_TLS_TEST="1",
+                MUVV_TLS_FIXTURE=str(data),
+                DATABASE_URL=URL.create(
+                    "postgresql+psycopg2", username=options["user"], password=password,
+                    host="127.0.0.1", port=port, database="postgres",
+                    query={"sslmode": "verify-full", "sslrootcert": str(data / "test-ca.crt")},
+                ).render_as_string(hide_password=False),
+            )
+            completed = subprocess.run(
+                [sys.executable, "-B", "-m", "unittest", "discover", "-v",
+                 "-s", str(ROOT / "backend/integration_tests"), "-p", "test_database_tls.py"],
+                cwd=run_dir, env=tls_env, creationflags=hidden, timeout=90,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+            )
+            print(completed.stdout, end="")
+            if completed.returncode:
+                return completed.returncode
         if args.migrations:
-            migration_password = secrets.token_urlsafe(32)
+            migration_password = secrets.token_urlsafe(32) + ("%@" if args.tls else "")
             migration_database = "muvv_migration_" + secrets.token_hex(8)
             with psycopg2.connect(**options) as conn:
                 with conn.cursor() as cur:
@@ -272,6 +343,7 @@ def main():
                 DATABASE_URL=URL.create(
                     "postgresql+psycopg2", username="muvv_migration_owner", password=migration_password,
                     host="127.0.0.1", port=port, database=migration_database,
+                    query={"sslmode": "verify-full", "sslrootcert": str(data / "test-ca.crt")} if args.tls else {},
                 ).render_as_string(hide_password=False),
             )
             completed = subprocess.run(
@@ -310,6 +382,7 @@ def main():
                 DATABASE_URL=URL.create(
                     "postgresql+psycopg2", username="muvv_http_owner", password=http_password,
                     host="127.0.0.1", port=port, database=database,
+                    query={"sslmode": "verify-full", "sslrootcert": str(data / "test-ca.crt")} if args.tls else {},
                 ).render_as_string(hide_password=False),
             )
             completed = subprocess.run(

@@ -29,9 +29,9 @@ from fastapi.testclient import TestClient
 import jwt
 import httpx
 import psycopg2
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import Session as OrmSession, sessionmaker
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Engine, make_url
 from starlette.websockets import WebSocketDisconnect
 import uvicorn
 from websockets.sync.client import connect as websocket_connect
@@ -71,7 +71,7 @@ from app import database
 from app.main import app
 from app.models.audit_event import AuditEvent
 from app.models.driver import Driver, DriverStatus
-from app.models.freight import FreightRequest, FreightStatus, FreightCargoPhoto, TripFeedback
+from app.models.freight import FreightRequest, FreightStatus, FreightCargoPhoto, TripFeedback, TripStatusHistory
 from app.models.freight_chat import FreightChatMessage
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.password_reset import PasswordResetToken
@@ -83,6 +83,32 @@ from app.services import transbank_service
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_HTTPX_CLIENT = httpx.Client
+TLS_CONNECTIONS = []
+
+
+def verify_fixture_tls(dbapi_connection, connection_record=None):
+    if URL.query.get("sslmode") != "verify-full":
+        return
+    parameters = dbapi_connection.get_dsn_parameters()
+    if (not dbapi_connection.info.ssl_in_use
+            or dbapi_connection.info.ssl_attribute("protocol") not in {"TLSv1.2", "TLSv1.3"}
+            or parameters.get("sslmode") != "verify-full"
+            or parameters.get("sslrootcert") != URL.query["sslrootcert"]):
+        raise RuntimeError("Expected verified TLS for every HTTP test database connection")
+    TLS_CONNECTIONS.append(True)
+
+
+# Check pooled API, migration and auxiliary SQLAlchemy connections before SQL.
+event.listen(Engine, "connect", verify_fixture_tls)
+
+
+def raw_connection_options():
+    options = dict(host=URL.host, port=URL.port, dbname=URL.database,
+                   user=URL.username, password=URL.password, connect_timeout=5)
+    for name in ("sslmode", "sslrootcert"):
+        if name in URL.query:
+            options[name] = URL.query[name]
+    return options
 
 
 def load_module(name, path):
@@ -208,6 +234,27 @@ class HttpPermissionTests(unittest.TestCase):
         # Do not include bearer URLs, tokens or response bodies in failure logs.
         self.assertEqual(response.status_code, expected)
 
+    @unittest.skipUnless(URL.query.get("sslmode") == "verify-full", "Run with --tls")
+    def test_http_request_opens_a_verified_tls_connection(self):
+        engine.dispose()
+        before = len(TLS_CONNECTIONS)
+        self.assert_status(self.request("GET", "/users/me", user=1), 200)
+        self.assertGreater(len(TLS_CONNECTIONS), before)
+
+    @unittest.skipUnless(URL.query.get("sslmode") == "verify-full", "Run with --tls")
+    def test_tls_observer_rejects_encryption_without_hostname_verification(self):
+        options = raw_connection_options()
+        options["sslmode"] = "require"
+        raw = psycopg2.connect(**options)
+        try:
+            self.assertTrue(raw.info.ssl_in_use)
+            before = len(TLS_CONNECTIONS)
+            with self.assertRaisesRegex(RuntimeError, "Expected verified TLS"):
+                verify_fixture_tls(raw)
+            self.assertEqual(len(TLS_CONNECTIONS), before)
+        finally:
+            raw.close()
+
     def test_full_schema_rls_and_unprivileged_owner(self):
         with engine.connect() as conn:
             rows = conn.execute(text("SELECT relname, relrowsecurity FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind='r' AND relname <> 'alembic_version'")).all()
@@ -216,9 +263,9 @@ class HttpPermissionTests(unittest.TestCase):
             self.assertEqual(len(rows), 20)
         verifier = load_module("http_access_verifier", ROOT.parent / "scripts/verify-supabase-rls.py")
         # The verifier changes psycopg session defaults; never return that connection to the app pool.
-        raw = psycopg2.connect(host=URL.host, port=URL.port, dbname=URL.database,
-                               user=URL.username, password=URL.password, connect_timeout=5)
+        raw = psycopg2.connect(**raw_connection_options())
         try:
+            verify_fixture_tls(raw)
             verifier.begin_read_only_inspection(raw)
             result = verifier.inspect_access(raw)
             self.assertEqual(result["checked"], 20)
@@ -537,6 +584,124 @@ class HttpPermissionTests(unittest.TestCase):
         self.assert_status(self.request("POST", "/freights/103/decline", user=3), 200)
         self.assertEqual(self.request("GET", "/freights?status=available", user=3).json(), [])
         self.assert_status(self.request("PUT", "/freights/103/accept", user=3), 409)
+
+    def prepare_pickup_home_office(self):
+        with SessionLocal() as db:
+            freight = db.get(FreightRequest, 103)
+            freight.service_type = "home_office"
+            freight.selected_vehicle_type = "pickup"
+            pickup = db.get(Vehicle, 80)
+            pickup.supported_service_types = ["package", "urgent", "home_office"]
+            pickup.max_weight_kg = 800
+            pickup.max_volume_m3 = 4
+            db.commit()
+
+    def assert_pickup_request_unchanged(self):
+        with SessionLocal() as db:
+            freight = db.get(FreightRequest, 103)
+            self.assertEqual(
+                (freight.status, freight.driver_id, freight.actual_vehicle_id, freight.client_pays),
+                (FreightStatus.pending, None, None, 12000),
+            )
+            self.assertEqual(freight.payment.status, PaymentStatus.authorized)
+            self.assertEqual(db.query(AuditEvent).filter(
+                AuditEvent.event_type == "freight.accepted", AuditEvent.entity_id == "103",
+            ).count(), 0)
+
+    def test_pickup_confirmation_is_strict_and_persisted_with_actor(self):
+        self.prepare_pickup_home_office()
+        for value in ("true", "false", 1, 0, None, [], {}):
+            with self.subTest(value=value):
+                self.assert_status(self.request("PUT", "/freights/103/accept", user=8,
+                    json={"vehicle_id": 80, "cargo_safety_acknowledged": value}), 422)
+                self.assert_pickup_request_unchanged()
+        for payload in ({"vehicle_id": 80}, {"vehicle_id": 80, "cargo_safety_acknowledged": False}):
+            self.assert_status(self.request("PUT", "/freights/103/accept", user=8, json=payload), 409)
+            self.assert_pickup_request_unchanged()
+        self.assert_status(self.request("PUT", "/freights/103/accept", user=8,
+            json={"vehicle_id": 80, "cargo_safety_acknowledged": True}), 200)
+        with SessionLocal() as db:
+            freight = db.get(FreightRequest, 103)
+            self.assertEqual((freight.status, freight.driver_id, freight.actual_vehicle_id, freight.client_pays),
+                             (FreightStatus.accepted, 80, 80, 12000))
+            self.assertIsNotNone(freight.accepted_at)
+            self.assertEqual(freight.accepted_at, freight.driver_assigned_at)
+            self.assertEqual(freight.accepted_at, freight.driver_accepted_at)
+            self.assertEqual(db.query(TripStatusHistory).filter(
+                TripStatusHistory.freight_id == 103, TripStatusHistory.status == FreightStatus.accepted,
+            ).count(), 1)
+            self.assertEqual(freight.payment.status, PaymentStatus.authorized)
+            event = db.query(AuditEvent).filter(
+                AuditEvent.event_type == "freight.accepted", AuditEvent.entity_id == "103",
+            ).one()
+            self.assertEqual((event.actor_user_id, event.actor_role), (8, "driver"))
+            self.assertIs(event.event_metadata["cargo_safety_acknowledged"], True)
+            self.assertEqual(event.event_metadata["cargo_safety_notice_version"], "pickup_home_office_v1")
+        self.assert_status(self.request("PUT", "/freights/103/accept", user=8,
+            json={"vehicle_id": 80, "cargo_safety_acknowledged": True}), 400)
+        with SessionLocal() as db:
+            self.assertEqual(db.query(AuditEvent).filter(
+                AuditEvent.event_type == "freight.accepted", AuditEvent.entity_id == "103",
+            ).count(), 1)
+
+    def test_pickup_confirmation_cannot_override_vehicle_eligibility(self):
+        for field, value in (
+            ("approval_status", "pending"), ("max_weight_kg", 50), ("max_volume_m3", 0.5),
+            ("supported_service_types", ["package", "urgent"]),
+        ):
+            with self.subTest(field=field):
+                self.prepare_pickup_home_office()
+                with SessionLocal() as db:
+                    pickup = db.get(Vehicle, 80)
+                    pickup.approval_status = "approved"
+                    setattr(pickup, field, value)
+                    db.commit()
+                self.assert_status(self.request("PUT", "/freights/103/accept", user=8,
+                    json={"vehicle_id": 80, "cargo_safety_acknowledged": True}), 403)
+                self.assert_pickup_request_unchanged()
+
+    def test_pickup_confirmation_cannot_override_role_or_vehicle_owner(self):
+        self.prepare_pickup_home_office()
+        # Keep an approved driver and its compatible vehicle; only the active role changes.
+        for role in (UserRole.client, UserRole.admin):
+            with self.subTest(role=role):
+                with SessionLocal() as db:
+                    user = db.get(User, 8)
+                    user.role = role
+                    user.account_roles = [role.value, "driver"]
+                    db.commit()
+                self.assert_status(self.request("PUT", "/freights/103/accept", user=8,
+                    json={"vehicle_id": 80, "cargo_safety_acknowledged": True}), 403)
+                self.assert_pickup_request_unchanged()
+        # A different approved driver has the correct active role but does not own this pickup.
+        self.assert_status(self.request("PUT", "/freights/103/accept", user=3,
+            json={"vehicle_id": 80, "cargo_safety_acknowledged": True}), 403)
+        self.assert_pickup_request_unchanged()
+
+    def test_older_app_selects_enclosed_vehicle_without_fabricating_confirmation(self):
+        self.prepare_pickup_home_office()
+        with SessionLocal() as db:
+            db.add(Vehicle(id=81, driver_id=80, type=VehicleType.van, brand="Synthetic",
+                model="Enclosed fixture", year=2024, plate="TEST81", color="White",
+                max_weight_kg=1000, max_volume_m3=6, approval_status="approved",
+                supported_service_types=["home_office"]))
+            db.commit()
+        self.assert_status(self.request("PUT", "/freights/103/accept", user=8), 200)
+        with SessionLocal() as db:
+            freight = db.get(FreightRequest, 103)
+            self.assertEqual((freight.status, freight.driver_id, freight.actual_vehicle_id, freight.client_pays),
+                             (FreightStatus.accepted, 80, 81, 12000))
+            self.assertIsNotNone(freight.accepted_at)
+            self.assertEqual(freight.accepted_at, freight.driver_assigned_at)
+            self.assertEqual(freight.accepted_at, freight.driver_accepted_at)
+            self.assertEqual(db.query(TripStatusHistory).filter(
+                TripStatusHistory.freight_id == 103, TripStatusHistory.status == FreightStatus.accepted,
+            ).count(), 1)
+            event = db.query(AuditEvent).filter(
+                AuditEvent.event_type == "freight.accepted", AuditEvent.entity_id == "103",
+            ).one()
+            self.assertIs(event.event_metadata["cargo_safety_acknowledged"], False)
+            self.assertIsNone(event.event_metadata["cargo_safety_notice_version"])
 
     def test_status_and_critical_fields_cannot_be_injected(self):
         for user in (1, 2, 4):

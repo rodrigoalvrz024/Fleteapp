@@ -1,5 +1,52 @@
 # Estado actual de seguridad de la imagen
 
+## Seguimiento 2026-09-21
+
+Consulta de fuentes oficiales, no un nuevo escaneo. El ultimo resultado de CI
+registrado corresponde a `171c757`, imagen
+`sha256:e8a7f80a4f9485349b84c05df47845a782de098d1289e3c9b2362fcef0fd7c55`,
+con 44 coincidencias High pendientes despues de las tres correcciones Python
+ya autorizadas. Ver [resultado exacto](storage-dependency-cleanup.md).
+Los resultados historicos que siguen se conservan sin reescribirlos.
+
+Hay una novedad concreta en zlib: upstream publico el
+[arreglo df84af2](https://github.com/madler/zlib/commit/df84af25dc1942490e1d1c899a07619152a46148)
+para CVE-2026-85091 y la consulta #1310 ahora figura cerrada. La
+[receta Wolfi](https://github.com/wolfi-dev/os/blob/main/zlib.yaml) consultada
+usa `1.3.2.1_rc20260601-r0` con un parche para el mismo manejo del buffer.
+Esto reemplaza la observacion anterior de que no habia evidencia de arreglo;
+NO acredita que la imagen Muvv anterior contenga ese cambio.
+
+La [pagina actual de Python de Chainguard](https://images.chainguard.dev/directory/image/python/vulnerabilities)
+ya no muestra zlib en su tabla, pero si muestra CVE-2026-19499 como High en
+`glibc-2.44 2.44-r6`, ademas de cinco Medium y un Low. No se obtuvo un nuevo
+digest ni se verifico firma/SBOM: es informacion del proveedor, no resultado
+de nuestro escaner. No equivale a una base aprobada ni a compatibilidad de Muvv.
+
+En Debian trixie siguen figurando vulnerables las versiones estables de
+[glibc monetario](https://security-tracker.debian.org/tracker/CVE-2026-19499),
+[glibc DNS](https://security-tracker.debian.org/tracker/CVE-2026-5435),
+[util-linux](https://security-tracker.debian.org/tracker/CVE-2026-76642) y
+[ACL](https://security-tracker.debian.org/tracker/CVE-2026-54369).
+Debian ahora enlaza el arreglo upstream de
+[zlib](https://security-tracker.debian.org/tracker/CVE-2026-85091), pero mantiene
+sus paquetes listados como vulnerables. No mezclar paquetes sid con trixie.
+
+Decision: mantener bloqueo, sin cambiar excepciones, versiones de dependencias
+ni imagen de Railway. Antes de repetir la comparacion Wolfi, revisar una
+actualizacion mantenida de glibc o solicitar al proveedor evidencia especifica
+de ese aviso. La consulta anterior centrada en zlib ya no debe enviarse sin
+actualizarla. No se envio ninguna consulta ni se contrato ningun servicio.
+
+En paralelo, las [pruebas TLS](database-tls-preflight.md) locales y una conexion
+real autorizada desde este PC al pooler Supabase pasaron con `verify-full` y
+modo de solo lectura, sin consultas a tablas. El operador descargo el certificado
+tras el bloqueo inicial de Chrome; no se desactivaron protecciones. La
+configuracion efectiva y conectividad desde Railway siguen pendientes. Este
+resultado no elimina avisos del contenedor ni autoriza desplegar.
+
+## Revision anterior
+
 Fecha de revision: 2026-09-15 (America/Santiago).
 Estado: BLOQUEADA. No modifica autorizaciones, excepciones ni produccion.
 

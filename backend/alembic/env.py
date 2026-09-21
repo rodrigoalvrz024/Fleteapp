@@ -7,14 +7,13 @@ import sys
 # Agregar el directorio raíz al path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.database import Base
+from app.database import Base, DATABASE_URL, connect_args
 from app.models import *  # importar todos los modelos
-from app.core.config import settings
 
 config = context.config
 
-# Usar DATABASE_URL del .env
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# ConfigParser must preserve URL-encoded passwords and certificate paths.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -37,6 +36,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     with connectable.connect() as connection:
         context.configure(

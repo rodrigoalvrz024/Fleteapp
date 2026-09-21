@@ -12,6 +12,7 @@ RUN /opt/muvv-venv/bin/python -m pip install --no-cache-dir --upgrade pip==26.2.
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
+COPY --chown=0:0 --chmod=0444 certs/supabase-root-2021.crt ./certs/supabase-root-2021.crt
 RUN chmod -R go-w /app /opt/muvv-venv
 
 FROM ${PYTHON_RUNTIME_IMAGE} AS trial

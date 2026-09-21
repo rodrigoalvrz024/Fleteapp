@@ -20,6 +20,7 @@ RUN addgroup --system app && adduser --system --ingroup app app
 COPY --chown=root:root app ./app
 COPY --chown=root:root alembic ./alembic
 COPY --chown=root:root alembic.ini .
+COPY --chown=root:root --chmod=0444 certs/supabase-root-2021.crt ./certs/supabase-root-2021.crt
 
 # The API never changes OS identities or edits its installed code.
 RUN chmod -R go-w /app /usr/local \

@@ -14,8 +14,8 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect, select, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import event, inspect, select, text
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import DBAPIError
 
 
@@ -48,7 +48,33 @@ import app.models
 ROOT = Path(__file__).resolve().parents[1]
 
 
+TLS_CONNECTIONS = []
+
+
+def verify_fixture_tls(dbapi_connection, connection_record):
+    if URL.query.get("sslmode") != "verify-full":
+        return
+    parameters = dbapi_connection.get_dsn_parameters()
+    if (not dbapi_connection.info.ssl_in_use
+            or dbapi_connection.info.ssl_attribute("protocol") not in {"TLSv1.2", "TLSv1.3"}
+            or parameters.get("sslmode") != "verify-full"
+            or parameters.get("sslrootcert") != URL.query["sslrootcert"]):
+        raise RuntimeError("Expected verified TLS for every API and Alembic test connection")
+    TLS_CONNECTIONS.append(True)
+
+
+# Check every real SQLAlchemy connection before any fixture/migration SQL runs.
+event.listen(Engine, "connect", verify_fixture_tls)
+
+
 class MigrationChainTests(unittest.TestCase):
+    @unittest.skipUnless(URL.query.get("sslmode") == "verify-full", "Run with --tls")
+    def test_tls_api_and_alembic_connections_are_verified(self):
+        before = len(TLS_CONNECTIONS)
+        command.upgrade(self.config, "head")
+        self.assertGreater(len(TLS_CONNECTIONS), before)
+        self.assertGreaterEqual(len(TLS_CONNECTIONS), 2)
+
     @contextmanager
     def session_migration_fixture(self):
         # This suite already verifies a newly created, disposable local database.
