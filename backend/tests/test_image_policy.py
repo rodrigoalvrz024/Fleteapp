@@ -73,6 +73,50 @@ class ImagePolicyTests(unittest.TestCase):
         self.assertFalse(result["blocked"])
         self.assertFalse(result["deployment_approved"])
 
+    def test_new_python_finding_is_not_covered_by_old_approval(self):
+        values = inputs()
+        new_finding = copy.deepcopy(values[0]["matches"][0])
+        new_finding["vulnerability"]["id"] = "CVE-2026-82049"
+        values[0]["matches"].append(new_finding)
+        original, result = evaluate(values)
+        self.assertEqual(original["counts"]["High"], 5)
+        self.assertEqual(result["remaining_counts"]["High"], 2)
+        self.assertTrue(result["blocked"])
+        self.assertNotIn("CVE-2026-82049",
+                         [row["id"] for row in result["recognized_corrections"]])
+        values[0]["matches"] = [new_finding]
+        with self.assertRaises(policy.reviewer.ReviewedFindingSetMismatch):
+            evaluate(values)
+
+    def test_drift_diagnoses_missing_findings_and_changed_binary_together(self):
+        values = inputs()
+        values[0]["matches"] = values[0]["matches"][-1:]
+        values[1]["xml_native_evidence"]["modules"]["pyexpat"]["sha256"] = "c" * 64
+        before = copy.deepcopy(values)
+        original = policy.audit.inspect_report(values[0], IMAGE)
+        drift = policy.evidence_drift(original["findings"], values[1])
+        self.assertEqual(drift["missing_reviewed_findings"], list(policy.reviewer.REVIEWED_CVES))
+        self.assertEqual(drift["changed_or_missing_modules"], ["pyexpat"])
+        self.assertEqual(drift["duplicate_reviewed_findings"], [])
+        self.assertFalse(drift["scanner_findings_waived"])
+        self.assertFalse(drift["deployment_approved"])
+        self.assertEqual(values, before)
+        with self.assertRaises(policy.reviewer.ReviewedFindingSetMismatch):
+            evaluate(values)
+
+    def test_drift_is_bounded_and_does_not_echo_untrusted_evidence(self):
+        for evidence in (None, [], "never-print", {"xml_native_evidence": []},
+                         {"xml_native_evidence": {"modules": {"never-print": "secret"}}}):
+            drift = policy.evidence_drift([], evidence)
+            self.assertEqual(drift["changed_or_missing_modules"], list(policy.reviewer.MODULE_HASHES))
+            self.assertNotIn("never-print", json.dumps(drift))
+            self.assertNotIn("secret", json.dumps(drift))
+        values = inputs()
+        original = policy.audit.inspect_report(values[0], IMAGE)
+        drift = policy.evidence_drift(original["findings"] * 2, values[1])
+        self.assertEqual(drift["duplicate_reviewed_findings"], list(policy.reviewer.REVIEWED_CVES))
+        self.assertEqual(drift["changed_or_missing_modules"], [])
+
     def test_other_severities_and_eol_remain_unapproved(self):
         for severity in policy.audit.SEVERITIES:
             values = inputs()
@@ -202,6 +246,9 @@ class ImagePolicyTests(unittest.TestCase):
                 self.assertIn('"deployment_approved": false', captured.getvalue())
                 self.assertNotIn("never-print", captured.getvalue())
                 self.assertNotIn("::error::injected", captured.getvalue())
+                if failure == "absent_and_hash":
+                    self.assertIn('"changed_or_missing_modules": ["pyexpat"]', captured.getvalue())
+                    self.assertIn('"missing_reviewed_findings": ["CVE-2026-3644", "CVE-2026-4224", "CVE-2026-7210"]', captured.getvalue())
 
 
 class PolicyWorkflowTests(unittest.TestCase):

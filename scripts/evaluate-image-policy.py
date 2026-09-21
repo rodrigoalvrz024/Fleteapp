@@ -51,6 +51,29 @@ def read_json(path, max_bytes):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
+def evidence_drift(findings, backports):
+    """Explain independent mismatches without approving or echoing evidence."""
+    counts = {cve: sum(row["id"] == cve for row in findings)
+              for cve in reviewer.REVIEWED_CVES}
+    modules = {}
+    if isinstance(backports, dict):
+        native = backports.get("xml_native_evidence")
+        if isinstance(native, dict) and isinstance(native.get("modules"), dict):
+            modules = native["modules"]
+    changed_modules = [name for name, digest in reviewer.MODULE_HASHES.items()
+                       if not isinstance(modules.get(name), dict)
+                       or modules[name].get("sha256") != digest]
+    return {
+        "status": "diagnostic_only_not_approval",
+        "reviewed_finding_counts": counts,
+        "missing_reviewed_findings": [cve for cve, count in counts.items() if count == 0],
+        "duplicate_reviewed_findings": [cve for cve, count in counts.items() if count > 1],
+        "changed_or_missing_modules": changed_modules,
+        "scanner_findings_waived": False,
+        "deployment_approved": False,
+    }
+
+
 def annotation(title, value, level="notice"):
     encoded = json.dumps(value, ensure_ascii=True).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
     print(f"::{level} title={title}::{encoded}")
@@ -78,8 +101,15 @@ def main(argv=None):
         if args.github_annotation:
             for index, payload in enumerate(audit.annotation_payloads(original)):
                 annotation("Image vulnerability audit" if index == 0 else f"Image vulnerability details {index}", payload)
+        backports = read_json(args.backports, 1024 * 1024)
+        drift = evidence_drift(original["findings"], backports)
+        if (drift["missing_reviewed_findings"] or drift["duplicate_reviewed_findings"]
+                or drift["changed_or_missing_modules"]):
+            print(json.dumps({"evidence_drift": drift}, ensure_ascii=True))
+            if args.github_annotation:
+                annotation("Python approval evidence drift (not approval)", drift)
         _, policy = evaluate(report,
-                                    read_json(args.backports, 1024 * 1024),
+                                    backports,
                                     read_json(args.trace, 1024 * 1024),
                                     image_id=args.image_id, commit=args.commit, run_id=args.run_id)
         if args.summary:

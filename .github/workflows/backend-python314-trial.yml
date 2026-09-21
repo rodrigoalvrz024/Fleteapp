@@ -17,6 +17,76 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  postgres-integration:
+    name: Disposable PostgreSQL permissions and TLS (no deploy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout tests without persistent credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pinned Python for database integration
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.7'
+
+      - name: Prepare isolated dependencies and verify local PostgreSQL tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -u)" -ne 0
+          pg_bin=/usr/lib/postgresql/16/bin
+          test -x "$pg_bin/initdb"
+          test -x "$pg_bin/pg_ctl"
+          "$pg_bin/postgres" --version | grep -E '^postgres \(PostgreSQL\) 16\.'
+          python -I -c 'import sys; assert sys.version_info[:3] == (3,14,7) and sys.version_info.releaselevel == "final"'
+          python -m venv .local-tools/linux-pg-venv
+          .local-tools/linux-pg-venv/bin/python -m pip install --no-cache-dir --only-binary=:all: \
+            pip==26.2.1 setuptools==84.0.0 wheel==0.48.0
+          .local-tools/linux-pg-venv/bin/python -m pip install --no-cache-dir --only-binary=:all: -r backend/requirements.txt
+          .local-tools/linux-pg-venv/bin/python -m pip check
+          printf '## Disposable Linux PostgreSQL integration\nCommit: `%s`\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          "$pg_bin/postgres" --version >> "$GITHUB_STEP_SUMMARY"
+          .local-tools/linux-pg-venv/bin/python --version >> "$GITHUB_STEP_SUMMARY"
+          printf '\nHost-runner tests, not approval of the runtime image or production. No external database.\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test isolation and POSIX permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 120s \
+            .local-tools/linux-pg-venv/bin/python -B -m unittest discover \
+            -s backend/tests -p test_isolated_postgres_runner.py -v
+
+      - name: Test HTTP permissions payments TLS and empty-schema migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 360s \
+            .local-tools/linux-pg-venv/bin/python -u -B scripts/test-supabase-rls-isolated.py \
+            --pg-bin /usr/lib/postgresql/16/bin --http --tls --migrations
+          printf '\nEmpty-schema, HTTP/WebSocket and verified-TLS integration: passed.\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test legacy-schema migration with verified TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 240s \
+            .local-tools/linux-pg-venv/bin/python -u -B scripts/test-supabase-rls-isolated.py \
+            --pg-bin /usr/lib/postgresql/16/bin --tls --migrations --migration-start models
+          printf '\nLegacy-schema verified-TLS migration: passed. No deployment approval.\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check disposable clusters were removed
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -d .local-tools/rls-tests; then
+            test -z "$(find .local-tools/rls-tests -mindepth 1 -maxdepth 1 -print -quit)"
+          fi
+
   compatibility:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

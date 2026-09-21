@@ -90,5 +90,57 @@ class Python314TrialConfigurationTests(unittest.TestCase):
             self.assertNotIn(forbidden, self.raw)
 
 
+class PostgresIntegrationConfigurationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = ROOT / ".github/workflows/backend-python314-trial.yml"
+        if not path.exists():
+            raise unittest.SkipTest("Repository-only integration configuration")
+        cls.raw = path.read_text(encoding="utf-8")
+        cls.config = yaml.load(cls.raw, Loader=yaml.BaseLoader)
+        cls.job = cls.config["jobs"]["postgres-integration"]
+        cls.steps = cls.job["steps"]
+
+    def step(self, prefix):
+        return next(step for step in self.steps if step["name"].startswith(prefix))
+
+    def test_runs_independently_of_blocked_image_with_readonly_permissions(self):
+        self.assertNotIn("needs", self.job)
+        self.assertEqual(self.job["runs-on"], "ubuntu-24.04")
+        self.assertEqual(self.job["timeout-minutes"], "15")
+        self.assertEqual(self.config["permissions"], {"contents": "read"})
+        self.assertEqual(self.steps[0]["with"]["persist-credentials"], "false")
+        for forbidden in ("${{ secrets.", "railway", "docker push", "continue-on-error", "sudo "):
+            self.assertNotIn(forbidden, yaml.dump(self.job))
+
+    def test_python_action_is_pinned_and_dependencies_are_isolated(self):
+        step = self.step("Set up pinned")
+        self.assertEqual(step["uses"], "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1")
+        self.assertEqual(step["with"]["python-version"], "3.14.7")
+        command = self.step("Prepare isolated")["run"]
+        for required in ('test "$(id -u)" -ne 0', "python -m venv .local-tools/linux-pg-venv",
+                         "--only-binary=:all:", "-r backend/requirements.txt", "-m pip check",
+                         "pg_bin=/usr/lib/postgresql/16/bin", "Host-runner tests, not approval"):
+            self.assertIn(required, command)
+
+    def test_both_migration_paths_use_disposable_verified_tls(self):
+        command = self.step("Test HTTP permissions")["run"]
+        self.assertIn("--http --tls --migrations", command)
+        legacy = self.step("Test legacy-schema")["run"]
+        self.assertIn("--tls --migrations --migration-start models", legacy)
+        for command in (command, legacy):
+            self.assertIn("scripts/test-supabase-rls-isolated.py", command)
+            self.assertIn("--pg-bin /usr/lib/postgresql/16/bin", command)
+            self.assertIn("timeout --signal=TERM --kill-after=10s", command)
+            self.assertNotIn("DATABASE_URL", command)
+            self.assertNotIn("|| true", command)
+
+    def test_cleanup_is_checked_even_after_failures(self):
+        step = self.step("Check disposable")
+        self.assertEqual(step["if"], "${{ always() }}")
+        self.assertIn('test -z "$(find .local-tools/rls-tests', step["run"])
+        self.assertNotIn("rm ", step["run"])
+
+
 if __name__ == "__main__":
     unittest.main()

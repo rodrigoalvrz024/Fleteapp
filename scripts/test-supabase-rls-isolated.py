@@ -1,6 +1,7 @@
 """Exercise the RLS migration on a disposable, loopback-only PostgreSQL cluster."""
 
 import argparse
+from contextlib import contextmanager
 import importlib.util
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import unittest
 
@@ -31,6 +33,74 @@ def load_module(name, path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def isolated_environment(environment):
+    return {key: value for key, value in environment.items()
+            if key.upper() in {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP"}}
+
+
+def python_worker_environment(environment):
+    result = isolated_environment(environment)
+    if sys.platform == "linux" and sysconfig.get_config_var("Py_ENABLE_SHARED"):
+        # setup-python may need libpython outside the system loader path.
+        # Derive only the running interpreter's own library directory, never LD_* input.
+        prefix = Path(sys.base_prefix).resolve(strict=True)
+        directory = Path(sysconfig.get_config_var("LIBDIR")).resolve(strict=True)
+        name = sysconfig.get_config_var("LDLIBRARY")
+        if not isinstance(name, str) or Path(name).name != name:
+            raise RuntimeError("Invalid Python runtime library name")
+        library = (directory / name).resolve(strict=True)
+        if (not directory.is_relative_to(prefix) or not library.is_relative_to(directory)
+                or not library.is_file()):
+            raise RuntimeError("Python worker libraries must belong to its runtime")
+        result["LD_LIBRARY_PATH"] = str(directory)
+    return result
+
+
+def verify_worker_python():
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", "import ssl, psycopg2, sqlalchemy, cryptography"],
+        env=python_worker_environment(os.environ), stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+    if result.returncode:
+        raise RuntimeError("Isolated Python worker preflight failed; no cluster created")
+
+
+@contextmanager
+def isolated_process_environment():
+    # This CLI is single-threaded; libpq in the parent must not inherit PG* either.
+    original = dict(os.environ)
+    try:
+        os.environ.clear()
+        os.environ.update(isolated_environment(original))
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
+
+
+def postgres_executables(directory, platform=None):
+    platform = os.name if platform is None else platform
+    if platform not in {"nt", "posix"}:
+        raise ValueError("Unsupported PostgreSQL test platform")
+    base = directory.resolve(strict=True)
+    suffix = ".exe" if platform == "nt" else ""
+    binaries = {name: base / (name + suffix) for name in ("initdb", "pg_ctl")}
+    if not base.is_dir() or not all(path.is_file() for path in binaries.values()):
+        raise ValueError("Both PostgreSQL test executables must exist")
+    return binaries
+
+
+def configure_loopback(data, port):
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("Invalid disposable PostgreSQL port")
+    # No shared Unix socket: both platforms use authenticated loopback TCP only.
+    with (data / "postgresql.conf").open("a", encoding="ascii") as config:
+        config.write("\nlisten_addresses = '127.0.0.1'\n"
+                     f"port = {port}\nunix_socket_directories = ''\n")
 
 
 def prepare_tls_fixture(data):
@@ -206,7 +276,7 @@ class AccessTests(unittest.TestCase):
         self.assertTrue(self.cursor.fetchone()[0])
 
 
-def main():
+def run_disposable_tests():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pg-bin", required=True, type=Path)
     parser.add_argument("--http", action="store_true", help="Also test real HTTP routes and the complete model schema with synthetic data.")
@@ -217,6 +287,10 @@ def main():
     args = parser.parse_args()
     if args.migration_start != "empty" and not args.migrations:
         parser.error("--migration-start requires --migrations")
+    if os.name == "posix" and os.geteuid() == 0:
+        parser.error("Run disposable PostgreSQL as a non-root user")
+    verify_worker_python()
+    binaries = postgres_executables(args.pg_bin)
     scratch = (ROOT / ".local-tools" / "rls-tests").resolve()
     if not scratch.is_relative_to(ROOT.resolve()):
         raise RuntimeError("Temporary cluster directory must stay inside the workspace.")
@@ -226,10 +300,11 @@ def main():
     password = secrets.token_urlsafe(32)
     password_file = run_dir / "password.txt"
     password_file.write_text(password, encoding="ascii")
+    password_file.chmod(0o600)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    child_env = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+    child_env = isolated_environment(os.environ)
     hidden = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
     def pg(name, *arguments):
@@ -237,7 +312,7 @@ def main():
         log_file = run_dir / (name + ".log")
         with log_file.open("a", encoding="utf8") as output:
             result = subprocess.run(
-                [str(args.pg_bin / name), *map(str, arguments)],
+                [str(binaries[name]), *map(str, arguments)],
                 env=child_env, creationflags=hidden, stdin=subprocess.DEVNULL,
                 stdout=output, stderr=subprocess.STDOUT, timeout=60,
             )
@@ -248,13 +323,14 @@ def main():
 
     engine = None
     try:
-        pg("initdb.exe", "-D", data, "-U", "muvv_test_superuser", "--auth=scram-sha-256",
+        pg("initdb", "-D", data, "-U", "muvv_test_superuser", "--auth=scram-sha-256",
            "--pwfile", password_file, "--encoding=UTF8", "--locale=C")
+        configure_loopback(data, port)
         if args.tls:
             prepare_tls_fixture(data)
-        pg("pg_ctl.exe", "-D", data, "-l", run_dir / "server.log", "-o",
-           f"-h 127.0.0.1 -p {port}", "-w", "-t", "30", "start")
-        options = dict(host="127.0.0.1", port=port, dbname="postgres",
+        pg("pg_ctl", "-D", data, "-l", run_dir / "server.log",
+           "-w", "-t", "30", "start")
+        options = dict(host="127.0.0.1", hostaddr="127.0.0.1", port=port, dbname="postgres",
                        user="muvv_test_superuser", password=password, connect_timeout=5,
                        options="-c statement_timeout=10000 -c lock_timeout=5000")
         with psycopg2.connect(**options) as conn:
@@ -279,7 +355,7 @@ def main():
                 "postgresql+psycopg2", username=options["user"], password=password,
                 host=options["host"], port=port, database="postgres",
             ),
-            connect_args={"connect_timeout": 5, "options": options["options"]},
+            connect_args={"hostaddr": "127.0.0.1", "connect_timeout": 5, "options": options["options"]},
         )
         with engine.begin() as conn:
             conn.exec_driver_sql("SET LOCAL ROLE muvv_backend_owner")
@@ -293,8 +369,7 @@ def main():
         if not result.wasSuccessful():
             return 1
         if args.tls:
-            tls_env = {key: value for key, value in os.environ.items()
-                       if key.upper() in {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP"}}
+            tls_env = python_worker_environment(os.environ)
             tls_env.update(
                 PYTHONIOENCODING="utf-8", MUVV_ISOLATED_TLS_TEST="1",
                 MUVV_TLS_FIXTURE=str(data),
@@ -331,8 +406,7 @@ def main():
                     ))
             finally:
                 conn.close()
-            migration_env = {key: value for key, value in os.environ.items()
-                             if key.upper() in {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP"}}
+            migration_env = python_worker_environment(os.environ)
             migration_env.update(
                 PYTHONPATH=str(ROOT / "backend"), PYTHONIOENCODING="utf-8",
                 APP_ENV="test", RUN_STARTUP_MIGRATIONS="false",
@@ -372,8 +446,7 @@ def main():
             finally:
                 conn.close()
             # No inherited app credentials or .env: the worker runs in the new scratch directory.
-            http_env = {key: value for key, value in os.environ.items()
-                        if key.upper() in {"SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP"}}
+            http_env = python_worker_environment(os.environ)
             http_env.update(
                 PYTHONPATH=str(ROOT / "backend"), PYTHONIOENCODING="utf-8",
                 APP_ENV="test", RUN_STARTUP_MIGRATIONS="false",
@@ -398,12 +471,17 @@ def main():
         if engine is not None:
             engine.dispose()
         if (data / "postmaster.pid").exists():
-            pg("pg_ctl.exe", "-D", data, "-m", "fast", "-w", "-t", "30", "stop")
+            pg("pg_ctl", "-D", data, "-m", "fast", "-w", "-t", "30", "stop")
         # Only delete the newly created test cluster, never an existing database.
         if run_dir.parent != scratch or not run_dir.name.startswith("run-"):
             raise RuntimeError("Unexpected temporary cluster path; cleanup refused.")
         shutil.rmtree(run_dir)
         print("Disposable cluster stopped and removed. No external database used.")
+
+
+def main():
+    with isolated_process_environment():
+        return run_disposable_tests()
 
 
 if __name__ == "__main__":
