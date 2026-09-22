@@ -211,7 +211,9 @@ class HttpPermissionTests(unittest.TestCase):
                     service_type="moving" if moving else "package", selected_vehicle_type="truck_medium" if moving else "van",
                     distance_km=5, estimated_price=50000 if moving else 12000,
                     client_pays=50000 if moving else 12000, driver_receives=10000, platform_fee=2000,
-                    scheduled_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+                    estimated_duration_minutes=30,
+                    scheduled_at=datetime.now(timezone.utc) + timedelta(
+                        minutes=10, days=1 if status == "pending" else 0),
                 )
                 db.add(freight)
                 db.flush()
@@ -585,6 +587,76 @@ class HttpPermissionTests(unittest.TestCase):
         self.assert_status(self.request("POST", "/freights/103/decline", user=3), 200)
         self.assertEqual(self.request("GET", "/freights?status=available", user=3).json(), [])
         self.assert_status(self.request("PUT", "/freights/103/accept", user=3), 409)
+
+    def accept_with_observed_lock_contention(self, entity, first_request, second_request):
+        locked = threading.Event()
+        release = threading.Event()
+        real_lock = freights.lock_first
+        holder_pid = []
+
+        def hold_first_lock(query):
+            row = real_lock(query)
+            if query.column_descriptions[0]["entity"] is entity and not locked.is_set():
+                holder_pid.append(query.session.execute(text("SELECT pg_backend_pid()")).scalar_one())
+                locked.set()
+                if not release.wait(timeout=10):
+                    raise RuntimeError("Synthetic lock coordination timed out")
+            return row
+
+        with patch.object(freights, "lock_first", side_effect=hold_first_lock), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(first_request)
+            try:
+                self.assertTrue(locked.wait(timeout=5))
+                second = pool.submit(second_request)
+                blocked = False
+                deadline = time.monotonic() + 3
+                # Observe a real PostgreSQL lock wait, not merely simultaneous HTTP calls.
+                while time.monotonic() < deadline:
+                    with engine.connect() as conn:
+                        blocked = conn.execute(text(
+                            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                            "WHERE datname=current_database() AND usename=current_user "
+                            "AND wait_event_type='Lock' "
+                            "AND :holder_pid=ANY(pg_blocking_pids(pid)))"
+                        ), {"holder_pid": holder_pid[0]}).scalar_one()
+                    if blocked:
+                        break
+                    time.sleep(0.02)
+                self.assertTrue(blocked, "Second acceptance must wait on the database row lock")
+                self.assertFalse(second.done())
+            finally:
+                release.set()
+            return [first.result(timeout=10), second.result(timeout=10)]
+
+    def test_concurrent_overlapping_bookings_for_one_driver_have_one_winner(self):
+        with SessionLocal() as db:
+            db.query(Payment).filter(Payment.freight_id == 104).update(
+                {"status": PaymentStatus.authorized})
+            db.commit()
+        def accept(fid):
+            return self.request("PUT", f"/freights/{fid}/accept", user=3,
+                                json={"vehicle_id": 30})
+
+        responses = self.accept_with_observed_lock_contention(
+            Driver, lambda: accept(103), lambda: accept(104))
+        self.assertEqual(sorted(r.status_code for r in responses), [200, 409])
+        with SessionLocal() as db:
+            self.assertEqual(db.query(FreightRequest).filter(
+                FreightRequest.id.in_([103, 104]), FreightRequest.driver_id == 30,
+                FreightRequest.status == FreightStatus.accepted).count(), 1)
+
+    def test_concurrent_drivers_accepting_same_offer_have_one_winner(self):
+        def accept(user):
+            return self.request("PUT", "/freights/103/accept", user=user,
+                                json={"vehicle_id": user * 10})
+
+        responses = self.accept_with_observed_lock_contention(
+            FreightRequest, lambda: accept(3), lambda: accept(4))
+        self.assertEqual(sorted(r.status_code for r in responses), [200, 400])
+        with SessionLocal() as db:
+            self.assertEqual(db.query(AuditEvent).filter(
+                AuditEvent.entity_id == "103", AuditEvent.event_type == "freight.accepted").count(), 1)
 
     def prepare_pickup_home_office(self):
         with SessionLocal() as db:

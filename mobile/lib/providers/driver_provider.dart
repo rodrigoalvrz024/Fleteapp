@@ -5,6 +5,7 @@ import '../models/freight_model.dart';
 import '../services/driver_onboarding_service.dart';
 import '../services/driver_live_location_service.dart';
 import '../services/freight_service.dart';
+import '../utils/api_error_message.dart';
 
 class DriverState {
   final bool isOnline;
@@ -59,12 +60,16 @@ class DriverState {
 }
 
 class DriverNotifier extends StateNotifier<DriverState> {
-  final FreightService _service = FreightService();
+  final FreightService _service;
   final DriverOnboardingService _driverService = DriverOnboardingService();
   Timer? _pollingTimer;
   final Set<int> _seenFreightIds = {};
+  bool _fetchingOffers = false;
+  int _offersGeneration = 0;
 
-  DriverNotifier() : super(const DriverState());
+  DriverNotifier({FreightService? freightService})
+      : _service = freightService ?? FreightService(),
+        super(const DriverState());
 
   // ── Online/Offline ──────────────────────────────────────
 
@@ -140,14 +145,16 @@ class DriverNotifier extends StateNotifier<DriverState> {
   // ── Polling ─────────────────────────────────────────────
 
   void _startPolling() {
+    _stopPolling();
     _fetchFreights();
     _pollingTimer = Timer.periodic(
-      const Duration(seconds: 15),
+      const Duration(seconds: 5),
       (_) => _fetchFreights(),
     );
   }
 
   void _stopPolling() {
+    _offersGeneration++;
     _pollingTimer?.cancel();
     _pollingTimer = null;
   }
@@ -189,13 +196,23 @@ class DriverNotifier extends StateNotifier<DriverState> {
   }
 
   Future<void> _fetchFreights() async {
-    if (!state.isOnline) return;
+    if (!mounted || !state.isOnline || _fetchingOffers) return;
+    _fetchingOffers = true;
+    final generation = _offersGeneration;
     try {
       final list = await _service.listFreights(status: 'available');
+      if (!mounted || !state.isOnline || generation != _offersGeneration) {
+        return;
+      }
       final newOnes =
           list.where((f) => !_seenFreightIds.contains(f.id)).toList();
 
-      state = state.copyWith(availableFreights: list);
+      final incoming = state.incomingFreight;
+      state = state.copyWith(
+        availableFreights: list,
+        clearIncoming:
+            incoming != null && !list.any((f) => f.id == incoming.id),
+      );
 
       // Present one available request at a time. Dismissed requests stay hidden
       // for this online session while the driver reviews the next one.
@@ -203,7 +220,16 @@ class DriverNotifier extends StateNotifier<DriverState> {
         state = state.copyWith(incomingFreight: newOnes.first);
         _seenFreightIds.add(newOnes.first.id);
       }
-    } catch (_) {}
+    } catch (_) {
+      if (!mounted || !state.isOnline || generation != _offersGeneration) {
+        return;
+      }
+      // Do not keep an actionable offer when its availability cannot be checked.
+      _seenFreightIds.remove(state.incomingFreight?.id);
+      state = state.copyWith(availableFreights: [], clearIncoming: true);
+    } finally {
+      _fetchingOffers = false;
+    }
   }
 
   Future<void> refreshFreights() => _fetchFreights();
@@ -239,7 +265,14 @@ class DriverNotifier extends StateNotifier<DriverState> {
       );
       _stopPolling();
       return true;
-    } catch (_) {
+    } catch (error) {
+      state = state.copyWith(
+          error: apiErrorMessage(
+        error,
+        fallback:
+            'No pudimos aceptar el flete. Actualiza e intenta nuevamente.',
+      ));
+      await refreshFreights();
       return false;
     }
   }

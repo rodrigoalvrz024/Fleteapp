@@ -37,6 +37,11 @@ from app.schemas.freight import (
 )
 from app.services.audit_service import record_audit_event
 from app.services.driver_operational_service import require_driver_can_operate
+from app.services.freight_dispatch_service import (
+    driver_assignments,
+    freight_is_open_offer,
+    schedule_conflicts,
+)
 from app.services.freight_matching_service import (
     compatible_vehicles,
     driver_matches_freight,
@@ -98,10 +103,7 @@ def _require_freight_view_access(
             and freight.driver_id is None
         ):
             require_driver_can_operate(driver)
-            if (
-                not freight.payment
-                or freight.payment.status != PaymentStatus.authorized
-            ):
+            if not freight_is_open_offer(freight):
                 raise HTTPException(status_code=404, detail="Flete no disponible")
             was_declined = (
                 db.query(FreightDriverDecline.id)
@@ -115,6 +117,8 @@ def _require_freight_view_access(
                 raise HTTPException(status_code=403, detail="Ya rechazaste este flete")
             if not driver_matches_freight(driver, freight):
                 raise HTTPException(status_code=403, detail="Tu vehiculo no es compatible con este flete")
+            if schedule_conflicts(freight, driver_assignments(db, driver.id)):
+                raise HTTPException(status_code=409, detail="Este flete se cruza con otro servicio de tu agenda")
             return
     raise HTTPException(status_code=403, detail="No tienes permiso para ver este flete")
 
@@ -500,7 +504,13 @@ def list_freights(
         query = query.filter(FreightRequest.status == status)
     freights = query.order_by(FreightRequest.created_at.desc()).all()
     if current_user.role == UserRole.driver and status == "available" and driver:
-        return [freight for freight in freights if driver_matches_freight(driver, freight)]
+        assignments = driver_assignments(db, driver.id)
+        return [
+            freight for freight in freights
+            if freight_is_open_offer(freight)
+            and driver_matches_freight(driver, freight)
+            and not schedule_conflicts(freight, assignments)
+        ]
     return freights
 
 @router.get("/{freight_id}", response_model=FreightResponse)
@@ -928,27 +938,26 @@ def accept_freight(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("driver")),
 ):
-    driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
+    # Serialize bookings for the same driver, even for two different freights.
+    driver = lock_first(db.query(Driver).filter(Driver.user_id == current_user.id))
     if not driver or driver.status != DriverStatus.approved:
         raise HTTPException(status_code=403, detail="Conductor no aprobado")
     require_driver_can_operate(driver)
 
-    freight_candidate = (
+    freight_candidate = lock_first(
         db.query(FreightRequest)
         .filter(
             FreightRequest.id == freight_id,
             FreightRequest.status == FreightStatus.pending,
             FreightRequest.driver_id.is_(None),
         )
-        .first()
     )
     if not freight_candidate:
         raise HTTPException(status_code=400, detail="Flete no disponible")
-    if (
-        not freight_candidate.payment
-        or freight_candidate.payment.status != PaymentStatus.authorized
-    ):
+    if not freight_is_open_offer(freight_candidate):
         raise HTTPException(status_code=400, detail="El pago del cliente aun no esta confirmado")
+    if schedule_conflicts(freight_candidate, driver_assignments(db, driver.id)):
+        raise HTTPException(status_code=409, detail="Este flete se cruza con otro servicio de tu agenda")
     candidates = compatible_vehicles(driver, freight_candidate)
     if not candidates:
         raise HTTPException(status_code=403, detail="No tienes un vehiculo aprobado compatible")

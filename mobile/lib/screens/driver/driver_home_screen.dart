@@ -11,6 +11,7 @@ import '../../core/theme/app_theme.dart';
 import '../../services/driver_live_location_service.dart';
 import '../../widgets/muvv_mobile_ui.dart';
 import '../../widgets/freight_cargo_safety_notice.dart';
+import '../../widgets/driver_offer_guard.dart';
 
 class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
@@ -520,6 +521,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
   Future<void> _showIncomingFreightOverlay(FreightModel freight) async {
     if (!mounted || _incomingOverlayOpen) return;
+    if (ref.read(driverProvider).incomingFreight?.id != freight.id) return;
     _incomingOverlayOpen = true;
     final action = await showGeneralDialog<_IncomingFreightAction>(
       context: context,
@@ -529,7 +531,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       transitionDuration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
           : AppTheme.motionStandard,
-      pageBuilder: (_, __, ___) => _IncomingFreightOverlay(freight: freight),
+      pageBuilder: (_, __, ___) => DriverOfferGuard(
+        freightId: freight.id,
+        child: _IncomingFreightOverlay(freight: freight),
+      ),
       transitionBuilder: (_, animation, __, child) {
         final curve = CurvedAnimation(
           parent: animation,
@@ -553,6 +558,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     );
     if (!mounted || action == null) {
       _incomingOverlayOpen = false;
+      if (mounted) {
+        if (ref.read(driverProvider).incomingFreight?.id == freight.id) {
+          ref.read(driverProvider.notifier).dismissIncoming();
+        }
+        setState(() {});
+      }
       return;
     }
 

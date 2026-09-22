@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -13,15 +14,20 @@ import 'widgets/driver_app_bar_actions.dart';
 enum _AvailableFilter { all, urgent, scheduled }
 
 class AvailableFreightsScreen extends StatefulWidget {
-  const AvailableFreightsScreen({super.key});
+  final FreightService? freightService;
+  const AvailableFreightsScreen({super.key, this.freightService});
 
   @override
   State<AvailableFreightsScreen> createState() =>
       _AvailableFreightsScreenState();
 }
 
-class _AvailableFreightsScreenState extends State<AvailableFreightsScreen> {
-  final _service = FreightService();
+class _AvailableFreightsScreenState extends State<AvailableFreightsScreen>
+    with WidgetsBindingObserver {
+  late final _service = widget.freightService ?? FreightService();
+  Timer? _refreshTimer;
+  int _loadGeneration = 0;
+  bool _fetching = false;
   List<FreightModel> _freights = [];
   bool _loading = true;
   String? _error;
@@ -30,30 +36,64 @@ class _AvailableFreightsScreenState extends State<AvailableFreightsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _startRefresh();
   }
 
-  Future<void> _load() async {
+  void _startRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (ModalRoute.of(context)?.isCurrent == true) _load(silent: true);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load(silent: true);
+      _startRefresh();
+    } else {
+      _refreshTimer?.cancel();
+      _loadGeneration++;
+      _fetching = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!mounted || _fetching) return;
+    _fetching = true;
+    final generation = ++_loadGeneration;
     setState(() {
-      _loading = true;
+      if (!silent) _loading = true;
       _error = null;
     });
     try {
       final data = await _service.listFreights(status: 'available');
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _freights = data;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
+        _freights = [];
         _loading = false;
         _error = apiErrorMessage(
           e,
           fallback: 'No pudimos cargar los fletes disponibles.',
         );
       });
+    } finally {
+      if (generation == _loadGeneration) _fetching = false;
     }
   }
 
@@ -129,9 +169,11 @@ class _AvailableFreightsScreenState extends State<AvailableFreightsScreen> {
                   for (final freight in visibleFreights) ...[
                     _AvailableFreightCard(
                       freight: freight,
-                      onTap: () => context.push(
-                        '/app/driver/freights/${freight.id}',
-                      ),
+                      onTap: () async {
+                        await context
+                            .push('/app/driver/freights/${freight.id}');
+                        if (mounted) await _load(silent: true);
+                      },
                     ),
                     const SizedBox(height: 10),
                   ],

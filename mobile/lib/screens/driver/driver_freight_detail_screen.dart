@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -17,27 +19,70 @@ import 'widgets/driver_app_bar_actions.dart';
 
 class DriverFreightDetailScreen extends StatefulWidget {
   final int freightId;
-  const DriverFreightDetailScreen({super.key, required this.freightId});
+  final FreightService? freightService;
+  const DriverFreightDetailScreen(
+      {super.key, required this.freightId, this.freightService});
   @override
   State<DriverFreightDetailScreen> createState() =>
       _DriverFreightDetailScreenState();
 }
 
-class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
-  final _service = FreightService();
+class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen>
+    with WidgetsBindingObserver {
+  late final _service = widget.freightService ?? FreightService();
+  Timer? _offerTimer;
+  int _loadGeneration = 0;
+  bool _fetching = false;
+  bool _watchOffer = true;
   FreightModel? _freight;
   bool _loading = true;
   bool _actionLoading = false;
+  String? _loadError;
   List<String> _cargoPhotoUrls = const [];
   static const int _maxEvidenceBytes = 8 * 1024 * 1024;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _startOfferRefresh();
+  }
+
+  void _startOfferRefresh() {
+    _offerTimer?.cancel();
+    _offerTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_actionLoading &&
+          _watchOffer &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          !_fetching) {
+        _load();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _load();
+      _startOfferRefresh();
+    } else {
+      _offerTimer?.cancel();
+      _loadGeneration++;
+      _fetching = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _offerTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _load() async {
+    final generation = ++_loadGeneration;
+    _fetching = true;
     try {
       final f = await _service.getFreight(widget.freightId);
       var cargoPhotoUrls = const <String>[];
@@ -48,9 +93,11 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
           // The details still render if a short-lived photo link is unavailable.
         }
       }
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _freight = f;
+        _watchOffer = f.status == 'pending';
+        _loadError = null;
         _cargoPhotoUrls = cargoPhotoUrls;
         _loading = false;
       });
@@ -64,10 +111,22 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
           clearServer: false,
         );
       }
-    } catch (_) {
+    } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
+        if (_freight == null || _freight?.status == 'pending') {
+          final status =
+              error is DioException ? error.response?.statusCode : null;
+          _watchOffer = ![401, 403, 404, 409].contains(status);
+        }
+        if (_freight?.status == 'pending') _freight = null;
+        _loadError = apiErrorMessage(error,
+            fallback:
+                'No pudimos comprobar esta solicitud. Revisa tu conexion e intenta nuevamente.');
         _loading = false;
       });
+    } finally {
+      if (generation == _loadGeneration) _fetching = false;
     }
   }
 
@@ -95,6 +154,8 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
     setState(() {
       _actionLoading = true;
     });
+    _loadGeneration++;
+    _fetching = false;
     try {
       final confirmed = await confirmFreightCargoSafety(context, freight);
       if (!mounted || !confirmed) return;
@@ -124,9 +185,14 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Error al aceptar'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                apiErrorMessage(e, fallback: 'No pudimos aceptar este flete.')),
             backgroundColor: AppTheme.error));
+        if (e is DioException &&
+            [400, 403, 404, 409].contains(e.response?.statusCode)) {
+          await _load();
+        }
       }
     } finally {
       if (mounted) {
@@ -327,15 +393,17 @@ class _DriverFreightDetailScreenState extends State<DriverFreightDetailScreen> {
       );
     }
     if (_freight == null) {
-      return const WebPageScaffold(
+      return WebPageScaffold(
         title: 'Detalle de flete',
-        actions: [DriverAppBarActions()],
+        actions: const [DriverAppBarActions()],
         child: WebPageBody(
           children: [
             WebEmptyState(
               icon: Icons.search_off_rounded,
-              title: 'No encontrado',
-              description: 'No pudimos cargar esta solicitud.',
+              title: 'Solicitud no disponible',
+              description: _loadError ?? 'No pudimos cargar esta solicitud.',
+              actionLabel: 'Actualizar',
+              onAction: _load,
             ),
           ],
         ),

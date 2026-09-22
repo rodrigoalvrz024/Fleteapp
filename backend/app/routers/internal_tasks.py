@@ -5,9 +5,10 @@ from app.core.config import settings
 from app.core.task_auth import verify_cloud_tasks_request
 from app.database import get_db
 from app.models.audit_event import AuditEvent
-from app.models.freight import FreightRequest, FreightStatus
+from app.models.freight import FreightRequest
 from app.services.audit_service import record_audit_event
 from app.services.notification_service import send_notification_to_drivers
+from app.services.freight_dispatch_service import freight_is_open_offer
 
 router = APIRouter(
     prefix="/internal/tasks",
@@ -38,7 +39,7 @@ async def notify_drivers_for_freight(
     freight = db.query(FreightRequest).filter(FreightRequest.id == freight_id).first()
     if not freight:
         return {"status": "skipped", "reason": "freight_not_found"}
-    if freight.status != FreightStatus.pending or freight.driver_id is not None:
+    if not freight_is_open_offer(freight):
         return {"status": "skipped", "reason": "freight_not_available"}
 
     existing = (

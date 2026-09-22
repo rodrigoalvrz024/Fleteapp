@@ -73,7 +73,7 @@ async def send_notification_to_drivers(
 ) -> int:
     from app.models.driver import Driver, DriverStatus
     from app.models.user import User
-    from app.services.freight_matching_service import driver_matches_freight
+    from app.services.freight_dispatch_service import driver_can_receive_offer, freight_is_open_offer
 
     drivers = (
         db.query(Driver)
@@ -81,15 +81,24 @@ async def send_notification_to_drivers(
             Driver.status == DriverStatus.approved,
             Driver.is_available == True,  # noqa: E712
         )
+        .order_by(Driver.id)
         .all()
     )
 
     sent = 0
     for driver in drivers:
-        if freight is not None and not driver_matches_freight(driver, freight):
-            continue
+        if freight is not None:
+            # A queued notification may run after acceptance, cancellation or refund.
+            db.refresh(freight)
+            db.expire(freight, ["payment"])
+            if not freight_is_open_offer(freight):
+                break
+            db.refresh(driver)
+            db.expire(driver, ["vehicles"])
+            if not driver_can_receive_offer(db, driver, freight):
+                continue
         user = db.query(User).filter(User.id == driver.user_id).first()
-        if user and user.fcm_token:
+        if user and user.is_active and user.deleted_at is None and user.fcm_token:
             if await send_push_notification(user.fcm_token, title, body, data):
                 sent += 1
     return sent

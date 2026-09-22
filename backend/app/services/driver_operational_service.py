@@ -59,6 +59,8 @@ def build_driver_operational_blockers(
 
 
 def driver_operational_blockers(driver: Driver) -> list[str]:
+    if driver.deleted_at is not None:
+        return ["Conductor no disponible"]
     return build_driver_operational_blockers(
         status=driver.status,
         has_vehicle=any(vehicle_is_approved(vehicle) for vehicle in driver.vehicles),

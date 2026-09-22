@@ -49,6 +49,10 @@ class FreightAccessTests(unittest.TestCase):
         decline_query.filter.return_value.first.return_value = None
 
         def query(model):
+            if model is FreightRequest:
+                assignments = MagicMock()
+                assignments.filter.return_value.all.return_value = []
+                return assignments
             return (
                 decline_query
                 if getattr(model, "class_", None) is FreightDriverDecline

@@ -26,6 +26,7 @@ class PickupCargoSafetyTests(unittest.TestCase):
             id=109, service_type="home_office", selected_vehicle_type="pickup",
             recommended_vehicle_type="pickup", cargo_weight_kg=80,
             cargo_volume_m3=0.6, payment=SimpleNamespace(status=PaymentStatus.authorized),
+            deleted_at=None, status="pending", driver_id=None,
         )
         self.vehicle = _vehicle(VehicleType.pickup, weight=500, volume=2)
         self.vehicle.id = 10
@@ -99,6 +100,7 @@ class PickupCargoSafetyTests(unittest.TestCase):
         queries = [MagicMock() for _ in range(5)]
         for query in queries:
             query.filter.return_value = query
+            query.with_for_update.return_value = query
         queries[0].first.return_value = driver
         queries[1].first.return_value = self.freight
         queries[2].first.return_value = None
@@ -109,7 +111,15 @@ class PickupCargoSafetyTests(unittest.TestCase):
         queries[3].update.side_effect = assign_vehicle
         queries[4].first.return_value = self.freight
         db = MagicMock()
-        db.query.side_effect = queries
+        assignment_query = MagicMock()
+        assignment_query.filter.return_value.all.return_value = []
+        calls = iter(queries)
+        def query(model):
+            # The schedule query follows the locked driver and candidate reads.
+            if db.query.call_count == 3 and model is FreightRequest:
+                return assignment_query
+            return next(calls)
+        db.query.side_effect = query
         return db, queries
 
     @patch("app.routers.freights.require_driver_can_operate")
