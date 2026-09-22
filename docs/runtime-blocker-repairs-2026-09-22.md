@@ -49,6 +49,7 @@ includes tzdata. No runtime data is downloaded from another distribution.
 ## Local verification
 
 - Full backend suite: 496 tests, 493 passed, 3 pre-existing skips.
+  Follow-up suite after orphan-alias handling: 498 tests, 495 passed, 3 skips.
 - Policy suite: 19 tests passed, including raw/clean/High/Critical/EOL, expired
   historical approval, invalid identity, partial findings and duplicates.
 - Runtime-data suite: initially 6 tests, then 8 passed with bounded gzip and synthetic TZif files.
@@ -72,6 +73,36 @@ Follow-up handles a fully stripped document only under the exact preconditions
 above, and reports fixed diagnostic codes for known missing source paths. It
 does not silently accept corrupt data or redirect an unknown link. Linux must
 confirm the actual layout and outcome; this is not a vulnerability fix.
+
+## Completed Linux validation of 55e3a60
+
+Code commit: `55e3a601b7defe0259c07dc8359e91ffe204abd1`.
+
+- [DHI 35686100377](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35686100377):
+  image `sha256:e146c08d57b2f8fc61e9b99c11bc88b8955b0ef3e50590743b9f0f7a3c574ccd`.
+  Filesystem gate PASS: zero violations, 252 symlinks checked, UID/GID 65532,
+  zero process capabilities, no_new_privileges=1. Actual CMD/PID1 startup, six
+  unauthenticated-route checks, clean SIGTERM shutdown and refusal of UID 0 PASS.
+  The previously broken-link gate no longer prevents these checks from running.
+  Full scan remains BLOCKED: 0 Critical, 30 High, 36 Medium, 2 Low,
+  20 Negligible, 0 Unknown. These 30 High matches group 12 distinct CVEs and
+  15 CVE/package/version combinations. No findings waived.
+- [Classic 35686100407](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35686100407):
+  image `sha256:2d9c9f689ce527e9b2f2e7e9311ba799a8f22ab25b2f75ee72fb9c91dd61a10f`.
+  Policy now reports `not_applicable`, no approval and zero recognized corrections.
+  Original/remaining High both 45. No obsolete finding-set error; the scan
+  legitimately remains BLOCKED with 0 Critical, 45 High, 55 Medium, 7 Low,
+  44 Negligible and 1 Unknown.
+- [Python 3.14 35686100388](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35686100388):
+  image `sha256:63af8a8f745b891d086cc573db7241ceab4944c203ef754e678584e9d285b92e`.
+  PostgreSQL integration succeeded. Scan remains BLOCKED: 0 Critical, 44 High,
+  51 Medium, 7 Low, 43 Negligible and 1 Unknown.
+
+No deployment or APK installation performed. Main stayed at
+`590e8fec432f094619355dad89dcb068c4bd649f`. No paid service purchased; CI uses the
+existing GitHub Actions quota. Do not rebuild identical candidates to try to
+clear the remaining findings: require changed maintained packages or a reviewed,
+explicitly authorized per-advisory disposition first.
 
 ## Remaining release blockers
 
