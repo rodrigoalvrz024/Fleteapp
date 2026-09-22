@@ -211,3 +211,100 @@ clasico, Python 3.14 y DHI. No se modificaron workflows ni sus umbrales.
 Validacion final antes de publicar: 440 pruebas por interprete, 437 aprobadas
 y tres omitidas, tanto en Python 3.11 como en 3.14.7; 44 casos del verificador.
 Las cifras de 420/436 anteriores corresponden a estados intermedios del lote.
+
+## Resultado Linux del commit eb041fc
+
+Commit publicado: `eb041fc36f3eb16fb6ba4c378f17ce86f5a10e19`, solo en
+`codex/mvp-supabase-rls-review`. main permanece en
+`590e8fec432f094619355dad89dcb068c4bd649f`. Todas las corridas terminaron.
+
+| Evaluacion | Corrida | Resultado |
+| --- | --- | --- |
+| Clasica | [35673329997](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35673329997) | Build y tests aprobados; verificador bloquea; escaneo posterior omitido. |
+| DHI | [35673330001](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35673330001) | Build y tests aprobados; verificador bloquea; escaneo posterior omitido. |
+| Python 3.14 | [35673330055](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35673330055) | Build y tests aprobados; verificador y escaneo bloquean. |
+| PostgreSQL independiente | Job 106574458329 de Python 3.14 | Todos los pasos aprobados: HTTP, permisos, pagos de prueba, TLS, migraciones vacia/legado y limpieza. |
+
+No trasladar resultados de pasos omitidos desde corridas anteriores. En
+particular, los nuevos pasos de arranque posteriores al verificador y los
+inventarios nativos no se ejecutaron. No hay contador CVE nuevo de clasica/DHI.
+
+Python 3.14, imagen `sha256:cfad0f9de5ebb6ea156f8b2d54c57181e15d212b59f7ec2c37c49250593923c8`:
+Grype 0.118.0, Debian 13.7, 0 Critical, 44 High, 51 Medium, 7 Low,
+43 Negligible y 1 Unknown. El escaneo obligatorio se ejecuto aunque fallo el
+verificador. No hubo nuevas excepciones ni aprobacion de despliegue.
+
+El verificador examino 172 enlaces en cada candidata clasica/Python 3.14:
+
+- Cuatro `code_group_or_world_writable`: /usr/share/man/man1, man5, man7 y man8.
+  Son permisos de directorios de manuales; no se registro `code_writable_by_app`
+  para ellos. No describirlos como cuatro exploits o fallos de bibliotecas.
+- Dos `symlink_external_directory_unreviewed`: /usr/lib/ssl/certs y
+  /usr/lib/ssl/private. El bloqueo explicito esperado evita aprobar arboles
+  externos no inspeccionados; NO acredita una vulnerabilidad de certificados.
+
+DHI examino 253 enlaces: los mismos dos directorios SSL no revisados y dos
+`symlink_unresolved`, /usr/share/zoneinfo/localtime y /usr/share/doc/base-files/FAQ.
+La anotacion no distingue inexistente de inaccesible: no afirmar la causa
+exacta sin inspeccionar metadatos. No se leyeron contenidos de claves privadas.
+
+Las cuatro capacidades son cero y no_new_privs=1 en los tres verificadores.
+Esto solo describe esas invocaciones en CI, no el hosting ni los pasos omitidos.
+
+### Proxima correccion concreta
+
+1. Ajustar permisos de los cuatro directorios de manuales en la candidata,
+   conservando lectura/ejecucion necesarias; probar el cambio, no excluir el aviso.
+2. Definir una inspeccion acotada de las rutas SSL con metadatos solamente y
+   sin enumerar/leer claves privadas. No agregar una excepcion general /etc.
+3. Aclarar los dos enlaces DHI sin resolver antes de cualquier disposicion.
+4. Ejecutar un nuevo lote solo cuando exista un cambio real verificable;
+   mantener separados estos resultados y los 44 registros High del escaner.
+
+No se modificaron Dockerfiles, permisos del hosting, datos, APK ni Splash.
+Este registro posterior de resultados queda local para evitar otra corrida
+innecesaria. La conclusion sigue siendo NO-GO.
+
+## Lote local posterior: permisos de manuales y diagnostico de enlaces
+
+Alcance preparado, todavia sin commit/push ni construccion Linux de este lote:
+
+- `backend/Dockerfile` y `backend/Dockerfile.python314`: validacion previa de
+  ocho entradas (cuatro ascendientes y cuatro directorios man1/man5/man7/man8)
+  con lstat, tipo directorio real y propietario root. Solo despues se quitan
+  bits 0022 de los cuatro directorios. No se cambia contenido, propietario,
+  lectura/ejecucion ni el resto de /usr; no hay chmod recursivo nuevo.
+- `scripts/verify-runtime-image.py`: diagnosticos acotados a ocho enlaces y
+  rutas de origen de hasta 200 caracteres. Los errores de sistema se traducen
+  a categorias fijas missing/denied/not_directory/loop/io_error; no se publican
+  mensajes de excepciones, nombres de destinos arbitrarios ni valores de enlaces.
+  Los directorios externos solo informan categoria SSL conocida u otro,
+  propietario y modo. No se enumeran ni se leen claves privadas.
+- El veredicto no cambia: los enlaces externos no revisados y los errores de
+  resolucion siguen bloqueando. Una categoria de error no demuestra por si sola
+  la causa de los dos enlaces DHI; falta ejecutar contra la imagen real.
+- `backend/tests/test_manual_directory_permissions.py`: ejecuta el mismo Python
+  extraido de las recetas con lstat/chmod simulados; verifica los cuatro cambios,
+  preservacion de bits y rechazo antes de modificar ante enlaces, archivos,
+  propietario no root o directorios ausentes.
+- `backend/tests/test_runtime_image_security.py`: prueba errores categorizados,
+  redaccion de datos, ausencia de lecturas/enumeracion SSL y conservacion del
+  bloqueo, salida 1 y anotacion con diagnosticos acotados.
+
+Validacion local: 451 casos por interprete, 448 aprobados y tres omitidos por
+plataforma tanto en Python 3.11 como en Python 3.14.7; 50 pruebas del verificador
+y cinco de permisos de manuales. Entorno de pruebas sin variables de produccion,
+URL de base de datos sintetica local y directorio de usuario temporal.
+Los mensajes de limpieza de clusters provienen de fixtures de esta suite;
+no representan una nueva prueba PostgreSQL real en este lote.
+
+Segunda revision estatica independiente: sin P1/P2 concretos en el alcance
+modificado. No ejecuto Docker ni red. Los mocks no prueban el parser Docker ni
+chmod real en Linux, que siguen pendientes de la siguiente corrida autorizada.
+git diff --check aprobado (solo advertencias de conversion LF/CRLF de Git).
+
+No se modificaron reglas de CVE, workflows, DHI, main, Railway, APK, Splash,
+pagos ni datos. No hay escaneo nuevo: los 44 High anteriores siguen pendientes.
+El propietario autorizo commit/push de este lote a la rama de pruebas y su
+consumo de Actions. No autoriza despliegue, Railway ni APK. La validacion Linux
+se registrara por separado; la autorizacion no modifica el estado NO-GO.

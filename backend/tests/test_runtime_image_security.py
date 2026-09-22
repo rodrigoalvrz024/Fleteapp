@@ -1,4 +1,5 @@
 import importlib.util
+import errno
 from contextlib import ExitStack
 import io
 import json
@@ -236,7 +237,7 @@ class RuntimeImageSecurityTests(unittest.TestCase):
                 patch.object(checker, "inspect_symlink", return_value=["symlink_external_directory_unreviewed"]) as inspect,
             ):
                 result = self.inspect_process(scan_roots=(root,))
-            inspect.assert_called_once_with(link, (), (root,))
+            inspect.assert_called_once_with(link, (), (root,), diagnostic={})
             self.assertTrue(result["blocked"])
             self.assertEqual(result["inspected_symlinks"], 1)
             self.assertEqual(result["violation_counts"], {"symlink_external_directory_unreviewed": 1})
@@ -248,6 +249,41 @@ class RuntimeImageSecurityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Missing runtime directory"):
                 self.inspect_process(scan_roots=(root,))
         walk.assert_not_called()
+
+    def test_link_diagnostics_are_bounded_and_preserve_blocking_annotation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            links = [root / ('link-' + str(i)) for i in range(12)]
+            for link in links:
+                link.touch()
+            original_lstat = Path.lstat
+
+            def metadata(path, *args, **kwargs):
+                if path in links:
+                    return SimpleNamespace(st_mode=stat.S_IFLNK | 0o777, st_uid=0)
+                return original_lstat(path, *args, **kwargs)
+
+            def inspect(path, protected, scanned, *, diagnostic):
+                diagnostic['resolution_issue'] = 'missing'
+                return ['symlink_unresolved']
+
+            with patch.object(Path, 'lstat', metadata), patch.object(checker, 'inspect_symlink', inspect):
+                result = self.inspect_process(scan_roots=(root,))
+            self.assertTrue(result['blocked'])
+            self.assertEqual(result['violation_counts'], {'symlink_unresolved': 12})
+            self.assertEqual(len(result['symlink_diagnostics']), 8)
+            for item in result['symlink_diagnostics']:
+                self.assertEqual(item['resolution_issue'], 'missing')
+                self.assertLessEqual(len(item['path']), 200)
+            with (
+                patch.object(checker, 'inspect_runtime', return_value=result),
+                patch.object(checker.sys, 'argv', ['check', '--github-annotation']),
+                patch.object(checker.sys, 'stdout', new_callable=io.StringIO) as output,
+            ):
+                self.assertEqual(checker.main(), 1)
+            annotation = next(line for line in output.getvalue().splitlines() if line.startswith('::error'))
+            payload = json.loads(annotation.split('::', 2)[2])
+            self.assertEqual(payload['symlink_diagnostics'], result['symlink_diagnostics'])
 
     def test_real_effective_saved_and_supplementary_root_identities_block(self):
         self.assertFalse(self.inspect_process()["blocked"])
@@ -347,7 +383,8 @@ class RuntimeImageSecurityTests(unittest.TestCase):
 
 
 class SymlinkSecurityTests(unittest.TestCase):
-    def inspect(self, target, *, nodes=None, links=None, writable=(), capabilities=(), visited=None):
+    def inspect(self, target, *, nodes=None, links=None, writable=(), capabilities=(), visited=None,
+                diagnostic=None):
         directory = (stat.S_IFDIR | 0o755, 0)
         regular = (stat.S_IFREG | 0o644, 0)
         tree = {name: directory for name in ("/", "/usr", "/usr/lib", "/app", "/etc", "/etc/ssl")}
@@ -375,7 +412,54 @@ class SymlinkSecurityTests(unittest.TestCase):
             patch.object(checker, "has_file_capability", side_effect=lambda p: p.as_posix() in capabilities),
         ):
             roots = (Path("/usr"), Path("/app"))
-            return checker.inspect_symlink(Path("/usr/lib/link"), roots, roots)
+            return checker.inspect_symlink(Path("/usr/lib/link"), roots, roots, diagnostic=diagnostic)
+
+    def test_diagnostics_distinguish_os_errors_without_payload_or_target_path(self):
+        cases = ((errno.ENOENT, "missing"), (errno.EACCES, "denied"),
+                 (errno.EPERM, "denied"), (errno.ENOTDIR, "not_directory"),
+                 (errno.ELOOP, "loop"), (errno.EIO, "io_error"))
+        for number, kind in cases:
+            with self.subTest(kind=kind, number=number):
+                diagnostic = {}
+                error = OSError(number, "private exception payload", "/private/secret-name")
+                result = self.inspect("/etc/secret-name", nodes={"/etc/secret-name": error},
+                                      diagnostic=diagnostic)
+                self.assertEqual(result, ["symlink_unresolved"])
+                self.assertEqual(diagnostic, {"resolution_issue": kind})
+                self.assertNotIn("secret", json.dumps(diagnostic))
+
+    def test_ssl_directory_diagnostic_does_not_enumerate_or_open_keys(self):
+        for target, expected in (("/etc/ssl/certs", "ssl_certificates"),
+                                 ("/etc/ssl/private", "ssl_private"),
+                                 ("/etc/other-private-dir", "other_external_directory")):
+            diagnostic = {}
+            with (
+                patch.object(checker.os, "scandir", side_effect=AssertionError("directory enumerated")),
+                patch("builtins.open", side_effect=AssertionError("content opened")),
+                patch.object(Path, "open", side_effect=AssertionError("content opened")),
+            ):
+                result = self.inspect(target, nodes={target: (stat.S_IFDIR | 0o750, 0)},
+                                      diagnostic=diagnostic)
+            self.assertEqual(result, ["symlink_external_directory_unreviewed"])
+            self.assertEqual(diagnostic, {"target_class": expected, "target_uid": 0, "target_mode": "0750"})
+            self.assertNotIn(target, json.dumps(diagnostic))
+
+    def test_diagnostic_does_not_approve_or_hide_unsafe_ssl_target(self):
+        diagnostic = {}
+        result = self.inspect("/etc/ssl/private", nodes={"/etc/ssl/private": (stat.S_IFDIR | 0o777, 0)},
+                              diagnostic=diagnostic)
+        self.assertIn("symlink_target_code_group_or_world_writable", result)
+        self.assertEqual(diagnostic, {})
+
+    def test_non_directory_resolution_has_safe_diagnostic(self):
+        diagnostic = {}
+        self.assertEqual(self.inspect("ok.so/child", diagnostic=diagnostic), ["symlink_unresolved"])
+        self.assertEqual(diagnostic, {"resolution_issue": "not_directory"})
+
+    def test_success_does_not_emit_a_failure_diagnostic(self):
+        diagnostic = {}
+        self.assertEqual(self.inspect("ok.so", diagnostic=diagnostic), [])
+        self.assertEqual(diagnostic, {})
 
     def test_relative_absolute_and_multihop_targets_are_checked(self):
         for target in ("ok.so", "/usr/lib/ok.so", "../lib/ok.so"):

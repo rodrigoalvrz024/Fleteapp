@@ -26,6 +26,10 @@ MAX_LINK_STEPS = 256
 MAX_LINK_PATH = 4096
 MAX_RUNTIME_ENTRIES = 200_000
 VIRTUAL_LINK_ROOTS = tuple(PurePosixPath(name) for name in ("/proc", "/sys", "/dev", "/run"))
+LINK_ERROR_KINDS = {
+    errno.ENOENT: "missing", errno.EACCES: "denied", errno.EPERM: "denied",
+    errno.ENOTDIR: "not_directory", errno.ELOOP: "loop",
+}
 
 
 def runtime_paths(profile):
@@ -67,7 +71,7 @@ def has_file_capability(path):
         raise
 
 
-def inspect_symlink(path, protected_roots, scan_roots):
+def inspect_symlink(path, protected_roots, scan_roots, *, diagnostic=None):
     """Check every traversed component; never read contents or walk external trees."""
     original = PurePosixPath(path.as_posix())
     if not original.is_absolute() or len(str(original)) > MAX_LINK_PATH:
@@ -87,9 +91,20 @@ def inspect_symlink(path, protected_roots, scan_roots):
         for _ in range(MAX_LINK_STEPS):
             if not pending:
                 # Only directories are skipped by the normal non-following walk.
-                if stat.S_ISDIR(Path(str(current)).lstat().st_mode):
+                final_metadata = Path(str(current)).lstat()
+                if stat.S_ISDIR(final_metadata.st_mode):
                     if not (any(current.is_relative_to(base) for base in protected)
                             and any(current.is_relative_to(base) for base in scanned)):
+                        if diagnostic is not None:
+                            # Categorize only known OS paths; never log arbitrary link values.
+                            diagnostic.update({
+                                "target_class": {
+                                    "/etc/ssl/certs": "ssl_certificates",
+                                    "/etc/ssl/private": "ssl_private",
+                                }.get(str(current), "other_external_directory"),
+                                "target_uid": final_metadata.st_uid,
+                                "target_mode": format(stat.S_IMODE(final_metadata.st_mode), "04o"),
+                            })
                         return ["symlink_external_directory_unreviewed"]
                 return []
             part = pending.popleft()
@@ -130,6 +145,8 @@ def inspect_symlink(path, protected_roots, scan_roots):
                 pending.extendleft(reversed(parts))
                 continue
             if pending and not stat.S_ISDIR(metadata.st_mode):
+                if diagnostic is not None:
+                    diagnostic["resolution_issue"] = "not_directory"
                 return ["symlink_unresolved"]
             if regular and is_legacy_openssl_library(candidate.name):
                 return ["legacy_openssl_library"]
@@ -137,8 +154,10 @@ def inspect_symlink(path, protected_roots, scan_roots):
                 return ["perl_archive_tar_named_file"]
             current = candidate
         return ["symlink_resolution_limit"]
-    except OSError:
+    except OSError as error:
         # Missing/denied targets are not evidence of absence. Do not log link contents.
+        if diagnostic is not None:
+            diagnostic["resolution_issue"] = LINK_ERROR_KINDS.get(error.errno, "io_error")
         return ["symlink_unresolved"]
 
 
@@ -200,6 +219,7 @@ def inspect_runtime(profile="classic"):
 
     inspected = 0
     inspected_links = 0
+    link_diagnostics = []
 
     for root in scan_roots:
         try:
@@ -222,7 +242,11 @@ def inspect_runtime(profile="classic"):
                                       writable=protected and not is_link and os.access(path, os.W_OK),
                                       capability=capability)
             if is_link:
-                reasons.extend(inspect_symlink(path, protected_roots, scan_roots))
+                diagnostic = {}
+                reasons.extend(inspect_symlink(path, protected_roots, scan_roots,
+                                               diagnostic=diagnostic))
+                if diagnostic and len(link_diagnostics) < 8:
+                    link_diagnostics.append({"path": str(path)[:200], **diagnostic})
                 inspected_links += 1
             if (stat.S_ISREG(metadata.st_mode) or is_link) and is_legacy_openssl_library(path.name):
                 reasons.append("legacy_openssl_library")
@@ -242,6 +266,7 @@ def inspect_runtime(profile="classic"):
             "removed_tools": removed_tools,
             "perl_archive_tar_readable": archive_tar_readable,
             "inspected_symlinks": inspected_links,
+            "symlink_diagnostics": link_diagnostics,
             "symlink_policy": "bounded_metadata_no_external_directory_walk",
             "inspected_entries": inspected, "blocked": bool(violations),
             "violation_counts": dict(Counter(item["reason"] for item in violations)),

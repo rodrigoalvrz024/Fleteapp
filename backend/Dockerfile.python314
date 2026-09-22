@@ -24,5 +24,20 @@ RUN chmod -R go-w /app /usr/local \
     && rm -- /usr/bin/infocmp /usr/bin/nsenter \
     && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 
+# Keep manual pages readable; remove only group/world directory write access.
+RUN python -I -B - <<'PY'
+import os
+from pathlib import Path
+import stat
+
+paths = [Path('/usr/share/man') / name for name in ('man1', 'man5', 'man7', 'man8')]
+parents = [Path('/'), Path('/usr'), Path('/usr/share'), Path('/usr/share/man')]
+entries = [(path, path.lstat()) for path in parents + paths]
+if any(not stat.S_ISDIR(meta.st_mode) or meta.st_uid != 0 for _, meta in entries):
+    raise SystemExit('Manual directory layout is not trusted')
+for path, meta in entries[len(parents):]:
+    os.chmod(path, stat.S_IMODE(meta.st_mode) & ~0o022, follow_symlinks=False)
+PY
+
 USER app
 CMD ["python", "-m", "app.server"]
