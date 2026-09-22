@@ -22,26 +22,36 @@ APPROVED_FROM = date(2026, 9, 15)
 EXPIRES_ON = date(2026, 10, 15)
 
 
+def has_reviewed_findings(findings):
+    return any(row["id"] in reviewer.REVIEWED_CVES for row in findings)
+
+
 def evaluate(report, backports, trace, *, image_id, commit, run_id, today=None):
     original = audit.inspect_report(report, image_id)
-    today = today if today is not None else datetime.now(timezone.utc).date()
-    reviewer.require(APPROVED_FROM <= today < EXPIRES_ON)
     reviewer.require(isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit) is not None)
     reviewer.require(isinstance(run_id, str) and re.fullmatch(r"[1-9][0-9]{0,19}", run_id) is not None)
-    reviewer.require(backports["ci_identity"] == {"image_id": image_id, "commit": commit, "run_id": run_id})
-    reviewer.validate_python_evidence(original["findings"], backports, trace, image_id)
     remaining = dict(original["counts"])
-    remaining["High"] -= len(reviewer.REVIEWED_CVES)
-    recognized = [dict(row, disposition="vendor_fix_verified") for row in original["findings"]
-                  if row["id"] in reviewer.REVIEWED_CVES]
+    recognized = []
+    applicable = has_reviewed_findings(original["findings"])
+    if applicable:
+        today = today if today is not None else datetime.now(timezone.utc).date()
+        reviewer.require(APPROVED_FROM <= today < EXPIRES_ON)
+        reviewer.require(backports["ci_identity"] == {"image_id": image_id, "commit": commit, "run_id": run_id})
+        reviewer.validate_python_evidence(original["findings"], backports, trace, image_id)
+        recognized = [dict(row, disposition="vendor_fix_verified") for row in original["findings"]
+                      if row["id"] in reviewer.REVIEWED_CVES]
+        remaining["High"] -= len(recognized)
     return original, {
-        "approval_id": APPROVAL_ID, "expires_on_exclusive": EXPIRES_ON.isoformat(),
+        "mode": "approved_corrections" if applicable else "not_applicable",
+        "approval_id": APPROVAL_ID if applicable else None,
+        "expires_on_exclusive": EXPIRES_ON.isoformat() if applicable else None,
         "image_id": image_id, "commit": commit, "run_id": run_id,
         "original_counts": original["counts"], "remaining_counts": remaining,
         "recognized_corrections": recognized,
         "blocked": bool(remaining["Critical"] or remaining["High"] or original["package_alerts"]),
         "deployment_approved": False,
-        "scope": "Three exact Python findings only; medium and other findings remain unapproved.",
+        "scope": ("Three exact Python findings only; medium and other findings remain unapproved."
+                  if applicable else "No reviewed Python findings present; unchanged raw scan gate, no approval applied."),
     }
 
 
@@ -101,22 +111,29 @@ def main(argv=None):
         if args.github_annotation:
             for index, payload in enumerate(audit.annotation_payloads(original)):
                 annotation("Image vulnerability audit" if index == 0 else f"Image vulnerability details {index}", payload)
-        backports = read_json(args.backports, 1024 * 1024)
-        drift = evidence_drift(original["findings"], backports)
-        if (drift["missing_reviewed_findings"] or drift["duplicate_reviewed_findings"]
-                or drift["changed_or_missing_modules"]):
-            print(json.dumps({"evidence_drift": drift}, ensure_ascii=True))
-            if args.github_annotation:
-                annotation("Python approval evidence drift (not approval)", drift)
-        _, policy = evaluate(report,
-                                    backports,
-                                    read_json(args.trace, 1024 * 1024),
-                                    image_id=args.image_id, commit=args.commit, run_id=args.run_id)
+        backports = trace = None
+        # Historical approval evidence is irrelevant when no correction is applied.
+        # Mandatory runtime regression steps remain independent workflow gates.
+        if has_reviewed_findings(original["findings"]):
+            backports = read_json(args.backports, 1024 * 1024)
+            drift = evidence_drift(original["findings"], backports)
+            if (drift["missing_reviewed_findings"] or drift["duplicate_reviewed_findings"]
+                    or drift["changed_or_missing_modules"]):
+                print(json.dumps({"evidence_drift": drift}, ensure_ascii=True))
+                if args.github_annotation:
+                    annotation("Python approval evidence drift (not approval)", drift)
+            trace = read_json(args.trace, 1024 * 1024)
+        _, policy = evaluate(report, backports, trace,
+                             image_id=args.image_id, commit=args.commit, run_id=args.run_id)
         if args.summary:
             with args.summary.open("a", encoding="utf-8") as stream:
-                stream.write("\n## Approved correction review\n\n")
-                stream.write(f"Approval: {APPROVAL_ID}; expires before {EXPIRES_ON}.\n\n")
-                stream.write(f"Original High: {original['counts']['High']}; verified corrections: 3; "
+                stream.write("\n## Python correction policy\n\n")
+                if policy["mode"] == "not_applicable":
+                    stream.write("Mode: not_applicable. No approval applied; raw findings unchanged.\n\n")
+                else:
+                    stream.write(f"Approval: {APPROVAL_ID}; expires before {EXPIRES_ON}.\n\n")
+                stream.write(f"Original High: {original['counts']['High']}; verified corrections: "
+                             f"{len(policy['recognized_corrections'])}; "
                              f"remaining High: {policy['remaining_counts']['High']}.\n\n")
                 stream.write("Policy: " + ("BLOCKED" if policy["blocked"] else "No remaining High/Critical")
                              + ". No deployment approval. Medium and other findings require review.\n")
@@ -136,7 +153,8 @@ def main(argv=None):
         return 2
     print(json.dumps({"policy": policy}, indent=2, ensure_ascii=True))
     if args.github_annotation:
-        annotation("Approved Python corrections", policy, "error" if policy["blocked"] else "notice")
+        title = "Python corrections not applicable" if policy["mode"] == "not_applicable" else "Approved Python corrections"
+        annotation(title, policy, "error" if policy["blocked"] else "notice")
     return 1 if policy["blocked"] else 0
 
 

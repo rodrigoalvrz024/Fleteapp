@@ -64,6 +64,17 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         for forbidden in ("--only-fixed", "--vex", "continue-on-error"):
             self.assertNotIn(forbidden, self.raw)
 
+    def test_runtime_data_repair_is_build_only_and_tested_in_dhi(self):
+        runtime = self.dockerfile.split("FROM ${PYTHON_RUNTIME_IMAGE} AS trial", 1)[1]
+        self.assertIn("source=docker/configure_runtime.py,target=/configure-runtime.py,readonly", runtime)
+        self.assertLess(runtime.index("/configure-runtime.py"), runtime.index("USER 65532:65532"))
+        self.assertIn("backend/docker/configure_runtime.py", self.config["on"]["push"]["paths"])
+        self.assertIn("backend/tests/test_runtime_data_setup.py", self.config["on"]["push"]["paths"])
+        tests = next(step for step in self.config["jobs"]["evaluate"]["steps"]
+                     if step["name"].startswith("Run application"))["run"]
+        self.assertIn("dst=/workspace/backend/docker,readonly", tests)
+        self.assertIn("dst=/workspace/backend/Dockerfile.hardened,readonly", tests)
+
     def test_removed_storage_provider_is_not_installed_or_built(self):
         build, runtime = self.dockerfile.split("FROM ${PYTHON_RUNTIME_IMAGE} AS trial", 1)
         self.assertNotIn("cloudinary", (ROOT / "backend/requirements.txt").read_text().lower())

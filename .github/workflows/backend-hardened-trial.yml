@@ -6,6 +6,9 @@ on:
       - codex/mvp-supabase-rls-review
     paths:
       - backend/Dockerfile.hardened
+      - backend/docker/configure_runtime.py
+      - backend/tests/test_runtime_data_setup.py
+      - backend/tests/test_hardened_trial_config.py
       - .github/workflows/backend-hardened-trial.yml
       - scripts/inspect-hardened-findings.py
       - backend/tests/test_hardened_finding_evidence.py
@@ -94,6 +97,10 @@ jobs:
             --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/tests,dst=/workspace/backend/tests,readonly" \
             --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts,dst=/workspace/scripts,readonly" \
             --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/alembic,dst=/workspace/backend/alembic,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/docker,dst=/workspace/backend/docker,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/Dockerfile.hardened,dst=/workspace/backend/Dockerfile.hardened,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/backend/requirements.txt,dst=/workspace/backend/requirements.txt,readonly" \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/.github/workflows/backend-hardened-trial.yml,dst=/workspace/.github/workflows/backend-hardened-trial.yml,readonly" \
             --workdir /workspace/backend --entrypoint python muvv-backend:hardened-trial \
             -B -m unittest discover -s tests
 
