@@ -35,8 +35,10 @@ are package matches, not distinct vulnerabilities or demonstrated attacks.
 3. DHI build can restore the missing `base-files/README` from the same package's
    `README.gz`, only if FAQ points exactly to README. Decompression is bounded;
    invalid gzip, non-UTF-8 data, unsafe ancestors or unexpected links stop build.
-   Both inputs validate before either file is created. Nothing is deleted or
-   redirected, and no package database or scanner exemptions are changed.
+   Both inputs validate before either file is created. If both README and its
+   compressed copy are truly absent, remove only the root-owned dangling
+   FAQ -> README documentation alias instead. No libraries, licenses, package
+   database records or scanner exemptions are removed or changed.
 
 The FAQ rule is supported by the [Debian base-files link definition](https://sources.debian.org/src/base-files/13.8%2Bdeb13u7/debian/base-files.links).
 It is a conditional repair, NOT a claim that the DHI image has this exact link
@@ -49,7 +51,7 @@ includes tzdata. No runtime data is downloaded from another distribution.
 - Full backend suite: 496 tests, 493 passed, 3 pre-existing skips.
 - Policy suite: 19 tests passed, including raw/clean/High/Critical/EOL, expired
   historical approval, invalid identity, partial findings and duplicates.
-- Runtime-data suite: 6 tests passed with bounded gzip and synthetic TZif files.
+- Runtime-data suite: initially 6 tests, then 8 passed with bounded gzip and synthetic TZif files.
   Ownership metadata is simulated for Windows/non-root portability. These tests
   do not replace validation of real inode ownership or symlinks in Linux.
 - DHI configuration suite: 13 tests passed. New build helper and configuration
@@ -57,6 +59,19 @@ includes tzdata. No runtime data is downloaded from another distribution.
 - Independent review found no remaining P1/P2 in the conditional repair. An
   unexpected FAQ layout must still stop CI; no precondition was relaxed.
 - Linux results remain required before claiming the DHI files are repaired.
+
+## First Linux attempt
+
+Commit `6365d87f2de824d3bb073427b8f2818227d71341` was published with authorization.
+[DHI build 35685698395](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35685698395)
+stopped inside the configuration helper before creating an image; no runtime
+checks or scan passed for that candidate. The fixed generic error did not expose
+the missing path, so this is not evidence that README.gz was specifically absent.
+
+Follow-up handles a fully stripped document only under the exact preconditions
+above, and reports fixed diagnostic codes for known missing source paths. It
+does not silently accept corrupt data or redirect an unknown link. Linux must
+confirm the actual layout and outcome; this is not a vulnerability fix.
 
 ## Remaining release blockers
 

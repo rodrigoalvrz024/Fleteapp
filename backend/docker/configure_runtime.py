@@ -76,8 +76,9 @@ def configure(root=Path("/")):
     utc = read_regular(root / "usr/share/zoneinfo/Etc/UTC")
     validate_utc(utc)
     writes = []
+    removals = []
     localtime = root / "etc/localtime"
-    # No package files or symlinks are removed, retargeted or overwritten.
+    # Existing timezone data is never retargeted or overwritten.
     if missing_regular(localtime, utc):
         writes.append((localtime, utc))
 
@@ -93,13 +94,22 @@ def configure(root=Path("/")):
     except FileNotFoundError:
         if os.path.lexists(readme):
             raise RuntimeDataError("Unexpected README link") from None
-        compressed = read_regular(docs / "README.gz")
-        with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
-            content = stream.read(MAX_DATA + 1)
-        if not 0 < len(content) <= MAX_DATA:
-            raise RuntimeDataError("Unexpected decompressed README size")
-        content.decode("utf-8")
-        writes.append((readme, content))
+        try:
+            compressed = read_regular(docs / "README.gz")
+        except FileNotFoundError:
+            if os.path.lexists(docs / "README.gz"):
+                raise RuntimeDataError("Unexpected compressed README link") from None
+            # Some minimal images omit both documentation files but retain the
+            # FAQ -> README alias. Remove only that verified dangling alias,
+            # never package metadata, licenses or executable/library files.
+            removals.append(faq)
+        else:
+            with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+                content = stream.read(MAX_DATA + 1)
+            if not 0 < len(content) <= MAX_DATA:
+                raise RuntimeDataError("Unexpected decompressed README size")
+            content.decode("utf-8")
+            writes.append((readme, content))
 
     # All inputs must validate before creating either missing file. O_EXCL
     # refuses replacement; a failed build is discarded rather than published.
@@ -108,8 +118,11 @@ def configure(root=Path("/")):
         with os.fdopen(fd, "wb") as stream:
             stream.write(content)
             os.fchmod(stream.fileno(), 0o444)
+    for path in removals:
+        path.unlink()
     return {"created": [path.relative_to(root).as_posix() for path, _ in writes],
-            "package_files_removed": False, "security_findings_waived": False}
+            "removed_documentation_aliases": [path.relative_to(root).as_posix() for path in removals],
+            "security_findings_waived": False}
 
 
 if __name__ == "__main__":
@@ -120,5 +133,14 @@ if __name__ == "__main__":
         print(json.dumps(configure(), sort_keys=True))
     except RuntimeDataError as error:
         raise SystemExit("Runtime data configuration failed: " + str(error)) from None
+    except FileNotFoundError as error:
+        known = {
+            "/usr/share/zoneinfo/Etc": "missing_timezone_directory",
+            "/usr/share/zoneinfo/Etc/UTC": "missing_timezone_data",
+            "/usr/share/doc/base-files": "missing_documentation_directory",
+            "/usr/share/doc/base-files/FAQ": "missing_faq_alias",
+        }
+        raise SystemExit("Runtime data configuration failed: " + known.get(
+            error.filename, "missing_required_path")) from None
     except (OSError, ValueError, EOFError):
         raise SystemExit("Runtime data configuration failed; image not ready") from None

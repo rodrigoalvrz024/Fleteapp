@@ -87,12 +87,12 @@ class RuntimeDataTests(unittest.TestCase):
             self.assertEqual((root / "usr/share/doc/base-files/README").read_bytes(), b"Package documentation\n")
             self.assertTrue((root / "usr/share/doc/base-files/README.gz").exists())
             self.assertTrue((root / "usr/share/doc/base-files/FAQ").exists())
-            self.assertFalse(result["package_files_removed"])
+            self.assertEqual(result["removed_documentation_aliases"], [])
             self.assertFalse(result["security_findings_waived"])
             self.assertEqual(self.run_fixture(root)["created"], [])
 
     def test_invalid_faq_or_source_blocks_before_any_write(self):
-        for failure in ("target", "gzip", "oversized", "missing", "not_utf8", "crc"):
+        for failure in ("target", "gzip", "oversized", "not_utf8", "crc"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 self.fixture(root)
@@ -101,8 +101,6 @@ class RuntimeDataTests(unittest.TestCase):
                     compressed.write_bytes(b"not-gzip")
                 elif failure == "oversized":
                     compressed.write_bytes(gzip.compress(b"x" * (setup.MAX_DATA + 1)))
-                elif failure == "missing":
-                    compressed.unlink()
                 elif failure == "not_utf8":
                     compressed.write_bytes(gzip.compress(b"\xff"))
                 elif failure == "crc":
@@ -113,6 +111,31 @@ class RuntimeDataTests(unittest.TestCase):
                     self.run_fixture(root, target="/etc/secret" if failure == "target" else "README")
                 self.assertFalse((root / "etc/localtime").exists())
                 self.assertFalse((root / "usr/share/doc/base-files/README").exists())
+
+    def test_removes_only_verified_orphan_doc_alias_when_both_sources_absent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            docs = root / "usr/share/doc/base-files"
+            (docs / "README.gz").unlink()
+            (docs / "copyright").write_bytes(b"License data retained")
+            result = self.run_fixture(root)
+            self.assertEqual(result["removed_documentation_aliases"], ["usr/share/doc/base-files/FAQ"])
+            self.assertFalse((docs / "FAQ").exists())
+            self.assertFalse((docs / "README").exists())
+            self.assertEqual((docs / "copyright").read_bytes(), b"License data retained")
+            self.assertEqual((root / "etc/localtime").read_bytes(), tzif())
+
+    def test_missing_compressed_doc_does_not_allow_removing_unknown_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            docs = root / "usr/share/doc/base-files"
+            (docs / "README.gz").unlink()
+            with self.assertRaises(ValueError):
+                self.run_fixture(root, target="/etc/secret")
+            self.assertTrue((docs / "FAQ").exists())
+            self.assertFalse((root / "etc/localtime").exists())
 
     def test_refuses_existing_different_localtime_without_overwriting(self):
         with tempfile.TemporaryDirectory() as directory:
