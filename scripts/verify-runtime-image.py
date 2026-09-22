@@ -31,6 +31,20 @@ LINK_ERROR_KINDS = {
     errno.ENOENT: "missing", errno.EACCES: "denied", errno.EPERM: "denied",
     errno.ENOTDIR: "not_directory", errno.ELOOP: "loop",
 }
+KNOWN_LINK_DIAGNOSTICS = {
+    "/usr/share/zoneinfo/localtime": {
+        "/etc/localtime": "system_localtime_absolute",
+        "../../../etc/localtime": "system_localtime_relative",
+    },
+    "/usr/share/doc/base-files/FAQ": {
+        "FAQ.gz": "compressed_faq_relative",
+        "/usr/share/doc/base-files/FAQ.gz": "compressed_faq_absolute",
+    },
+}
+KNOWN_MISSING_COMPONENTS = {
+    "/etc/localtime": "system_localtime",
+    "/usr/share/doc/base-files/FAQ.gz": "compressed_faq",
+}
 
 
 def runtime_paths(profile):
@@ -103,6 +117,7 @@ def inspect_symlink(path, protected_roots, scan_roots, *, diagnostic=None):
     scanned = tuple(PurePosixPath(root.as_posix()) for root in scan_roots)
     pending = deque(original.parts[1:])
     current = PurePosixPath("/")
+    candidate = current
     hops = 0
     try:
         # The parent of /usr or /app must not permit replacing the whole tree.
@@ -163,6 +178,9 @@ def inspect_symlink(path, protected_roots, scan_roots, *, diagnostic=None):
                     return ["symlink_invalid_target"]
                 if target.startswith("//"):
                     return ["symlink_invalid_target"]
+                # Diagnostic categories only; never log arbitrary link text or relax checks.
+                if diagnostic is not None and candidate == original and str(original) in KNOWN_LINK_DIAGNOSTICS:
+                    diagnostic["source_target_class"] = KNOWN_LINK_DIAGNOSTICS[str(original)].get(target, "unrecognized")
                 if target.startswith("/"):
                     current = PurePosixPath("/")
                 # Keep dot components: file/. and file/.. are not valid file targets.
@@ -185,6 +203,8 @@ def inspect_symlink(path, protected_roots, scan_roots, *, diagnostic=None):
         # Missing/denied targets are not evidence of absence. Do not log link contents.
         if diagnostic is not None:
             diagnostic["resolution_issue"] = LINK_ERROR_KINDS.get(error.errno, "io_error")
+            if error.errno == errno.ENOENT and str(original) in KNOWN_LINK_DIAGNOSTICS:
+                diagnostic["missing_component_class"] = KNOWN_MISSING_COMPONENTS.get(str(candidate), "unrecognized")
         return ["symlink_unresolved"]
 
 

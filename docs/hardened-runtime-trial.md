@@ -178,3 +178,115 @@ La consulta a fuentes primarias mantiene pendientes los avisos de
 evaluadas. Una correccion en otra distribucion o rama no prueba que estas imagenes
 esten corregidas. No se cambian paquetes, hashes aprobados, politica de CVE ni
 la aprobacion anterior de tres correcciones Python. Estado de promocion: NO-GO.
+
+## Resultado Linux del lote d6f0290
+
+Commit autorizado y publicado: `d6f029081f4e618b6bfa85de97b8aa4445e6e233`,
+solo en `codex/mvp-supabase-rls-review`. `main` conserva
+`590e8fec432f094619355dad89dcb068c4bd649f`. Sin despliegue ni APK.
+Ejecuciones terminadas el 2026-09-22 UTC (2026-09-21 en Chile).
+
+| Evaluacion | Critical | High | Medium | Resultado |
+| --- | ---: | ---: | ---: | --- |
+| [Clasica](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35678405126) | 0 | 45 | 55 | Pruebas y arranque aprobados; escaneo bloqueado |
+| [Python 3.14](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35678405136) | 0 | 44 | 51 | Pruebas, arranque y PostgreSQL/TLS aprobados; escaneo bloqueado |
+| [DHI](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35678405218) | 0 | 30 | 36 | Pruebas iniciales aprobadas; filesystem y escaneo bloqueados |
+
+Identidades exactas:
+
+- Clasica: `sha256:9d3f7bfb7080be62210253b8aced9875cea07223b4be019a330be6c98ea9e1c4`.
+- Python 3.14: `sha256:b3f63180a3e0ed3ae774511d9aebc8f441c40fce8ce27e0d9bafae2a23810249`.
+- DHI: `sha256:a9d5b935e5502f23cd35d6079651b1b5e3d032df36cc1eb96c26ec48e2069296`.
+
+En DHI se confirmo el comportamiento nuevo: despues del fallo de filesystem,
+inventario nativo y publicacion de metadata terminaron correctamente; el escaneo
+completo reporto los hallazgos y fallo; el diagnostico separado termino bien.
+El job sigue fallido. Arranque real y rechazo del CMD bajo root siguen OMITIDOS,
+no aprobados. Persisten los dos enlaces sin destino ya documentados arriba.
+
+El escaneo DHI (Grype 0.118.0, 2026-09-22T02:11:10.961136441Z) registro
+88 coincidencias: 0 Critical, 30 High, 36 Medium, 2 Low, 20 Negligible y 0 Unknown;
+0 package alerts. Los 30 High agrupan 12 CVE y 15 combinaciones CVE/paquete/version.
+Cada combinacion figura en `/var/lib/dpkg/status` y en un registro `status.d`.
+Esto explica la doble procedencia del catalogo, no prueba dos copias binarias,
+no acredita un parche y no autoriza eliminar coincidencias.
+
+| Grupo de paquete | CVE High | Filas High |
+| --- | --- | ---: |
+| libc6 | CVE-2026-19499, CVE-2026-5435 | 4 |
+| libexpat1 | CVE-2026-66046, CVE-2026-76956, CVE-2026-76957, CVE-2026-93990 | 8 |
+| libuuid1 | CVE-2026-76642, CVE-2026-78408, CVE-2026-78409, CVE-2026-78410 | 8 |
+| libncursesw6, libtinfo6, ncurses-base, ncurses-bin | CVE-2025-69720 | 8 |
+| zlib1g | CVE-2026-85091 | 2 |
+
+El inventario DHI analizo 435 ELF y no encontro los nombres conocidos infocmp,
+nsenter, getfacl, setfacl, chacl ni Archive/Tar.pm. Hay 16 archivos con imports
+de carga dinamica. La ausencia de imports directos o nombres no demuestra
+ausencia de copias renombradas, enlaces estaticos o exposicion dinamica.
+Las pruebas de parseo sintetico no prueban seguridad del parser.
+
+La candidata clasica mantiene el bloqueo `reviewed_python_finding_set_mismatch`:
+los tres avisos previamente autorizados no figuran y cambio la huella pyexpat.
+No se renovaron huellas ni autorizaciones. No se interpreta el menor recuento
+DHI frente a las otras imagenes como vulnerabilidades corregidas.
+
+Siguiente lote: revisar los destinos exactos de los dos enlaces DHI con metadata
+acotada, sin exceptuar enlaces rotos; contrastar los cuatro avisos libexpat1 con
+la procedencia del paquete mantenido; decidir correcciones antes de otra CI.
+No repetir construcciones sin cambios o nueva evidencia. Estado final: NO-GO.
+
+## Revision XML y diagnostico acotado de enlaces (local, 2026-09-21)
+
+Este lote no modifica la imagen, no elimina enlaces ni cambia el veredicto de
+seguridad. Solo clasifica destinos conocidos de los dos enlaces pendientes:
+`/etc/localtime` (absoluto o relativo) y `FAQ.gz` (absoluto o relativo).
+Son hipotesis de diagnostico, NO destinos observados todavia en DHI. Cualquier
+otro texto se publica como `unrecognized`, sin registrar su valor ni el mensaje
+de excepcion. Se mantienen las comprobaciones de cada antecesor, limites de
+resolucion, permisos y errores. No hay lecturas de contenido ni enumeracion nueva.
+La siguiente prueba Linux debe identificar el destino antes de decidir una
+reparacion; no se borran archivos del proveedor para conseguir un check verde.
+
+### Estado de Expat segun fuentes primarias
+
+Consulta del 2026-09-22 UTC, correspondiente al 21 de septiembre en Chile:
+
+| Aviso | Estado publicado | Decision para la candidata |
+| --- | --- | --- |
+| [CVE-2026-66046](https://security-tracker.debian.org/tracker/CVE-2026-66046) | Corregido upstream 2.8.4; el conjunto requiere un arreglo adicional para evitar CVE-2026-76641. | No copiar un parche aislado; falta paquete mantenido compatible acreditado. |
+| [CVE-2026-76956](https://security-tracker.debian.org/tracker/CVE-2026-76956) | Afecta 2.8.2/2.8.3; corregido en 2.8.4. | Tener API de hash de 16 bytes no demuestra calidad de entropia ni cierre de este aviso. |
+| [CVE-2026-76957](https://security-tracker.debian.org/tracker/CVE-2026-76957) | Corregido en 2.8.4; trixie 2.8.3 sigue marcado vulnerable. | Parsear XML valido no prueba seguridad de callbacks de codificacion. |
+| [CVE-2026-93990](https://security-tracker.debian.org/tracker/CVE-2026-93990) | Incluye 2.8.4; Debian lista arreglos upstream pero paquetes aun vulnerables. | Actualizar solamente a 2.8.4 no cierra los cuatro avisos. |
+
+El [feed publico de Docker](https://raw.githubusercontent.com/docker-hardened-images/advisories/main/vex/python/dhi-python.vex.json)
+contiene declaraciones `not_affected` para los tres primeros avisos del paquete
+`expat@2.8.3-1~deb13u1+dhi3`, justificadas por la clasificacion Debian `no-dsa`.
+Esa nota no acredita por si misma un parche ni inalcanzabilidad en Muvv. No se
+aplico el feed al escaner ni se verifico una atestacion firmada del digest;
+los hallazgos se conservan. La documentacion de
+[Docker sobre VEX](https://docs.docker.com/guides/dhi-vex-walkthrough/)
+exige distinguir los motivos y productos de cada declaracion.
+
+### Exposicion revisada y pruebas locales
+
+Los servicios propios de documentos, evidencia, chat y fotos de carga usan
+Supabase/HTTPX y bytes de imagen. Se agregaron 96 subcasos: cuatro servicios,
+tres contenidos (XML, SVG, XML UTF-16) y ocho combinaciones MIME/extension.
+Todos exigen HTTPException 400 y ninguna escritura en storage, incluyendo
+contenido XML declarado JPG, PNG, WEBP, HEIC o PDF. Esto valida el servicio,
+no un recorrido HTTP completo, ni archivos poliglotas o XML embebido.
+
+La revision independiente no encontro llamadas directas XML explotables en
+los flujos propios revisados, pero identifico consumidores XML instalados:
+`google-cloud-storage==3.14.1` y `google-resumable-media==2.8.2` procesan respuestas
+multipart con ElementTree. Firebase Admin los incluye transitivamente. No se
+encontro que Muvv use esos flujos: usa Supabase para archivos y Firebase Messaging
+para notificaciones. Esto NO prueba inalcanzabilidad global ni de la imagen DHI.
+No se retiran dependencias transitivas arbitrariamente ni se descuentan CVE.
+
+Verificacion del lote: 67 pruebas del verificador aprobadas; suite completa en
+Python 3.11 y 3.14 con 472 casos, 469 aprobados y 3 omisiones por plataforma en
+cada version. Revision independiente sin hallazgos P1/P2 en el diff actual.
+Sin commit/push de este nuevo lote, sin nueva CI ni despliegue. Siguiente paso:
+autorizar su validacion Linux; luego reparar unicamente con destinos observados
+y exigir evidencia de correccion mantenida para XML. La promocion sigue NO-GO.

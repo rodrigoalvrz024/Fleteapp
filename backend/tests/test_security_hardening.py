@@ -15,7 +15,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from fastapi import HTTPException
 import jwt
-from starlette.datastructures import UploadFile
+from starlette.datastructures import Headers, UploadFile
 
 from app.core.config import Settings, settings
 from app.core.rate_limit import _client_ip
@@ -37,6 +37,9 @@ from app.services.storage_service import (
     create_driver_document_view_token,
     decode_driver_document_view_token,
     upload_driver_document,
+    upload_freight_evidence,
+    upload_freight_chat_image,
+    upload_staged_freight_cargo_photo,
 )
 
 
@@ -230,6 +233,32 @@ class SecurityHardeningTests(unittest.TestCase):
 
             asyncio.run(upload_driver_document(upload, 1, "license_image"))
         self.assertEqual(error.exception.status_code, 400)
+
+    def test_xml_and_svg_uploads_are_rejected_even_with_image_mime_and_extension(self):
+        import asyncio
+
+        uploads = ((upload_driver_document, (1, 'license_image')),
+                   (upload_freight_evidence, (1, 'delivery')),
+                   (upload_freight_chat_image, (1,)),
+                   (upload_staged_freight_cargo_photo, (1,)))
+        payloads = (b'<?xml version="1.0"?><muvv/>', b'<svg xmlns="http://www.w3.org/2000/svg"/>',
+                    '<muvv/>'.encode('utf-16'))
+        declarations = (('application/xml', 'test.xml'), ('image/svg+xml', 'test.svg'),
+                        ('image/jpeg', 'test.jpg'), ('image/png', 'test.png'),
+                        ('image/webp', 'test.webp'), ('image/heic', 'test.heic'),
+                        ('application/pdf', 'test.pdf'), ('application/octet-stream', 'test.jpg'))
+        with patch('app.services.storage_service._upload_private_object') as store:
+            for function, args in uploads:
+                for payload in payloads:
+                    for mime, filename in declarations:
+                        with self.subTest(upload=function.__name__, mime=mime, payload=payload):
+                            with BytesIO(payload) as stream:
+                                upload = UploadFile(filename=filename, file=stream,
+                                                    headers=Headers({'content-type': mime}))
+                                with self.assertRaises(HTTPException) as error:
+                                    asyncio.run(function(upload, *args))
+                            self.assertEqual(error.exception.status_code, 400)
+            store.assert_not_called()
 
     def test_admin_role_is_not_available_to_client_or_driver(self):
         admin_only = require_role("admin")

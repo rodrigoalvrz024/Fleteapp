@@ -494,6 +494,78 @@ class RuntimeImageSecurityTests(unittest.TestCase):
 
 
 class SymlinkSecurityTests(unittest.TestCase):
+    def known_link_nodes(self):
+        return {name: (stat.S_IFDIR | 0o755, 0) for name in (
+            '/usr/share', '/usr/share/zoneinfo', '/usr/share/doc', '/usr/share/doc/base-files')}
+
+    def test_known_broken_links_report_categories_without_changing_verdict(self):
+        for source, targets in checker.KNOWN_LINK_DIAGNOSTICS.items():
+            for target, category in targets.items():
+                with self.subTest(source=source, target=target):
+                    diagnostic = {}
+                    result = self.inspect(target, source=source, nodes=self.known_link_nodes(), diagnostic=diagnostic)
+                    self.assertEqual(result, ['symlink_unresolved'])
+                    self.assertEqual(result, self.inspect(target, source=source, nodes=self.known_link_nodes()))
+                    self.assertEqual(diagnostic['source_target_class'], category)
+                    self.assertEqual(diagnostic['resolution_issue'], 'missing')
+                    self.assertEqual(diagnostic['missing_component_class'],
+                                     'system_localtime' if 'localtime' in source else 'compressed_faq')
+
+    def test_known_link_diagnostics_never_read_content_or_log_unknown_targets(self):
+        for source in checker.KNOWN_LINK_DIAGNOSTICS:
+            diagnostic = {}
+            with (
+                patch.object(Path, 'open', side_effect=AssertionError('content read')),
+                patch.object(checker.os, 'scandir', side_effect=AssertionError('tree enumeration')),
+            ):
+                self.assertEqual(self.inspect('/etc/private-secret', source=source,
+                                 nodes=self.known_link_nodes(), diagnostic=diagnostic), ['symlink_unresolved'])
+            self.assertEqual(diagnostic, {'source_target_class': 'unrecognized',
+                                         'resolution_issue': 'missing', 'missing_component_class': 'unrecognized'})
+            self.assertNotIn('private-secret', json.dumps(diagnostic))
+
+    def test_known_link_still_rejects_unsafe_ancestors_and_targets(self):
+        source = '/usr/share/zoneinfo/localtime'
+        for path in ('/usr/share', '/etc/localtime'):
+            nodes = self.known_link_nodes()
+            nodes[path] = (stat.S_IFDIR | 0o777, 0)
+            diagnostic = {}
+            result = self.inspect('/etc/localtime', source=source, nodes=nodes, diagnostic=diagnostic)
+            self.assertIn('symlink_target_code_group_or_world_writable', result)
+            self.assertNotIn('missing_component_class', diagnostic)
+        for target, reason in (('/proc/self/fd/3', 'symlink_virtual_target'),
+                               ('/etc/secret\nvalue', 'symlink_invalid_target'),
+                               ('//etc/localtime', 'symlink_invalid_target')):
+            diagnostic = {}
+            self.assertEqual(self.inspect(target, source=source, nodes=self.known_link_nodes(),
+                             diagnostic=diagnostic), [reason])
+            self.assertNotIn(target, json.dumps(diagnostic))
+
+    def test_known_existing_link_is_not_reported_missing(self):
+        nodes = self.known_link_nodes()
+        nodes['/etc/localtime'] = (stat.S_IFREG | 0o644, 0)
+        diagnostic = {}
+        self.assertEqual(self.inspect('/etc/localtime', source='/usr/share/zoneinfo/localtime',
+                         nodes=nodes, diagnostic=diagnostic), [])
+        self.assertEqual(diagnostic, {'source_target_class': 'system_localtime_absolute'})
+
+    def test_known_link_metadata_error_remains_blocking_without_secret_details(self):
+        for number, category in ((errno.EACCES, 'denied'), (errno.EIO, 'io_error')):
+            nodes = self.known_link_nodes()
+            nodes['/etc/localtime'] = OSError(number, 'private error text')
+            diagnostic = {}
+            self.assertEqual(self.inspect('/etc/localtime', source='/usr/share/zoneinfo/localtime',
+                             nodes=nodes, diagnostic=diagnostic), ['symlink_unresolved'])
+            self.assertEqual(diagnostic, {'source_target_class': 'system_localtime_absolute',
+                                         'resolution_issue': category})
+
+    def test_known_link_missing_root_remains_a_failure_before_readlink(self):
+        diagnostic = {}
+        nodes = {'/': FileNotFoundError(errno.ENOENT, 'private failure')}
+        self.assertEqual(self.inspect('/etc/localtime', source='/usr/share/zoneinfo/localtime',
+                         nodes=nodes, diagnostic=diagnostic), ['symlink_unresolved'])
+        self.assertEqual(diagnostic, {'resolution_issue': 'missing', 'missing_component_class': 'unrecognized'})
+
     def inspect(self, target, *, nodes=None, links=None, writable=(), capabilities=(), visited=None,
                 diagnostic=None, source="/usr/lib/link", access_grants=(), access_checks=None):
         directory = (stat.S_IFDIR | 0o755, 0)
@@ -510,7 +582,7 @@ class SymlinkSecurityTests(unittest.TestCase):
             if visited is not None:
                 visited.append(name)
             if name not in tree:
-                raise FileNotFoundError("not logged")
+                raise FileNotFoundError(errno.ENOENT, "not logged")
             item = tree[name]
             if isinstance(item, Exception):
                 raise item
