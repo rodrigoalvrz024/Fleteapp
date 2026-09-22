@@ -1,10 +1,10 @@
 """Read-only checks of the candidate image, run as its normal application user."""
 import argparse
-from collections import Counter
+from collections import Counter, deque
 import errno
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import stat
 import subprocess
@@ -12,9 +12,20 @@ import sys
 
 
 REMOVED_COMMANDS = ("mount", "umount", "swapon", "swapoff", "losetup")
-PROTECTED_ROOTS = (Path("/app"), Path("/usr/local"))
+PROTECTED_ROOTS = (Path("/app"), Path("/usr"))
 SCAN_ROOTS = (Path("/usr"), Path("/app"))
 REMOVED_TOOL_PATHS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
+CAPABILITY_FIELDS = {
+    "inheritable_capabilities": "CapInh",
+    "permitted_capabilities": "CapPrm",
+    "effective_capabilities": "CapEff",
+    "ambient_capabilities": "CapAmb",
+}
+MAX_LINK_HOPS = 40
+MAX_LINK_STEPS = 256
+MAX_LINK_PATH = 4096
+MAX_RUNTIME_ENTRIES = 200_000
+VIRTUAL_LINK_ROOTS = tuple(PurePosixPath(name) for name in ("/proc", "/sys", "/dev", "/run"))
 
 
 def runtime_paths(profile):
@@ -56,10 +67,84 @@ def has_file_capability(path):
         raise
 
 
+def inspect_symlink(path, protected_roots, scan_roots):
+    """Check every traversed component; never read contents or walk external trees."""
+    original = PurePosixPath(path.as_posix())
+    if not original.is_absolute() or len(str(original)) > MAX_LINK_PATH:
+        return ["symlink_invalid_path"]
+    protected = tuple(PurePosixPath(root.as_posix()) for root in protected_roots)
+    scanned = tuple(PurePosixPath(root.as_posix()) for root in scan_roots)
+    pending = deque(original.parts[1:])
+    current = PurePosixPath("/")
+    hops = 0
+    try:
+        # The parent of /usr or /app must not permit replacing the whole tree.
+        root = Path("/")
+        reasons = file_violations(root.lstat(), protected=True,
+                                  writable=os.access(root, os.W_OK), capability=False)
+        if reasons:
+            return ["symlink_target_" + reason for reason in reasons]
+        for _ in range(MAX_LINK_STEPS):
+            if not pending:
+                # Only directories are skipped by the normal non-following walk.
+                if stat.S_ISDIR(Path(str(current)).lstat().st_mode):
+                    if not (any(current.is_relative_to(base) for base in protected)
+                            and any(current.is_relative_to(base) for base in scanned)):
+                        return ["symlink_external_directory_unreviewed"]
+                return []
+            part = pending.popleft()
+            if part == "..":
+                current = current.parent
+                continue
+            candidate = current / part
+            if len(str(candidate)) > MAX_LINK_PATH:
+                return ["symlink_resolution_limit"]
+            if any(candidate.is_relative_to(base) for base in VIRTUAL_LINK_ROOTS):
+                return ["symlink_virtual_target"]
+            entry = Path(str(candidate))
+            metadata = entry.lstat()
+            is_link = stat.S_ISLNK(metadata.st_mode)
+            regular = stat.S_ISREG(metadata.st_mode)
+            if not (is_link or regular or stat.S_ISDIR(metadata.st_mode)):
+                return ["symlink_special_target"]
+            reasons = file_violations(metadata, protected=True,
+                                      writable=not is_link and os.access(entry, os.W_OK),
+                                      capability=regular and has_file_capability(entry))
+            if reasons:
+                return ["symlink_target_" + reason for reason in reasons]
+            if is_link:
+                hops += 1
+                if hops > MAX_LINK_HOPS:
+                    return ["symlink_resolution_limit"]
+                target = os.readlink(entry)
+                if not target or len(target) > MAX_LINK_PATH or any(ord(c) < 32 for c in target):
+                    return ["symlink_invalid_target"]
+                if target.startswith("//"):
+                    return ["symlink_invalid_target"]
+                if target.startswith("/"):
+                    current = PurePosixPath("/")
+                # Keep dot components: file/. and file/.. are not valid file targets.
+                parts = [part for part in target.split("/") if part]
+                if target.endswith("/"):
+                    parts.append(".")
+                pending.extendleft(reversed(parts))
+                continue
+            if pending and not stat.S_ISDIR(metadata.st_mode):
+                return ["symlink_unresolved"]
+            if regular and is_legacy_openssl_library(candidate.name):
+                return ["legacy_openssl_library"]
+            if candidate.as_posix().endswith("/Archive/Tar.pm"):
+                return ["perl_archive_tar_named_file"]
+            current = candidate
+        return ["symlink_resolution_limit"]
+    except OSError:
+        # Missing/denied targets are not evidence of absence. Do not log link contents.
+        return ["symlink_unresolved"]
+
+
 def process_security(status):
     fields = dict(line.split(":", 1) for line in status.splitlines() if ":" in line)
-    return {"effective_capabilities": int(fields["CapEff"].strip(), 16),
-            "permitted_capabilities": int(fields["CapPrm"].strip(), 16),
+    return {**{name: int(fields[field].strip(), 16) for name, field in CAPABILITY_FIELDS.items()},
             "no_new_privileges": int(fields["NoNewPrivs"].strip())}
 
 
@@ -91,9 +176,11 @@ def inspect_runtime(profile="classic"):
         raise RuntimeError("Runtime verification requires the Linux candidate container")
     process = process_security(Path("/proc/self/status").read_text())
     violations = []
-    if os.geteuid() == 0 or os.getegid() == 0 or 0 in os.getgroups():
+    # Saved identities and inheritable/ambient capabilities must also agree
+    # with the application startup guard; effective identity alone is not enough.
+    if 0 in (*os.getresuid(), *os.getresgid(), *os.getgroups()):
         violations.append({"reason": "root_identity"})
-    if process["effective_capabilities"] or process["permitted_capabilities"]:
+    if any(process[name] for name in CAPABILITY_FIELDS):
         violations.append({"reason": "process_capabilities"})
     if process["no_new_privileges"] != 1:
         violations.append({"reason": "new_privileges_allowed"})
@@ -112,30 +199,50 @@ def inspect_runtime(profile="classic"):
         violations.append({"reason": "perl_archive_tar_readable"})
 
     inspected = 0
-
-    def walk_error(error):
-        raise error
+    inspected_links = 0
 
     for root in scan_roots:
-        if not root.is_dir():
+        try:
+            root_metadata = root.lstat()
+        except FileNotFoundError:
+            raise RuntimeError("Missing runtime directory") from None
+        if not stat.S_ISDIR(root_metadata.st_mode):
             raise RuntimeError("Missing runtime directory")
-        for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
-            for path in [Path(directory), *(Path(directory) / name for name in dirs + files)]:
-                metadata = path.lstat()
-                protected = any(path.is_relative_to(base) for base in protected_roots)
-                capability = stat.S_ISREG(metadata.st_mode) and has_file_capability(path)
-                reasons = file_violations(metadata, protected=protected,
-                                          writable=protected and os.access(path, os.W_OK),
-                                          capability=capability)
-                if (stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)) and is_legacy_openssl_library(path.name):
-                    reasons.append("legacy_openssl_library")
-                if profile == "dhi" and path.as_posix().endswith("/Archive/Tar.pm"):
-                    reasons.append("perl_archive_tar_named_file")
-                violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
-                inspected += 1
+        pending = [root]
+        while pending:
+            if inspected >= MAX_RUNTIME_ENTRIES:
+                raise RuntimeError("Runtime entry limit exceeded")
+            path = pending.pop()
+            metadata = path.lstat()
+            protected = any(path.is_relative_to(base) or base.is_relative_to(path)
+                            for base in protected_roots)
+            capability = stat.S_ISREG(metadata.st_mode) and has_file_capability(path)
+            is_link = stat.S_ISLNK(metadata.st_mode)
+            reasons = file_violations(metadata, protected=protected,
+                                      writable=protected and not is_link and os.access(path, os.W_OK),
+                                      capability=capability)
+            if is_link:
+                reasons.extend(inspect_symlink(path, protected_roots, scan_roots))
+                inspected_links += 1
+            if (stat.S_ISREG(metadata.st_mode) or is_link) and is_legacy_openssl_library(path.name):
+                reasons.append("legacy_openssl_library")
+            if path.as_posix().endswith("/Archive/Tar.pm"):
+                reasons.append("perl_archive_tar_named_file")
+            violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
+            inspected += 1
+            if stat.S_ISDIR(metadata.st_mode) and not reasons:
+                # os.walk classifies symlink destinations even with followlinks=False.
+                # Enumerate names only, then lstat each entry before deciding to descend.
+                with os.scandir(path) as entries:
+                    for entry in entries:
+                        if inspected + len(pending) >= MAX_RUNTIME_ENTRIES:
+                            raise RuntimeError("Runtime entry limit exceeded")
+                        pending.append(Path(entry.path))
     return {"profile": profile, "uid": os.geteuid(), "gid": os.getegid(), **process,
             "removed_tools": removed_tools,
             "perl_archive_tar_readable": archive_tar_readable,
+            "inspected_symlinks": inspected_links,
+            "symlink_policy": "bounded_metadata_no_external_directory_walk",
             "inspected_entries": inspected, "blocked": bool(violations),
             "violation_counts": dict(Counter(item["reason"] for item in violations)),
             "violations": violations}
@@ -155,10 +262,9 @@ def main():
     print(json.dumps(result, indent=2))
     if args.github_annotation:
         summary = {key: value for key, value in result.items() if key != "violations"}
-        if result.get("profile") == "dhi":
-            summary["violation_examples"] = [
-                {"reason": row["reason"], "path": row.get("path", "")[:200]}
-                for row in result["violations"][:8]]
+        summary["violation_examples"] = [
+            {"reason": row["reason"], "path": row.get("path", "")[:200]}
+            for row in result["violations"][:8]]
         level = "error" if result["blocked"] else "notice"
         print(f"::{level} title=Runtime image security::{json.dumps(summary)}")
     return 1 if result["blocked"] else 0

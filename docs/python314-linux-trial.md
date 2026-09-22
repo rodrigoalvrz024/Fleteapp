@@ -107,7 +107,7 @@ el 2026-09-21. No autoriza despliegue ni cambios de produccion.
 Las dos ejecuciones finalizaron y se revisaron sin autorizar despliegue.
 El candidato clasico conserva 45 High; la alternativa Python 3.14 tiene 44 High.
 
-## Inventario nativo preparado, pendiente de ejecucion
+## Inventario nativo: preparacion y ejecucion
 
 El 2026-09-21 se preparo un paso adicional para obtener evidencia de la misma
 imagen Python 3.14 construida y escaneada. No se puede usar el inventario de
@@ -149,3 +149,45 @@ revisar exposicion por CVE. No se espera que agregar diagnostico repare los
 44 registros High. Un inventario vacio o fallido no es evidencia de ausencia.
 Antes de publicar la preparacion, separar los cambios propios de web/mobile y
 confirmar autorizacion de commit/push a pruebas y consumo de Actions.
+
+### Resultado autorizado del 2026-09-21
+
+La preparacion anterior se publico como commit
+`c1d9cca521b70ba362720a61cb4b62b08ad70d09`, exclusivamente en
+`codex/mvp-supabase-rls-review`. Los resultados siguientes sustituyen el estado
+pendiente de ejecucion descrito en el registro de preparacion. No hubo deploy.
+
+- Python 3.14: https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35669571540
+  (compatibility, job 106562776187). Build, dependencias, tests offline,
+  privilegios, inventario y preservacion de metadatos: success. Solo el
+  escaneo de seguridad falla y mantiene el bloqueo.
+- Imagen examinada y escaneada:
+  `sha256:91440550843b1f025bc2eebae8f3abc001d553acb2ee44a45ee7ffb5f6b931d3`.
+  Grype 0.118.0, Debian 13.7: 0 Critical, 44 High, 51 Medium, 7 Low,
+  43 Negligible, 1 Unknown (146 registros). No se exime ninguno.
+- PostgreSQL independiente, job 106562776342 de esa misma corrida: todos los
+  pasos success, incluidos permisos HTTP, pagos de prueba, TLS, migraciones
+  desde esquema vacio y legado, y comprobacion de limpieza de clusters.
+  Estos tests del runner no sustituyen la aprobacion de la imagen.
+- Clasico: https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35669571548
+  (job 106562769618). Solo falla el escaneo. Imagen
+  `sha256:c9d6e5b5f1f618bf2a2427323251cb581f314e60f922148bc8da8914c7bce904`:
+  0 Critical, 45 High, 55 Medium, 7 Low, 44 Negligible, 1 Unknown.
+  Sigue bloqueado tambien por `reviewed_python_finding_set_mismatch`.
+
+Inventario Python 3.14: 784 archivos ELF inspeccionados; cero importadores
+directos encontrados en los grupos legacy_dns, monetary_format y xml_hash.
+ACL tiene cinco (cp, install, mv, sed, tar); gzip_write tiene dos (dpkg-deb y
+libapt-pkg). Hay 33 archivos con imports de carga dinamica. Las anotaciones
+de carga dinamica muestran 12 y omiten 21; no se afirma haber inspeccionado
+manualmente el artefacto JSON completo.
+
+Por nombres conocidos, infocmp, getfacl, setfacl, chacl y perl_archive_tar no
+aparecen. La coincidencia nsenter es un archivo de autocompletado Bash, no
+el ejecutable. Esto no descarta copias renombradas, enlaces estaticos ni
+llamadas dinamicas. No equivale a demostrar inalcanzabilidad por CVE.
+
+Siguiente revision: cruzar los componentes/importadores reales con las
+funciones y condiciones afectadas de cada aviso, priorizando bibliotecas
+presentes y carga dinamica. No borrar archivos de bibliotecas ni aprobar
+excepciones a partir de este inventario. La decision sigue siendo NO-GO.
