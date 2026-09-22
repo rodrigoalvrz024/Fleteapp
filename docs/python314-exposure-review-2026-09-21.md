@@ -308,3 +308,102 @@ pagos ni datos. No hay escaneo nuevo: los 44 High anteriores siguen pendientes.
 El propietario autorizo commit/push de este lote a la rama de pruebas y su
 consumo de Actions. No autoriza despliegue, Railway ni APK. La validacion Linux
 se registrara por separado; la autorizacion no modifica el estado NO-GO.
+
+## Resultado Linux del commit d6266f9
+
+Commit `d6266f942dc4e80f24791714b1f59a60da5b1ded` publicado solo en
+`codex/mvp-supabase-rls-review`, con autorizacion. main verificada sin cambios
+en `590e8fec432f094619355dad89dcb068c4bd649f`. Todas las evaluaciones terminaron.
+
+| Evaluacion | Corrida | Resultado |
+| --- | --- | --- |
+| Clasica | [35674993510](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35674993510) | Build, dependencias, tests, descriptores y pruebas Python aprobados. Verificador bloquea solo dos directorios SSL. Escaneo posterior omitido. |
+| DHI | [35674993496](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35674993496) | Build y tests aprobados. Dos directorios SSL y dos enlaces sin resolver bloqueados. Escaneo posterior omitido. |
+| Python 3.14 | [35674993485](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35674993485) | Build, dependencias y tests aprobados. Dos directorios SSL bloqueados y escaneo obligatorio bloqueado. |
+| PostgreSQL independiente | Job 106579513655 de Python 3.14 | Todos los pasos aprobados: aislamiento, HTTP, permisos, pagos sinteticos, TLS, migraciones vacia/legado y limpieza. |
+
+Los cuatro avisos `code_group_or_world_writable` de manuales ya NO aparecen en
+clasica/Python 3.14: el ajuste de permisos se construyo y verifico en Linux real.
+El verificador mantiene 172 enlaces inspeccionados en esas imagenes y 253 en DHI.
+
+Diagnostico SSL comun a las tres candidatas:
+
+- `/usr/lib/ssl/private`: destino categorizado ssl_private, UID 0, modo 0700.
+- `/usr/lib/ssl/certs`: destino categorizado ssl_certificates, UID 0, modo 0755.
+- Ambos siguen con `symlink_external_directory_unreviewed`. Estos metadatos
+  no prueban los contenidos ni autorizan una excepcion general. No se leyeron
+  claves privadas ni se enumero su directorio.
+
+DHI: `/usr/share/zoneinfo/localtime` y `/usr/share/doc/base-files/FAQ` registran
+`resolution_issue=missing`, no denied. Esto identifica ENOENT durante la
+resolucion/consulta de metadatos, pero no publica el destino ni demuestra que
+sea seguro borrar el enlace. No se elimino ninguno.
+
+Nuevo escaneo Python 3.14: imagen
+`sha256:d4f4d01a8558a0a54910d5c6d5c77aa124186b2ec0b282f91cf0d1d5b7a3d1ff`,
+Grype 0.118.0, Debian 13.7, 2026-09-22T01:15:37.957089615Z.
+0 Critical, 44 High, 51 Medium, 7 Low, 43 Negligible, 1 Unknown; 146 registros.
+Clasica/DHI no tienen escaneo nuevo en esta corrida. Los pasos posteriores
+de arranque y los inventarios nativos quedaron omitidos por el bloqueo previo.
+La identidad clasica aparece en la evidencia Python como
+`sha256:7d77bba2e8d4bd6aff162d493b2921ad326de09ae035d96cf62c6f911349c6e9`.
+
+Siguiente trabajo: inspeccion acotada de confianza de certificados publicos;
+definir y probar la frontera del directorio privado sin leer claves; identificar
+los destinos DHI ausentes y su uso antes de corregirlos. Mantener bloqueos y
+avisos originales hasta contar con evidencia suficiente. Los 44 High no se
+resuelven con el ajuste de permisos de manuales. Estado NO-GO.
+
+Sin despliegue ni cambios en Railway, APK o datos reales. Actions puede consumir
+cuota; no se contrato un servicio y no se afirma facturacion exacta. Este
+registro posterior queda local para no disparar otra corrida solo por informar.
+
+## Lote local siguiente: certificados publicos y frontera privada
+
+Cambios preparados en `scripts/verify-runtime-image.py` y sus pruebas; no
+publicados ni ejecutados contra una nueva imagen Linux todavia.
+
+Se agrega exclusivamente `/etc/ssl/certs` a las raices protegidas/recorridas
+de ambos perfiles. Antes de enumerarlo se valida con lstat, desde /, cada
+ascendiente: directorio real, propietario root, sin escritura de grupo/otros
+ni escritura efectiva de la app. Un enlace en un ascendiente, raiz ausente
+o fallo de inspeccion impide aprobar. El recorrido sigue siendo de metadatos,
+sin abrir certificados, con el mismo presupuesto global de 200.000 entradas.
+No se agrega /etc ni /etc/ssl completo. No valida validez criptografica de CAs.
+
+La unica frontera privada reconocida es el origen exacto
+`/usr/lib/ssl/private` con destino completamente resuelto `/etc/ssl/private`.
+Ademas de comprobar todos los componentes, exige propietario root, directorio
+real de modo exacto 0700 y denegacion independiente de R_OK, W_OK y X_OK usando
+identidades efectivas. Cambiar origen, destino, propietario, modo o permitir
+cualquiera de esos accesos mantiene el bloqueo. Errores o falta de soporte
+de la comprobacion no equivalen a acceso denegado y no aprueban la candidata.
+
+Esto cambia el criterio del enlace privado de "externo no revisado" a una
+frontera de acceso verificada bajo esas condiciones concretas. NO afirma que
+sus contenidos hayan sido revisados, no enumera ni abre claves y no descuenta
+ningun CVE. El informe lo distingue mediante private_ssl_boundary_verified,
+private_ssl_scope=inaccessibility_only_not_content_review y el contador separado
+inspected_certificate_entries. No extenderlo a otros destinos sin revision.
+La comprobacion es puntual en CI, no garantia del hosting ni frente a cambios
+privilegiados concurrentes. Las capacidades/identidades siguen controlandose
+por separado en el mismo verificador; una infraccion mantiene el bloqueo global.
+
+Pruebas: suite completa 462 casos por interprete, 459 aprobados y tres omitidos
+por plataforma tanto en Python 3.11 como en Python 3.14.7. Los 61 casos del
+verificador incluyen raiz ausente, padres enlazados/escribibles, presupuesto
+compartido, origen/destino/modos incorrectos y acceso R/W/X individual.
+La revision estatica independiente no encontro P1/P2; sugirio un caso integrado
+adicional, que se implemento reemplazando un mock del resolvedor por el
+resolvedor real hasta el informe serializable, en ambos perfiles y con los
+cuatro estados de acceso. Tras ese ajuste de prueba, los 61 casos volvieron a
+pasar en ambos interpretes. No se ejecutaron datos ni servicios reales.
+
+Queda pendiente la construccion/inspeccion Linux de este lote. Los dos enlaces
+DHI con ENOENT siguen bloqueados; no se borraron ni se agrego una excepcion.
+Los 44 High de la ultima imagen siguen pendientes y no hay nuevo escaneo.
+Sin cambios de Dockerfiles, workflows, paquetes, app, Railway, APK ni Splash.
+La revision estatica final confirmo cerrado el hueco del caso integrado, sin
+P1/P2 nuevos. El propietario autorizo publicar este lote y probarlo en Linux,
+incluido su consumo de Actions, sin despliegue ni APK. Estado NO-GO hasta
+registrar evidencia suficiente; la autorizacion no elimina los avisos pendientes.

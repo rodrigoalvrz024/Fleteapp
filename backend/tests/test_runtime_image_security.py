@@ -39,7 +39,7 @@ class RuntimeImageSecurityTests(unittest.TestCase):
     def test_profiles_preserve_classic_and_cover_dhi_python_and_venv(self):
         self.assertEqual(checker.runtime_paths("classic"), (checker.PROTECTED_ROOTS, checker.SCAN_ROOTS))
         protected, scanned = checker.runtime_paths("dhi")
-        self.assertEqual({str(path) for path in protected}, {str(Path("/app")), str(Path("/usr")), str(Path("/opt/muvv-venv"))})
+        self.assertEqual(set(protected), {Path("/app"), Path("/usr"), Path("/opt/muvv-venv"), checker.CERTIFICATE_ROOT})
         self.assertIn(Path("/opt"), scanned)
         with self.assertRaises(ValueError):
             checker.runtime_paths("skip")
@@ -52,6 +52,117 @@ class RuntimeImageSecurityTests(unittest.TestCase):
                 path = Path(name)
                 self.assertTrue(any(path.is_relative_to(root) for root in protected))
                 self.assertTrue(any(path.is_relative_to(root) for root in scanned))
+
+    def test_public_certificate_tree_is_explicit_in_both_profiles_not_all_etc(self):
+        for profile in ('classic', 'dhi'):
+            protected, scanned = checker.runtime_paths(profile)
+            self.assertIn(Path('/etc/ssl/certs'), protected)
+            self.assertIn(Path('/etc/ssl/certs'), scanned)
+            for path in (Path('/etc'), Path('/etc/ssl'), Path('/etc/ssl/private')):
+                self.assertNotIn(path, scanned)
+
+    def test_certificate_ancestors_are_checked_from_root_without_following_links(self):
+        expected = [Path(p) for p in ('/', '/etc', '/etc/ssl', '/etc/ssl/certs')]
+        touched = []
+
+        def metadata(path):
+            touched.append(path)
+            return SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)
+
+        with patch.object(Path, 'lstat', metadata), patch.object(checker.os, 'access', return_value=False) as access:
+            checker.verify_certificate_ancestors()
+        self.assertEqual(touched, expected)
+        self.assertTrue(all(call.kwargs == {'effective_ids': True} for call in access.call_args_list))
+
+    def test_unsafe_certificate_ancestor_stops_before_later_metadata(self):
+        expected = [Path(p) for p in ('/', '/etc', '/etc/ssl', '/etc/ssl/certs')]
+        for index, unsafe in enumerate(expected):
+            for mode, uid in ((stat.S_IFLNK | 0o777, 0), (stat.S_IFDIR | 0o777, 0),
+                              (stat.S_IFDIR | 0o755, 100), (stat.S_IFREG | 0o644, 0)):
+                touched = []
+
+                def metadata(path):
+                    touched.append(path)
+                    return SimpleNamespace(st_mode=mode if path == unsafe else stat.S_IFDIR | 0o755,
+                                           st_uid=uid if path == unsafe else 0)
+
+                with (
+                    self.subTest(path=unsafe, mode=mode, uid=uid),
+                    patch.object(Path, 'lstat', metadata),
+                    patch.object(checker.os, 'access', return_value=False),
+                    self.assertRaises(RuntimeError),
+                ):
+                    checker.verify_certificate_ancestors()
+                self.assertEqual(touched, expected[:index + 1])
+
+    def test_missing_certificate_ancestor_or_unsupported_access_is_incomplete(self):
+        for error in (FileNotFoundError(), PermissionError()):
+            with patch.object(Path, 'lstat', side_effect=error), self.assertRaises(OSError):
+                checker.verify_certificate_ancestors()
+        with (
+            patch.object(Path, 'lstat', return_value=SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)),
+            patch.object(checker.os, 'access', side_effect=NotImplementedError()),
+            self.assertRaises(RuntimeError),
+        ):
+            checker.verify_certificate_ancestors()
+
+    def test_certificate_enumeration_checks_children_with_the_global_entry_budget(self):
+        root, file = checker.CERTIFICATE_ROOT, checker.CERTIFICATE_ROOT / 'test.pem'
+        tree = {Path(name): SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)
+                for name in ('/', '/etc', '/etc/ssl', '/etc/ssl/certs')}
+        tree[file] = SimpleNamespace(st_mode=stat.S_IFREG | 0o666, st_uid=0)
+        listing = MagicMock()
+        with (
+            patch.object(Path, 'lstat', lambda path: tree[path]),
+            patch.object(checker.os, 'scandir', return_value=listing) as scan,
+            patch.object(checker.os, 'access', return_value=False),
+            patch.object(Path, 'open', side_effect=AssertionError('certificate contents opened')),
+        ):
+            listing.__enter__.return_value = iter([SimpleNamespace(path=str(file))])
+            result = self.inspect_process(scan_roots=(root,), protected_roots=(root,))
+            self.assertEqual(result['violation_counts'], {'code_group_or_world_writable': 1})
+            self.assertEqual(result['inspected_certificate_entries'], 2)
+            scan.assert_called_once_with(root)
+            listing.__enter__.return_value = iter([SimpleNamespace(path=str(file))])
+            with patch.object(checker, 'MAX_RUNTIME_ENTRIES', 1), self.assertRaisesRegex(RuntimeError, 'entry limit'):
+                self.inspect_process(scan_roots=(root,), protected_roots=(root,))
+
+    def test_private_boundary_is_reported_separately_without_claiming_content_review(self):
+        root = Path('/usr')
+        link, target = Path('/usr/lib/ssl/private'), Path('/etc/ssl/private')
+        tree = {Path(name): SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)
+                for name in ('/', '/usr', '/usr/lib', '/usr/lib/ssl', '/etc', '/etc/ssl')}
+        tree[link] = SimpleNamespace(st_mode=stat.S_IFLNK | 0o777, st_uid=0)
+        tree[target] = SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_uid=0)
+        children = {root: Path('/usr/lib'), Path('/usr/lib'): Path('/usr/lib/ssl'),
+                    Path('/usr/lib/ssl'): link}
+
+        def listing(path):
+            self.assertIn(path, children, 'private tree must not be enumerated')
+            context = MagicMock()
+            context.__enter__.return_value = iter([SimpleNamespace(path=str(children[path]))])
+            return context
+
+        for profile in ('classic', 'dhi'):
+            for granted in (None, checker.os.R_OK, checker.os.W_OK, checker.os.X_OK):
+                with (
+                    self.subTest(profile=profile, granted=granted),
+                    patch.object(Path, 'lstat', lambda path: tree[path]),
+                    patch.object(checker.os, 'scandir', side_effect=listing),
+                    patch.object(checker.os, 'readlink', return_value=target.as_posix()),
+                    patch.object(checker.os, 'access', side_effect=lambda path, mode, **kw: path == target and mode == granted),
+                    patch.object(Path, 'open', side_effect=AssertionError('private read')),
+                    patch('builtins.open', side_effect=AssertionError('private read')),
+                ):
+                    result = self.inspect_process(scan_roots=(root,), protected_roots=(root,), profile=profile)
+                self.assertEqual(result['blocked'], granted is not None)
+                self.assertEqual(result['private_ssl_boundary_verified'], granted is None)
+                self.assertEqual(result['private_ssl_scope'], 'inaccessibility_only_not_content_review')
+                self.assertEqual(result['inspected_certificate_entries'], 0)
+                self.assertEqual(result['inspected_symlinks'], 1)
+                if granted is None:
+                    self.assertEqual(result['symlink_diagnostics'][0]['scope'], 'inaccessible_private_boundary_only')
+                json.dumps(result)
 
     def test_legacy_openssl_names_include_bundled_wheel_libraries(self):
         for name in ("libssl.so.1.1", "libcrypto-7d0e8add.so.1.1", "libssl-hash.so.1.0.0", "libcrypto.so.1.0.2"):
@@ -384,13 +495,13 @@ class RuntimeImageSecurityTests(unittest.TestCase):
 
 class SymlinkSecurityTests(unittest.TestCase):
     def inspect(self, target, *, nodes=None, links=None, writable=(), capabilities=(), visited=None,
-                diagnostic=None):
+                diagnostic=None, source="/usr/lib/link", access_grants=(), access_checks=None):
         directory = (stat.S_IFDIR | 0o755, 0)
         regular = (stat.S_IFREG | 0o644, 0)
-        tree = {name: directory for name in ("/", "/usr", "/usr/lib", "/app", "/etc", "/etc/ssl")}
+        tree = {name: directory for name in ("/", "/usr", "/usr/lib", "/usr/lib/ssl", "/app", "/etc", "/etc/ssl")}
         tree.update({"/usr/lib/ok.so": regular, "/etc/ssl/ca.pem": regular})
         tree.update(nodes or {})
-        targets = {"/usr/lib/link": target, **(links or {})}
+        targets = {source: target, **(links or {})}
         for name in targets:
             tree.setdefault(name, (stat.S_IFLNK | 0o777, 0))
 
@@ -405,14 +516,77 @@ class SymlinkSecurityTests(unittest.TestCase):
                 raise item
             return SimpleNamespace(st_mode=item[0], st_uid=item[1])
 
+        def access(path, mode, **kwargs):
+            if access_checks is not None:
+                access_checks.append((path.as_posix(), mode, kwargs))
+            return ((mode == checker.os.W_OK and path.as_posix() in writable)
+                    or (path.as_posix(), mode) in access_grants)
+
         with (
             patch.object(Path, "lstat", metadata),
             patch.object(checker.os, "readlink", side_effect=lambda p: targets[p.as_posix()]),
-            patch.object(checker.os, "access", side_effect=lambda p, mode: p.as_posix() in writable),
+            patch.object(checker.os, "access", side_effect=access),
             patch.object(checker, "has_file_capability", side_effect=lambda p: p.as_posix() in capabilities),
         ):
             roots = (Path("/usr"), Path("/app"))
-            return checker.inspect_symlink(Path("/usr/lib/link"), roots, roots, diagnostic=diagnostic)
+            return checker.inspect_symlink(Path(source), roots, roots, diagnostic=diagnostic)
+
+    def test_exact_private_boundary_requires_effective_read_write_and_search_denial(self):
+        diagnostic, access_checks = {}, []
+        with (
+            patch.object(checker.os, 'scandir', side_effect=AssertionError('private enumeration')),
+            patch.object(Path, 'open', side_effect=AssertionError('private read')),
+            patch('builtins.open', side_effect=AssertionError('private read')),
+        ):
+            result = self.inspect('/etc/ssl/private', source='/usr/lib/ssl/private',
+                                  nodes={'/etc/ssl/private': (stat.S_IFDIR | 0o700, 0)},
+                                  diagnostic=diagnostic, access_checks=access_checks)
+        self.assertEqual(result, [])
+        self.assertEqual(diagnostic['scope'], 'inaccessible_private_boundary_only')
+        self.assertEqual([item for item in access_checks if item[2]], [
+            ('/etc/ssl/private', mode, {'effective_ids': True})
+            for mode in (checker.os.R_OK, checker.os.W_OK, checker.os.X_OK)])
+
+    def test_any_effective_private_access_keeps_the_link_blocked(self):
+        for mode in (checker.os.R_OK, checker.os.W_OK, checker.os.X_OK):
+            with self.subTest(mode=mode):
+                result = self.inspect('/etc/ssl/private', source='/usr/lib/ssl/private',
+                                      nodes={'/etc/ssl/private': (stat.S_IFDIR | 0o700, 0)},
+                                      access_grants=(('/etc/ssl/private', mode),))
+                self.assertTrue(result)
+
+    def test_private_boundary_does_not_allow_other_sources_targets_or_modes(self):
+        cases = [('/usr/lib/link', '/etc/ssl/private', 0o700, 0),
+                 ('/usr/lib/ssl/private', '/etc/other', 0o700, 0),
+                 ('/usr/lib/ssl/private', '/etc/ssl/private', 0o750, 0),
+                 ('/usr/lib/ssl/private', '/etc/ssl/private', 0o755, 0),
+                 ('/usr/lib/ssl/private', '/etc/ssl/private', 0o1700, 0),
+                 ('/usr/lib/ssl/private', '/etc/ssl/private', 0o700, 100)]
+        for source, target, mode, uid in cases:
+            with self.subTest(source=source, target=target, mode=mode, uid=uid):
+                self.assertTrue(self.inspect(target, source=source,
+                                             nodes={target: (stat.S_IFDIR | mode, uid)}))
+
+    def test_private_boundary_still_checks_all_ancestors_and_never_reads_children(self):
+        for unsafe in ('/', '/etc', '/etc/ssl', '/usr', '/usr/lib', '/usr/lib/ssl'):
+            with self.subTest(ancestor=unsafe):
+                result = self.inspect('/etc/ssl/private', source='/usr/lib/ssl/private', nodes={
+                    '/etc/ssl/private': (stat.S_IFDIR | 0o700, 0), unsafe: (stat.S_IFDIR | 0o777, 0)})
+                self.assertTrue(result)
+        visited = []
+        result = self.inspect('/etc/ssl/private/key.pem', source='/usr/lib/ssl/private',
+                              nodes={'/etc/ssl/private': PermissionError(errno.EACCES, 'not logged')},
+                              visited=visited)
+        self.assertTrue(result)
+        self.assertNotIn('/etc/ssl/private/key.pem', visited)
+
+    def test_private_boundary_probe_errors_cannot_be_treated_as_access_denied(self):
+        with patch.object(checker, 'private_ssl_boundary', side_effect=OSError(errno.EIO, 'secret')):
+            diagnostic = {}
+            self.assertEqual(self.inspect('/etc/ssl/private', source='/usr/lib/ssl/private',
+                             nodes={'/etc/ssl/private': (stat.S_IFDIR | 0o700, 0)}, diagnostic=diagnostic),
+                             ['symlink_unresolved'])
+            self.assertNotIn('scope', diagnostic)
 
     def test_diagnostics_distinguish_os_errors_without_payload_or_target_path(self):
         cases = ((errno.ENOENT, "missing"), (errno.EACCES, "denied"),

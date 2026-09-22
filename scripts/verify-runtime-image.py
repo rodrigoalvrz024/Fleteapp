@@ -12,8 +12,9 @@ import sys
 
 
 REMOVED_COMMANDS = ("mount", "umount", "swapon", "swapoff", "losetup")
-PROTECTED_ROOTS = (Path("/app"), Path("/usr"))
-SCAN_ROOTS = (Path("/usr"), Path("/app"))
+CERTIFICATE_ROOT = Path("/etc/ssl/certs")
+PROTECTED_ROOTS = (Path("/app"), Path("/usr"), CERTIFICATE_ROOT)
+SCAN_ROOTS = (Path("/usr"), Path("/app"), CERTIFICATE_ROOT)
 REMOVED_TOOL_PATHS = (Path("/usr/bin/infocmp"), Path("/usr/bin/nsenter"))
 CAPABILITY_FIELDS = {
     "inheritable_capabilities": "CapInh",
@@ -36,7 +37,7 @@ def runtime_paths(profile):
     if profile == "classic":
         return PROTECTED_ROOTS, SCAN_ROOTS
     if profile == "dhi":
-        return (Path("/app"), Path("/usr"), Path("/opt/muvv-venv")), (Path("/usr"), Path("/app"), Path("/opt"))
+        return (*PROTECTED_ROOTS, Path("/opt/muvv-venv")), (*SCAN_ROOTS, Path("/opt"))
     raise ValueError("Unknown runtime profile")
 
 
@@ -69,6 +70,28 @@ def has_file_capability(path):
         if error.errno in (errno.ENODATA, errno.ENOTSUP):
             return False
         raise
+
+
+def private_ssl_boundary(source, target, metadata):
+    """Verify inaccessibility, not contents; never enumerate the private tree."""
+    if (source != PurePosixPath("/usr/lib/ssl/private")
+            or target != PurePosixPath("/etc/ssl/private")
+            or not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) != 0o700):
+        return False
+    return not any(os.access(Path(str(target)), mode, effective_ids=True)
+                   for mode in (os.R_OK, os.W_OK, os.X_OK))
+
+
+def verify_certificate_ancestors():
+    # Check each real ancestor before scandir can traverse it; no broad /etc walk.
+    for path in reversed((CERTIFICATE_ROOT, *CERTIFICATE_ROOT.parents)):
+        metadata = path.lstat()
+        if (not stat.S_ISDIR(metadata.st_mode)
+                or file_violations(metadata, protected=True,
+                                   writable=os.access(path, os.W_OK, effective_ids=True),
+                                   capability=False)):
+            raise RuntimeError("Untrusted certificate directory layout")
 
 
 def inspect_symlink(path, protected_roots, scan_roots, *, diagnostic=None):
@@ -105,6 +128,10 @@ def inspect_symlink(path, protected_roots, scan_roots, *, diagnostic=None):
                                 "target_uid": final_metadata.st_uid,
                                 "target_mode": format(stat.S_IMODE(final_metadata.st_mode), "04o"),
                             })
+                        if private_ssl_boundary(original, current, final_metadata):
+                            if diagnostic is not None:
+                                diagnostic["scope"] = "inaccessible_private_boundary_only"
+                            return []
                         return ["symlink_external_directory_unreviewed"]
                 return []
             part = pending.popleft()
@@ -219,9 +246,13 @@ def inspect_runtime(profile="classic"):
 
     inspected = 0
     inspected_links = 0
+    certificate_entries = 0
+    private_boundary_verified = False
     link_diagnostics = []
 
     for root in scan_roots:
+        if root == CERTIFICATE_ROOT:
+            verify_certificate_ancestors()
         try:
             root_metadata = root.lstat()
         except FileNotFoundError:
@@ -245,6 +276,8 @@ def inspect_runtime(profile="classic"):
                 diagnostic = {}
                 reasons.extend(inspect_symlink(path, protected_roots, scan_roots,
                                                diagnostic=diagnostic))
+                if not reasons and diagnostic.get("scope") == "inaccessible_private_boundary_only":
+                    private_boundary_verified = True
                 if diagnostic and len(link_diagnostics) < 8:
                     link_diagnostics.append({"path": str(path)[:200], **diagnostic})
                 inspected_links += 1
@@ -254,6 +287,8 @@ def inspect_runtime(profile="classic"):
                 reasons.append("perl_archive_tar_named_file")
             violations.extend({"reason": reason, "path": str(path)} for reason in reasons)
             inspected += 1
+            if path.is_relative_to(CERTIFICATE_ROOT):
+                certificate_entries += 1
             if stat.S_ISDIR(metadata.st_mode) and not reasons:
                 # os.walk classifies symlink destinations even with followlinks=False.
                 # Enumerate names only, then lstat each entry before deciding to descend.
@@ -267,7 +302,10 @@ def inspect_runtime(profile="classic"):
             "perl_archive_tar_readable": archive_tar_readable,
             "inspected_symlinks": inspected_links,
             "symlink_diagnostics": link_diagnostics,
-            "symlink_policy": "bounded_metadata_no_external_directory_walk",
+            "symlink_policy": "bounded_metadata_public_certs_private_boundary",
+            "private_ssl_scope": "inaccessibility_only_not_content_review",
+            "private_ssl_boundary_verified": private_boundary_verified,
+            "inspected_certificate_entries": certificate_entries,
             "inspected_entries": inspected, "blocked": bool(violations),
             "violation_counts": dict(Counter(item["reason"] for item in violations)),
             "violations": violations}
