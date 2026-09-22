@@ -108,6 +108,53 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         self.assertTrue(exported["path"].endswith("/report.json"))
         self.assertEqual(exported["retention-days"], "14")
 
+    def test_readonly_evidence_continues_after_a_failed_gate_not_after_failed_build(self):
+        steps = self.config['jobs']['evaluate']['steps']
+        build = next(step for step in steps if step['name'].startswith('Pull and build'))
+        self.assertEqual(build['id'], 'build')
+        for prefix in ('Inspect complete DHI', 'Scan full trial'):
+            step = next(step for step in steps if step['name'].startswith(prefix))
+            self.assertEqual(step['if'], "${{ always() && steps.build.outcome == 'success' && !cancelled() }}")
+            self.assertNotIn('continue-on-error', step)
+        for prefix in ('Verify DHI filesystem', 'Verify real DHI startup', 'Verify DHI startup refuses'):
+            step = next(step for step in steps if step['name'].startswith(prefix))
+            self.assertNotIn('if', step)
+            self.assertNotIn('continue-on-error', step)
+
+    def test_scan_failure_is_not_hidden_by_the_diagnostic_probe(self):
+        steps = self.config['jobs']['evaluate']['steps']
+        scan = next(step for step in steps if step.get('id') == 'scan')
+        diagnosis = next(step for step in steps if step['name'].startswith('Diagnose DHI'))
+        self.assertLess(steps.index(scan), steps.index(diagnosis))
+        self.assertIn('scripts/report-image-audit.py', scan['run'])
+        self.assertNotIn('inspect-hardened-findings.py', scan['run'])
+        self.assertNotIn('docker run', scan['run'])
+        self.assertNotIn('||', scan['run'])
+        self.assertNotIn('continue-on-error', scan)
+        self.assertIn("steps.scan.outputs.report != ''", diagnosis['if'])
+        self.assertIn("steps.build.outcome == 'success'", diagnosis['if'])
+        self.assertIn('!cancelled()', diagnosis['if'])
+        self.assertEqual(diagnosis['env'], {
+            'AUDIT_REPORT': '${{ steps.scan.outputs.report }}',
+            'AUDIT_IMAGE': '${{ steps.scan.outputs.image_id }}'})
+        for required in ('--user 65532:65532', '--network none', '--read-only', '--cap-drop ALL',
+                         '--security-opt no-new-privileges', '--entrypoint python "$AUDIT_IMAGE"'):
+            self.assertIn(required, diagnosis['run'])
+        self.assertNotIn('${{ steps.', diagnosis['run'])
+        self.assertNotIn('secrets.', str(diagnosis))
+
+    def test_native_metadata_is_bounded_and_only_uploaded_after_success(self):
+        steps = self.config['jobs']['evaluate']['steps']
+        native = next(step for step in steps if step.get('id') == 'native')
+        upload = next(step for step in steps if step['name'] == 'Preserve DHI native metadata only')
+        self.assertEqual(upload['if'], "${{ always() && steps.native.outcome == 'success' && !cancelled() }}")
+        for required in ('umask 077', '^sha256:[0-9a-f]{64}$', 'docker create --network none',
+                         'timeout --signal=TERM --kill-after=5s 60s docker export'):
+            self.assertIn(required, native['run'])
+        for forbidden in ('docker run', 'docker start', 'extractall', 'tar --extract'):
+            self.assertNotIn(forbidden, native['run'])
+        self.assertNotIn('rootfs.tar', str(upload))
+
 
 if __name__ == "__main__":
     unittest.main()

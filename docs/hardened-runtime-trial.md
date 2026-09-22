@@ -134,3 +134,47 @@ diferencia 45 -> 26 como 19 vulnerabilidades corregidas: cambia la composicion
 de paquetes y aparecen avisos de libexpat1 que requieren analisis propio.
 No se modifico el filtro del escaner, no hubo excepciones ni despliegue.
 Siguen pendientes todas las validaciones de adopcion descritas arriba.
+
+## Diagnostico completo sin relajar bloqueos: 2026-09-21
+
+La [evaluacion DHI 35676690697](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/35676690697)
+del commit `90b854e` supero construccion, dependencias y pruebas iniciales.
+El control de filesystem rechazo dos enlaces no resueltos:
+`/usr/share/zoneinfo/localtime` y `/usr/share/doc/base-files/FAQ`.
+Inventario nativo, escaneo y pruebas posteriores de arranque quedaron omitidos;
+esto no prueba que la imagen carezca de vulnerabilidades.
+
+El nuevo lote local permite inventario y escaneo tras construir correctamente,
+incluso si falla un control anterior, pero nunca tras cancelacion o build fallido.
+Los fallos siguen bloqueando el job. El reporte obligatorio del escaner se evalua
+antes del diagnostico, en un paso separado, sin `continue-on-error` ni exclusiones.
+La sonda usa el mismo digest, UID/GID 65532, sin red, filesystem de solo lectura,
+sin capacidades y con limites de recursos. El inventario exporta sin arrancar
+la imagen y tiene timeout; solo se publica metadata JSON tras exito.
+
+Verificacion local: 465 casos en Python 3.11 y Python 3.14, con 462 aprobados y
+3 omitidos por plataforma en cada version; 12 pruebas de configuracion DHI.
+Revision independiente estatica sin hallazgos P1/P2. La ejecucion real en Linux
+de este lote aun esta pendiente; las pruebas locales no la sustituyen.
+Un timeout del job puede impedir completar el diagnostico y no debe interpretarse
+como resultado limpio. Commit, push y consumo de Actions requieren autorizacion
+para este lote. Sin despliegue, cambios en Railway ni APK.
+
+### Avisos que siguen abiertos
+
+Los ultimos escaneos completos de las candidatas clasica y Python 3.14 reportaron
+45 y 44 coincidencias altas, respectivamente. No son recuentos de CVE unicas.
+La diferencia incluye [CVE-2026-82049](https://security-tracker.debian.org/tracker/CVE-2026-82049),
+relativa a filtros de extraccion TAR en Python hasta 3.13. No se encontraron
+llamadas de extraccion TAR en `backend/app`; esto no descarta exposicion indirecta
+en dependencias. El estado no afectado de una version Debian sin esos filtros
+no se extrapola al Python upstream 3.11.16 de la candidata.
+
+La consulta a fuentes primarias mantiene pendientes los avisos de
+[glibc strfmon](https://security-tracker.debian.org/tracker/CVE-2026-19499),
+[glibc DNS](https://security-tracker.debian.org/tracker/CVE-2026-5435),
+[libacl](https://security-tracker.debian.org/tracker/CVE-2026-54369) y
+[zlib](https://security-tracker.debian.org/tracker/CVE-2026-85091) para las versiones
+evaluadas. Una correccion en otra distribucion o rama no prueba que estas imagenes
+esten corregidas. No se cambian paquetes, hashes aprobados, politica de CVE ni
+la aprobacion anterior de tres correcciones Python. Estado de promocion: NO-GO.

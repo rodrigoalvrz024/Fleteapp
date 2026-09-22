@@ -42,6 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Pull and build using temporary read-only registry credentials
+        id: build
         env:
           DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
           DHI_TOKEN: ${{ secrets.DHI_READ_TOKEN }}
@@ -185,22 +186,27 @@ jobs:
           printf '::notice title=DHI root rejection::Actual container CMD refused UID 0 before importing the application\n'
 
       - name: Inspect complete DHI native filesystem without executing its files
+        id: native
+        if: ${{ always() && steps.build.outcome == 'success' && !cancelled() }}
         run: |
           set -euo pipefail
+          umask 077
           audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-dhi-native.XXXXXX")"
           python3 -m venv "$audit_dir/venv"
           "$audit_dir/venv/bin/python" -m pip install --disable-pip-version-check \
             --require-hashes --only-binary=:all: --no-deps -r scripts/native-audit-requirements.txt
           image_id="$(docker image inspect muvv-backend:hardened-trial --format '{{.Id}}')"
+          [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
           container="$(docker create --network none "$image_id")"
           trap 'docker rm "$container" > /dev/null 2>&1 || true' EXIT
-          docker export --output "$audit_dir/rootfs.tar" "$container"
+          timeout --signal=TERM --kill-after=5s 60s docker export --output "$audit_dir/rootfs.tar" "$container"
           mkdir -p "$RUNNER_TEMP/dhi-native-symbol-evidence"
           timeout --signal=TERM --kill-after=5s 180s "$audit_dir/venv/bin/python" \
             scripts/report-native-symbols.py "$audit_dir/rootfs.tar" --image-id "$image_id" \
             --output "$RUNNER_TEMP/dhi-native-symbol-evidence/report.json" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
 
       - name: Preserve DHI native metadata only
+        if: ${{ always() && steps.native.outcome == 'success' && !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dhi-native-symbol-evidence
@@ -209,8 +215,11 @@ jobs:
           retention-days: 14
 
       - name: Scan full trial without VEX suppressions or ignored matches
+        id: scan
+        if: ${{ always() && steps.build.outcome == 'success' && !cancelled() }}
         run: |
           set -euo pipefail
+          umask 077
           audit_dir="$(mktemp -d "${RUNNER_TEMP}/muvv-dhi-audit.XXXXXX")"
           curl --fail --silent --show-error --location --retry 3 \
             --proto '=https' --proto-redir '=https' \
@@ -219,15 +228,26 @@ jobs:
           printf '%s  %s\n' '1d444c5e7360471815f7158f71935fcecc68a3c417d85c7344f770854300bba2' "$audit_dir/grype.tar.gz" | sha256sum --check --strict
           tar --extract --gzip --file "$audit_dir/grype.tar.gz" --directory "$audit_dir" grype
           image_id="$(docker image inspect muvv-backend:hardened-trial --format '{{.Id}}')"
+          [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
           "$audit_dir/grype" "docker:${image_id}" --config scripts/grype-candidate.yaml \
             --output json > "$audit_dir/report.json"
-          python3 scripts/inspect-hardened-findings.py "$audit_dir/report.json" --image-id "$image_id"
-          docker run --rm --network none --read-only --cap-drop ALL \
-            --security-opt no-new-privileges --memory 256m --cpus 1 --pids-limit 32 \
-            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/inspect-hardened-findings.py,dst=/evidence.py,readonly" \
-            --entrypoint python muvv-backend:hardened-trial -I -B /evidence.py --runtime --image-id "$image_id"
+          printf 'report=%s\nimage_id=%s\n' "$audit_dir/report.json" "$image_id" >> "$GITHUB_OUTPUT"
           python3 scripts/report-image-audit.py "$audit_dir/report.json" \
             --image-id "$image_id" --summary "$GITHUB_STEP_SUMMARY" --github-annotation
+
+      - name: Diagnose DHI findings separately from the mandatory scan gate
+        if: ${{ always() && steps.build.outcome == 'success' && steps.scan.outputs.report != '' && !cancelled() }}
+        env:
+          AUDIT_REPORT: ${{ steps.scan.outputs.report }}
+          AUDIT_IMAGE: ${{ steps.scan.outputs.image_id }}
+        run: |
+          set -euo pipefail
+          [[ "$AUDIT_IMAGE" =~ ^sha256:[0-9a-f]{64}$ ]]
+          python3 scripts/inspect-hardened-findings.py "$AUDIT_REPORT" --image-id "$AUDIT_IMAGE"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --user 65532:65532 --security-opt no-new-privileges --memory 256m --cpus 1 --pids-limit 32 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/inspect-hardened-findings.py,dst=/evidence.py,readonly" \
+            --entrypoint python "$AUDIT_IMAGE" -I -B /evidence.py --runtime --image-id "$AUDIT_IMAGE"
 
       - name: State evaluation limits
         if: always()
