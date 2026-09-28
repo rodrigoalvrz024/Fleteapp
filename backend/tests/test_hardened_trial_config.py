@@ -55,6 +55,25 @@ class HardenedTrialConfigurationTests(unittest.TestCase):
         self.assertIn("--chown=0:0", self.dockerfile)
         self.assertIn("--only-binary=:all:", self.dockerfile)
 
+    def test_vendor_runtime_is_fixed_and_builder_remains_isolated(self):
+        step = self.config["jobs"]["evaluate"]["steps"][2]["run"]
+        pins = (
+            "a7bb712353136de87ec96d2c2d15de48852031aeda75be9196f2ca1825a27766",
+            "9a9fd7ffe996f9042cca4a2c0d167076a55b650cbd45a8bc535d9ab7d8ca2217",
+        )
+        for digest in pins:
+            self.assertIn("dhi.io/python@sha256:" + digest, step)
+        self.assertNotIn("dhi.io/python:3.11-debian13", step)
+        self.assertIn('docker pull --platform linux/amd64 "$digest"', step)
+        self.assertIn("assert sys.argv[1] in json.load(sys.stdin)", step)
+        self.assertIn("'{{.Os}}/{{.Architecture}}'", step)
+        self.assertIn("backend/Dockerfile.hardened --platform linux/amd64", step)
+        self.assertLess(step.index("unset DHI_TOKEN"), step.index("docker pull"))
+        provenance = ROOT / ".github/workflows/backend-dhi-provenance.yml"
+        if provenance.exists():
+            for digest in pins:
+                self.assertIn(digest, provenance.read_text(encoding="utf-8"))
+
     def test_trial_keeps_full_scanner_and_synthetic_offline_tests(self):
         self.assertIn("scripts/grype-candidate.yaml", self.raw)
         self.assertIn("scripts/report-image-audit.py", self.raw)

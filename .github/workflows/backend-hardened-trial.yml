@@ -56,18 +56,23 @@ jobs:
           DOCKER_CONFIG="$(mktemp -d "${RUNNER_TEMP}/muvv-dhi-auth.XXXXXX")"
           trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
           printf '%s' "$DHI_TOKEN" | docker login dhi.io --username "$DHI_USERNAME" --password-stdin
-          docker pull dhi.io/python:3.11-debian13-dev
-          docker pull dhi.io/python:3.11-debian13
+          unset DHI_TOKEN DHI_USERNAME
+          # Keep the previously evaluated builder; isolate the vendor's new runtime.
           declare -A images
+          images[build]='dhi.io/python@sha256:a7bb712353136de87ec96d2c2d15de48852031aeda75be9196f2ca1825a27766'
+          images[runtime]='dhi.io/python@sha256:9a9fd7ffe996f9042cca4a2c0d167076a55b650cbd45a8bc535d9ab7d8ca2217'
           for role in build runtime; do
-            tag='dhi.io/python:3.11-debian13'
-            if [[ "$role" = build ]]; then tag="${tag}-dev"; fi
-            digest="$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')"
+            digest="${images[$role]}"
             [[ "$digest" =~ ^dhi\.io/python@sha256:[0-9a-f]{64}$ ]]
-            images[$role]="$digest"
-            printf 'Resolved %s base: `%s`\n' "$role" "$digest" >> "$GITHUB_STEP_SUMMARY"
+            timeout --signal=TERM --kill-after=5s 180s docker pull --platform linux/amd64 "$digest"
+            docker image inspect "$digest" --format '{{json .RepoDigests}}' | \
+              python3 -c 'import json,sys; assert sys.argv[1] in json.load(sys.stdin)' "$digest"
+            base_id="$(docker image inspect "$digest" --format '{{.Id}}')"
+            [[ "$base_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+            test "$(docker image inspect "$digest" --format '{{.Os}}/{{.Architecture}}')" = linux/amd64
+            printf '%s requested base: `%s`; local config ID: `%s`; platform: linux/amd64\n' "$role" "$digest" "$base_id" >> "$GITHUB_STEP_SUMMARY"
           done
-          docker build --file backend/Dockerfile.hardened \
+          docker build --file backend/Dockerfile.hardened --platform linux/amd64 \
             --build-arg "PYTHON_BUILD_IMAGE=${images[build]}" \
             --build-arg "PYTHON_RUNTIME_IMAGE=${images[runtime]}" \
             --tag muvv-backend:hardened-trial backend

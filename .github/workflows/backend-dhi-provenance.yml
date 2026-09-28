@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Retrieve signed provenance for the already evaluated bases
+      - name: Bind signed provenance to the fixed candidate platform manifests
         id: evidence
         env:
           DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
@@ -60,34 +60,75 @@ jobs:
             if [[ "$role" = build ]]; then
               digest='a7bb712353136de87ec96d2c2d15de48852031aeda75be9196f2ca1825a27766'
             else
-              digest='6258618887b43ee67c5fd867a2d7dc76f21655aef417a4e23115902c5ba05a1e'
+              digest='9a9fd7ffe996f9042cca4a2c0d167076a55b650cbd45a8bc535d9ab7d8ca2217'
             fi
             ref="registry://dhi.io/python@sha256:$digest"
+            if ! timeout --signal=TERM --kill-after=5s 60s docker buildx imagetools inspect \
+              "dhi.io/python@sha256:$digest" --format '{{json .Manifest}}' \
+              > "$work/$role-index.json" 2> "$work/$role-index.log"; then
+              printf '::error::%s index lookup failed; raw output withheld.\n' "$role"
+              failed=1
+              continue
+            fi
             # DHI documents key verification without Rekor. Never claim tlog verification.
             if timeout --signal=TERM --kill-after=5s 120s "$work/tool/docker-scout" attest get \
               "$ref" --platform linux/amd64 --predicate-type https://slsa.dev/provenance/v0.2 \
               --verify --skip-tlog --key "$work/dhi.pub" --output "$work/$role.json" \
               > "$work/$role.log" 2>&1; then
-              if python3 - "$work/$role.json" <<'PY'
-          import json, pathlib, sys
-          path = pathlib.Path(sys.argv[1])
-          if not path.is_file() or not 0 < path.stat().st_size <= 16 * 1024 * 1024:
-              raise SystemExit(1)
+              if python3 - "$work/$role.json" "$work/$role-index.json" "$digest" <<'PY'
+          import json, pathlib, re, sys
+          def load(path):
+              path = pathlib.Path(path)
+              if not path.is_file() or not 0 < path.stat().st_size <= 16 * 1024 * 1024:
+                  raise ValueError("Invalid evidence size")
+              def unique(pairs):
+                  result = {}
+                  for key, value in pairs:
+                      if key in result:
+                          raise ValueError("Duplicate key")
+                      result[key] = value
+                  return result
+              return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique)
           try:
-              data = json.loads(path.read_text(encoding="utf-8"))
-              valid = (isinstance(data, dict)
+              data, index = load(sys.argv[1]), load(sys.argv[2])
+              requested = sys.argv[3]
+              index_types = ("application/vnd.oci.image.index.v1+json",
+                             "application/vnd.docker.distribution.manifest.list.v2+json")
+              manifest_types = ("application/vnd.oci.image.manifest.v1+json",
+                                "application/vnd.docker.distribution.manifest.v2+json")
+              if (not re.fullmatch(r"[0-9a-f]{64}", requested)
+                      or index.get("digest") != "sha256:" + requested
+                      or index.get("schemaVersion") != 2 or index.get("mediaType") not in index_types):
+                  raise ValueError("Index identity mismatch")
+              platforms = [m for m in index["manifests"]
+                           if m.get("platform", {}).get("os") == "linux"
+                           and m.get("platform", {}).get("architecture") == "amd64"]
+              if (len(platforms) != 1 or platforms[0].get("mediaType") not in manifest_types
+                      or platforms[0].get("platform", {}).get("variant") not in (None, "")
+                      or platforms[0].get("annotations", {}).get("vnd.docker.reference.type") == "attestation-manifest"):
+                  raise ValueError("Ambiguous platform")
+              platform = platforms[0]["digest"]
+              if not re.fullmatch(r"sha256:[0-9a-f]{64}", platform):
+                  raise ValueError("Invalid platform digest")
+              valid = (isinstance(data, dict) and data.get("_type") == "https://in-toto.io/Statement/v1"
                        and data.get("predicateType") == "https://slsa.dev/provenance/v0.2"
-                       and isinstance(data.get("subject"), list) and bool(data["subject"])
+                       and isinstance(data.get("subject"), list) and 1 <= len(data["subject"]) <= 64
+                       and all(isinstance(s.get("name"), str) and 0 < len(s["name"]) <= 2048
+                               and s.get("digest", {}).get("sha256") == platform.removeprefix("sha256:")
+                               for s in data["subject"])
                        and isinstance(data.get("predicate"), dict)
                        and isinstance(data["predicate"].get("materials"), list)
                        and bool(data["predicate"]["materials"]))
-          except (OSError, ValueError):
+          except (OSError, ValueError, KeyError, TypeError, AttributeError):
               valid = False
+          if valid:
+              print("Verified signature subject matches requested index's linux/amd64 manifest: " + platform)
           raise SystemExit(0 if valid else 1)
           PY
               then
                 cp "$work/$role.json" "$work/evidence/$role-provenance.json"
-                printf '%s: Scout signature verification and basic provenance shape passed for sha256:%s.\n' "$role" "$digest" >> "$GITHUB_STEP_SUMMARY"
+                cp "$work/$role-index.json" "$work/evidence/$role-index.json"
+                printf '%s: Scout signature and index-to-linux/amd64 subject binding passed for sha256:%s.\n' "$role" "$digest" >> "$GITHUB_STEP_SUMMARY"
               else
                 printf '::error::%s provenance structure is not the expected reviewed format.\n' "$role"
                 failed=1
@@ -123,7 +164,7 @@ jobs:
           printf 'directory=%s\n' "$work/evidence" >> "$GITHUB_OUTPUT"
           printf '%s\n' \
             'Evidence only. Docker public key pinned; Rekor transparency log not verified (documented DHI mode).' \
-            'Package provenance, patch-to-binary binding, subject/platform review and CVE regressions remain required.' \
+            'Package provenance, patch-to-binary binding and CVE regressions remain required; see per-role subject/platform binding results above.' \
             'No vulnerability waived, no image rebuilt or deployed, no APK or production data accessed.' >> "$GITHUB_STEP_SUMMARY"
           exit "$failed"
 
@@ -132,6 +173,8 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dhi-base-provenance-evidence
-          path: ${{ steps.evidence.outputs.directory }}/*-provenance.json
+          path: |
+            ${{ steps.evidence.outputs.directory }}/*-provenance.json
+            ${{ steps.evidence.outputs.directory }}/*-index.json
           if-no-files-found: warn
           retention-days: 14

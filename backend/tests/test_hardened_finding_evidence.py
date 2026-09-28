@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -94,6 +96,55 @@ class HardenedFindingEvidenceTests(unittest.TestCase):
     def test_oversized_annotation_rejected_without_truncation(self):
         with self.assertRaises(ValueError):
             evidence.annotation_lines({"image_id": IMAGE, "large": "x" * 4000}, "Test")
+
+    def runtime_with_maps(self, maps):
+        with patch.object(evidence.sys, "platform", "linux"), \
+                patch.object(evidence.Path, "read_text", return_value=maps), \
+                patch.object(evidence.Path, "stat", return_value=SimpleNamespace(st_size=6)), \
+                patch.object(evidence.Path, "read_bytes", return_value=b"native"), \
+                patch.object(evidence.os, "geteuid", return_value=65532, create=True), \
+                patch.object(evidence.os.path, "lexists", return_value=False):
+            return evidence.runtime_evidence(IMAGE)
+
+    def test_xml_mapping_never_claims_parser_provider_or_patch(self):
+        base = "100-200 r-xp 0 00:00 1 /opt/python/pyexpat.cpython-311.so\n"
+        for library, expected in (
+            ("libexpat.so.1.10.3", "observed"),
+            ("libexpatw.so.1", "observed"),
+            ("libexpat.so", "observed"),
+            ("libexpat_helper.so", "not_observed"),
+            ("libc.so.6", "not_observed"),
+        ):
+            with self.subTest(library=library):
+                result = self.runtime_with_maps(base + f"200-300 r-xp 0 00:00 2 /usr/lib/{library}\n")
+                self.assertEqual(result["xml_linkage"], {
+                    "shared_libexpat_mapping": expected,
+                    "pyexpat_provider": "undetermined",
+                    "elementtree_provider": "undetermined",
+                    "patch_attribution": "unverified",
+                })
+                self.assertFalse(result["findings_waived"])
+                self.assertEqual(result["image_id"], IMAGE)
+                self.assertEqual(len(result["mapped_native_files"]), 2)
+                lines = evidence.annotation_lines(result, "Native test")
+                self.assertEqual(len(lines), 1)
+                self.assertIn('"patch_attribution": "unverified"', lines[0])
+
+    def test_no_shared_mapping_is_not_bundled_proof(self):
+        result = self.runtime_with_maps("100-200 r-xp 0 00:00 1 /opt/python/pyexpat.cpython-311.so\n")
+        self.assertEqual(result["xml_linkage"]["shared_libexpat_mapping"], "not_observed")
+        self.assertEqual(result["xml_linkage"]["pyexpat_provider"], "undetermined")
+        self.assertEqual(result["xml_linkage"]["elementtree_provider"], "undetermined")
+
+    def test_empty_mappings_fail_instead_of_reporting_absence(self):
+        with self.assertRaisesRegex(ValueError, "Missing native mappings"):
+            self.runtime_with_maps("")
+
+    def test_unreadable_mappings_fail_instead_of_reporting_absence(self):
+        with patch.object(evidence.sys, "platform", "linux"), \
+                patch.object(evidence.Path, "read_text", side_effect=OSError("unavailable")):
+            with self.assertRaises(OSError):
+                evidence.runtime_evidence(IMAGE)
 
 
 if __name__ == "__main__":

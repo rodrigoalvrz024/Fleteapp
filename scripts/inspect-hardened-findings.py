@@ -72,13 +72,25 @@ def runtime_evidence(image_id):
     tools = ("infocmp", "mount", "umount", "nsenter", "getfacl", "setfacl", "chacl")
     if any(os.path.lexists(path) for path in ("/usr/bin/infocmp", "/bin/infocmp")):
         raise ValueError("Removed infocmp tool remains present")
+    # A process mapping is not evidence that either parser uses that library,
+    # nor does its absence establish a bundled copy or any patch status.
+    shared_expat_observed = any(
+        path.name == name or path.name.startswith(name + ".")
+        for path in paths for name in ("libexpat.so", "libexpatw.so")
+    )
     return {"image_id": image_id, "python": sys.version.split()[0],
             "expat": pyexpat.EXPAT_VERSION, "uid": os.geteuid(),
             "mapped_native_files": files,
+            "xml_linkage": {
+                "shared_libexpat_mapping": "observed" if shared_expat_observed else "not_observed",
+                "pyexpat_provider": "undetermined",
+                "elementtree_provider": "undetermined",
+                "patch_attribution": "unverified",
+            },
             "known_tool_paths_present": [str(Path(root) / tool)
                 for root in ("/usr/bin", "/bin", "/usr/sbin", "/sbin") for tool in tools
                 if os.path.lexists(Path(root) / tool)],
-            "limitations": "Known paths only; loaded libraries do not prove vulnerable code execution.",
+            "limitations": "This process and bounded parses only; mappings do not prove parser linkage, bundled code, fixes or vulnerable code execution.",
             "findings_waived": False}
 
 

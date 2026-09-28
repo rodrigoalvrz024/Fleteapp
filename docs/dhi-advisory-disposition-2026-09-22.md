@@ -99,7 +99,9 @@ matching rebuilds and a maintained solution for all four Expat issues. Do not
 repeat unchanged CI or purchase another base image on the assumption that it
 has no CVEs. No paid plan is required by this investigation.
 
-No external support request has been sent. Publishing a technical question
+The separate Expat draft has not been sent by this agent. On 2026-09-28 the
+user supplied the existing Docker support correspondence for case 00236676
+about glibc/Python 3.14; see the follow-up below. Sending additional questions
 requires approval and must omit repository source, credentials, customer data
 and private CI links. Public base digests and package versions are sufficient.
 
@@ -204,3 +206,191 @@ packages. Next: bind the platform manifests, retrieve package attestations,
 compare patch sources, and execute relevant regressions. No scanner findings
 were waived. The previous 30 High matches remain unresolved, not newly scanned.
 No deployment, APK, image rebuild or subscription change occurred.
+
+## Docker support case 00236676: response reviewed 2026-09-28
+
+Source: correspondence pasted by the user, including a support response dated
+2026-09-23. This is attributed vendor correspondence, not independently
+authenticated email or a cryptographic attestation. The initial automated
+Gordon answer is distinct from the later support response.
+
+The support response says:
+
+- DHI glibc `2.41-12+deb13u4+dhi0` contains an independent backport for
+  CVE-2026-19499, even though the standard Debian package remains listed as
+  affected. A version-based Debian finding alone cannot settle DHI patch status.
+- The corrected package is included in Python 3.14 Debian 13. The suggested
+  command uses `dhi.io/python:3.14.7-debian13` and OpenVEX v0.2.0 with `--verify`.
+- This image is in the standard Community catalog; support says no paid DHI
+  subscription or separate paid corrected image is required to download it.
+  This does not eliminate hosting, CI quota or other operating costs.
+- The supplied catalog URL identifies
+  `sha256:0c202fe5ead59e9534f24f0689a2bf921b2a931ed67c0e010fc64beb6330e481`.
+  This review could not retrieve that catalog page, and has NOT established
+  whether the URL digest denotes an index or a platform manifest. Do not use
+  it as an approved base pin or as the digest for the current 3.11 candidate.
+
+The public glibc recipe was reread and names the same DHI package revision.
+The previously verified 3.11 provenance lists that version and the libc6
+material hash recorded above. This corroborates the investigation, but neither
+matching version strings nor the email substitute for index/platform binding,
+package provenance, applied-patch review and regression evidence.
+
+Decision: strengthen the vendor evidence for CVE-2026-19499; do not switch Python,
+subtract findings, change the release gate or deploy. The current evaluated DHI
+candidate is Python 3.11.16, not the 3.14.7 image in the email. The other CVEs
+(including the four Expat advisories) are not resolved by this response.
+
+The follow-up dated 2026-09-25 says the case will close automatically in five
+days without a reply. Its live status has not been checked. Recommend replying
+in the existing email thread now. A narrowly scoped English reply is prepared
+in `docs/docker-case-00236676-reply.md`; it has NOT been sent. It contains no
+credentials, customer information or private repository/CI URLs.
+
+### Subsequent Gordon response: Expat revision mismatch
+
+The user supplied a further automated Gordon answer. It cannot confirm glibc
+package-level evidence, attributes three Expat fixes to `2.8.3-1~deb13u1+dhi3`,
+and cannot confirm CVE-2026-76957. It also assumes dynamic linkage from standard
+Debian builds, without exact DHI image linkage evidence.
+
+Direct inspection on 2026-09-28 of the cited Expat recipe and its last-change
+[immutable revision 4c77bc608d47ff97eba2024fc5cee0d9643ea5af](https://github.com/docker-hardened-images/catalog/blob/4c77bc608d47ff97eba2024fc5cee0d9643ea5af/package/deb/main/expat/debian-13/2.yaml)
+found `DHI_REL: "4"` and `DHI_VERSION: 2.8.3-1~deb13u1+dhi4`.
+The recipe applies named patches and changelog entries for CVE-2026-66046,
+CVE-2026-76956 and CVE-2026-93990. CVE-2026-76957 is not named there.
+
+This is a concrete lead for a newer maintained package, NOT confirmation that
+our `dhi3` package contains these patches. Absence of a named CVE alone also
+does not prove vulnerability or absence of an indirect fix. Need exact package
+provenance, corrected image digest, review of CVE-2026-76957, and DHI-specific
+Python linkage evidence. Gordon's knowledge-base gap does not disprove the
+earlier human support statement about glibc. Release gate remains unchanged.
+
+Prepared a concise clarification below the existing support draft. It has not
+been sent; no new CI run, package replacement, deployment or subscription.
+
+### Human support follow-up received 2026-09-28
+
+Source: the user's pasted human Docker Support reply. This is vendor-reported
+evidence, not an independently authenticated email or a new image inspection.
+Support closed duplicate case 00237588; keep correspondence under 00236676.
+This reply supersedes the automated Gordon linkage and revision assumptions.
+
+| Component | What support states | Remaining verification |
+| --- | --- | --- |
+| libc6 `2.41-12+deb13u4+dhi0` | Recipe backports CVE-2026-19499 (glibc BZ #34510); build uses `nocheck` | Bind source and files to the evaluated image; execute relevant regressions. No additional package provenance/test results are available from this reply. |
+| libexpat1 `2.8.3-1~deb13u1+dhi3` | Backports CVE-2026-66046 and CVE-2026-76956 | Verify exact shipped files and patch applicability. |
+| libexpat1 `2.8.3-1~deb13u1+dhi4` | Adds CVE-2026-93990 | New candidate only; not the previously scanned package. |
+| CVE-2026-76957 | No named backport in the current definition | Unconfirmed, not proof of absence of any indirect fix. |
+| Python pyexpat, old and new images | Appears to use Python's bundled Expat, not system libexpat1 | System package backports cannot be credited to this copy. Independently establish parser implementation, source and fixes. ElementTree must also remain in scope. |
+
+New runtime **index digest reported by support**, NOT an approved base:
+
+`dhi.io/python@sha256:9a9fd7ffe996f9042cca4a2c0d167076a55b650cbd45a8bc535d9ab7d8ca2217`
+
+Support associates it with `3.11-debian13`, libc6
+`2.41-12+deb13u4+dhi1` and libexpat1 `2.8.3-1~deb13u1+dhi4`.
+No matching build/dev index digest was supplied. Neither this index nor those
+contents have been independently retrieved or executed during this follow-up.
+The old evaluated index, derived image ID and scan counts above remain unchanged.
+
+Public references supplied by support:
+
+- [glibc recipe at 72b9b6eb55](https://github.com/docker-hardened-images/catalog/blob/72b9b6eb55/package/deb/main/glibc/debian-13/2.yaml)
+- [upstream glibc patch discussion](https://sourceware.org/pipermail/libc-alpha/2026-August/172345.html)
+- [glibc patch, mutable main](https://github.com/docker-hardened-images/catalog/blob/main/package/deb/main/glibc/patch/CVE-2026-19499.patch)
+- [Expat patches, mutable main](https://github.com/docker-hardened-images/catalog/tree/main/package/deb/main/expat/patch)
+
+Attempts to retrieve these new source references in this follow-up failed.
+They are recorded as supplied references, not newly independently inspected
+sources. Retrieval failure is not evidence that a fix is absent.
+The official [DHI verification guide](https://docs.docker.com/dhi/how-to/verify/)
+was retrieved: image signatures help establish provenance but are not proof
+that a specific regression was tested or a parser uses a patched library.
+
+Next isolated evaluation, before any release decision:
+
+1. Pin the requested candidate by digest, establish index to linux/amd64
+   manifest binding, and verify signed statements against that identity.
+   Resolve and verify the compatible build image separately; record both
+   bases and the resulting application image ID. Do not just rerun mutable tags.
+2. Reuse `scripts/inspect-hardened-findings.py` for bounded parses, mapped
+   file hashes and explicit linkage uncertainty. An observed shared library
+   does not identify which parser uses it; an unobserved library does not
+   prove bundled code. Unreadable maps remain incomplete evidence, not absence.
+3. Cross-check those hashes against `scripts/report-native-symbols.py` ELF
+   inventory (`DT_NEEDED`, imports/exports) from the SAME image. Preserve both
+   parser modules and the system library as separate evidence subjects.
+4. Establish each relevant fix from maintained source plus image-bound
+   evidence and bounded regressions. A simple XML parse/version string or
+   symbol absence does not establish a fix. If bundled Expat remains unresolved,
+   keep the release blocked and evaluate a maintained corrected runtime.
+5. Repeat the raw scan and application tests. Keep raw findings; no automatic
+   suppression from support email, VEX, shared-library presence or version alone.
+
+The diagnostic now emits `xml_linkage` with `observed` / `not_observed` for
+shared Expat mappings, `undetermined` for both parser providers and `unverified`
+for patch attribution. It never changes scan counts or the release gate.
+Its local tests simulate map contents; they do NOT validate the new DHI image.
+
+Local verification: 178 tests passed across finding diagnostics, hardened
+workflow configuration, image audit reports/policy, native symbol reports,
+Python backport verification and runtime security. The independent read-only
+review found no P1/P2 in this four-file change and independently reran all 12
+finding-evidence tests successfully. `git diff --check` passed for this scope.
+Actual candidate mappings and annotation size still require Linux evaluation.
+
+No new image pull/build, CI execution, commit/push, production pin change,
+deployment, APK installation, CVE exception or purchase was performed here.
+Support's inability to provide additional package evidence is recorded; do
+not repeatedly request the same unavailable material or treat it as approval.
+Community base images remain available without a paid DHI plan according to
+the [official plan documentation](https://docs.docker.com/subscription-billing/plans/dhi/).
+Further private support may require a subscription; buying support does not
+establish a fix. CI and hosting may still consume quota or incur charges.
+
+### Authorized exact-candidate evaluation, 2026-09-28
+
+The user subsequently authorized preparing and publishing the isolated trial
+to the testing branch and running GitHub Actions. This does NOT authorize
+deployment, paid subscriptions, APK installation or security exceptions.
+
+- The trial now requests runtime index `9a9fd7ffe996f9042cca4a2c0d167076a55b650cbd45a8bc535d9ab7d8ca2217`
+  explicitly on `linux/amd64`, not the mutable `3.11-debian13` tag.
+- The build image remains the previously evaluated index
+  `a7bb712353136de87ec96d2c2d15de48852031aeda75be9196f2ca1825a27766`.
+  No matching new builder was supplied. This deliberately isolates the runtime
+  change; the Python version, dependencies and application tests still must pass.
+- Docker must retain the requested RepoDigest, and the pulled OS/architecture
+  must match. The summary records requested indexes, local image config IDs
+  and the derived application image ID as DIFFERENT identifiers.
+- The separate provenance workflow checks the registry index's digest, selects
+  exactly one linux/amd64 image manifest, and requires Scout's verified SLSA
+  subject to match that platform digest. Index and signed statement are saved
+  together only for a successful role. Rekor remains explicitly unverified.
+- The Docker CLI is the trusted registry resolver here; JSON parsing does not
+  claim independent hashing of raw manifest bytes. Package patch attribution
+  remains separate and unapproved.
+- Both workflows retain read-only repository permissions and existing temporary
+  registry credentials. Only public evidence is uploaded, never registry logs
+  or credentials. Raw vulnerability findings are not suppressed.
+
+Pre-publication local checks: 179 verifier tests and 6 provenance configuration
+tests passed; all 13 embedded Bash steps passed syntax checks. Synthetic negative
+cases include a wrong index, wrong signed subject, ambiguous/wrong architecture,
+attestation manifests, duplicate JSON keys and malformed evidence. These are
+tests of the controls, not results from the new Docker candidate.
+
+Independent review identified and closed a compatibility issue before the
+push: the actual previously verified documents use in-toto Statement/v1 with
+six tag aliases, not one v0.1 subject. The validator now accepts 1-64 named
+subjects ONLY when every SHA-256 matches the selected platform. Mixed digests
+are rejected. Both historical documents passed this format check against
+synthetic matching indexes; this does not establish real registry binding.
+The reviewer reported no remaining confirmed P1/P2 in the reviewed changes.
+
+The push also matches the existing Backend Linux candidate workflow. Its checks
+remain independent of the DHI candidate; do not mix their findings or image IDs.
+The unrelated application, mobile and website working-tree changes are excluded
+from this evaluation commit.
