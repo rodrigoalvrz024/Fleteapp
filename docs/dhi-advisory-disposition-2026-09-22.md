@@ -165,3 +165,42 @@ be reviewed. It cannot approve a release or waive findings. See Docker's
   Reuses the existing read-only PAT through stdin; no new permissions or
   subscription. Successful registry authentication alone does not validate
   provenance. This change must still pass the actual attestation retrieval.
+
+### Signed provenance retrieved successfully
+
+- Commit `a9801f137e0b458a7576c3c156ed07c6e8c3a559`,
+  [run 36450823162](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36450823162),
+  passed (38 seconds total; job 32 seconds). Both Scout signature checks and
+  both basic document-shape checks passed after adding Docker Hub login.
+- Artifact `dhi-base-provenance-evidence`, ID `10983067835`, ZIP size 89,715 bytes.
+  Downloaded and independently hashed locally: SHA-256
+  `29f071eb6559f1c044c138b0fa542d6912c8cda80f4209dcdd0a0e3ee514965e`,
+  matching the GitHub artifact digest. Contains only the two provenance JSONs.
+- Both documents declare `linux/amd64`. Build lists 263 materials; runtime 104.
+  Their first subjects are respectively
+  `pkg:docker/dhi/python@3.11.16-debian13-dev?platform=linux%2Famd64` and
+  `pkg:docker/dhi/python@3.11.16-debian13?platform=linux%2Famd64`.
+- Subject SHA-256 values are respectively
+  `3b3f52951a5496cd953be80a9b0dff8132190a5d6459b4ac089fa2d7d34d27e9` and
+  `96542a5780b7c12083b208b09dff449bc2ed32e5c90907f5c903a46294f3b796`.
+  These are NOT the input index digests. An explicit registry index-to-platform
+  manifest comparison is still required; do not equate these values or treat
+  a declared platform as independent proof of that mapping.
+
+Both documents list these identical package material hashes (SHA-256):
+
+| Package | Version | Material hash |
+| --- | --- | --- |
+| libc6 | 2.41-12+deb13u4+dhi0 | `4a8baee075cce76aa3c04e30727fb3a095b4ab48b666a30a7b00b410fddd0f43` |
+| zlib1g | 1:1.3.dfsg+really1.3.1-1+dhi4 | `e4775cc88b8fc53843e43452a1e535ed49676d31e77bab9511e3a6555e7eccba` |
+| libncursesw6 | 6.5+20250216-2+dhi4 | `6a11ea46b9100f07449caaa6de558dc3994f2daf1ce343d5212da101455a9102` |
+| libtinfo6 | 6.5+20250216-2+dhi4 | `e3e3f9b84ee68f482eaa6ea6a1c33bc18e8863a4e5d28c0c8610fb7cec6b0380` |
+| ncurses-base | 6.5+20250216-2+dhi4 | `578958b3f8fdbec5ba4a79396191459434df763167be3c9d43318a2ddda92463` |
+| ncurses-bin | 6.5+20250216-2+dhi4 | `54821f5e17572f0badc7059efefb54fb54d9e8a28449274f478735314f22474d` |
+| libexpat1 | 2.8.3-1~deb13u1+dhi3 | `a8a537936675dc242a3ae4c25fad31bb1c1b52458e6bb00e36922cdc3c7b90c7` |
+
+These are signed material declarations, not independently downloaded/tested
+packages. Next: bind the platform manifests, retrieve package attestations,
+compare patch sources, and execute relevant regressions. No scanner findings
+were waived. The previous 30 High matches remain unresolved, not newly scanned.
+No deployment, APK, image rebuild or subscription change occurred.
