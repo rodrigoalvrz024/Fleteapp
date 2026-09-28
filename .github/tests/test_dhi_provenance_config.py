@@ -39,6 +39,7 @@ class DhiProvenanceConfigurationTests(unittest.TestCase):
         self.assertIn("Rekor transparency log not verified", self.shell)
 
     def test_credentials_do_not_reach_tools_or_artifact(self):
+        self.assertIn("for registry in docker.io dhi.io registry.scout.docker.com; do", self.shell)
         for value in ("umask 077", "--password-stdin", "unset DHI_TOKEN DHI_USERNAME", "trap 'rm -rf -- \"$DOCKER_CONFIG\"' EXIT"):
             self.assertIn(value, self.shell)
         self.assertLess(self.shell.index("unset DHI_TOKEN"), self.shell.index('"$work/tool/docker-scout" attest'))

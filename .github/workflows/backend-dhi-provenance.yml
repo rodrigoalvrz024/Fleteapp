@@ -46,7 +46,8 @@ jobs:
             --proto '=https' --proto-redir '=https' \
             https://registry.scout.docker.com/keyring/dhi/latest.pub --output "$work/dhi.pub"
           printf '%s  %s\n' '1d02bbccf149283ae6288d96264dcad3fb23ee1911d90324a48eab28e4cb8a5f' "$work/dhi.pub" | sha256sum --check --strict
-          for registry in dhi.io registry.scout.docker.com; do
+          # Scout authenticates its backend via Docker Hub as well as the DHI registries.
+          for registry in docker.io dhi.io registry.scout.docker.com; do
             printf '%s' "$DHI_TOKEN" | timeout 30s docker login "$registry" \
               --username "$DHI_USERNAME" --password-stdin > "$work/login.log" 2>&1 || {
               printf '::error::Registry authentication failed; credentials and logs withheld.\n'

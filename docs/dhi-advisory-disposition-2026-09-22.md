@@ -157,3 +157,11 @@ be reviewed. It cannot approve a release or waive findings. See Docker's
 - Follow-up emits only fixed diagnostic categories and the exit status, never
   raw tool output, URLs or credentials. Tests include secret-bearing synthetic
   errors and annotation injection. Verification requirements are unchanged.
+- Diagnostic [run 36450556241](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36450556241)
+  at `102d38b` failed in 13 seconds. Both invocations returned exit 1 and the
+  fixed category `authentication`; no signed documents were obtained.
+- Add the missing Docker Hub login to the same temporary credential store.
+  Docker [documents this prerequisite for Scout](https://docs.docker.com/scout/integrations/ci/azure/).
+  Reuses the existing read-only PAT through stdin; no new permissions or
+  subscription. Successful registry authentication alone does not validate
+  provenance. This change must still pass the actual attestation retrieval.
