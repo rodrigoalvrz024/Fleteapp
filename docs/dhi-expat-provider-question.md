@@ -4,7 +4,7 @@ Estado: borrador tecnico, NO publicado ni enviado. Sin secretos ni datos de usua
 
 ## Suggested title
 
-Python 3.11 Debian 13: clarification on bundled Expat 2.8.3 and update to 2.8.4
+Python 3.11 Debian 13: maintained fixes for all bundled Expat copies, including CVE-2026-93990
 
 ## Suggested body
 
@@ -25,18 +25,28 @@ Grype 0.118.0 identifies these Debian advisories for libexpat1
 - CVE-2026-66046
 - CVE-2026-76956
 - CVE-2026-76957
+- CVE-2026-93990
 
-Debian's tracker marks Expat 2.8.3 affected and lists fixes in 2.8.4.
-We also see an official DHI Expat 2.8.4 package definition. We do not assume
-that updating a shared library would fix a separately bundled copy in Python.
+Debian's tracker lists upstream 2.8.4 fixes for the first three, but also marks
+2.8.4 affected by CVE-2026-93990. We see an official DHI Expat 2.8.4 package
+definition, but do not regard that alone as sufficient. We do not assume that
+updating a shared library would fix a separately bundled copy in Python.
+
+The exact Linux/amd64 evaluation bases resolved on 2026-09-22 are:
+
+- Build: `dhi.io/python@sha256:a7bb712353136de87ec96d2c2d15de48852031aeda75be9196f2ca1825a27766`.
+- Runtime: `dhi.io/python@sha256:6258618887b43ee67c5fd867a2d7dc76f21655aef417a4e23115902c5ba05a1e`.
 
 Could you clarify:
 
 1. Which maintained Python 3.11 Debian 13 image/package revision incorporates
-   the fixes in every Expat copy, including the Python extensions?
+   all four fixes in every Expat copy, including the Python extensions and the
+   follow-up for CVE-2026-66046 that avoids introducing CVE-2026-76641?
 2. Is a release containing those fixes already available in Community?
 3. Which source/provenance or package-level patch evidence should downstream
    users verify, if version strings remain 2.8.3 due to backports?
+4. Is there a maintained release/backport for the UTF-16 correction tracked as
+   CVE-2026-93990, rather than only the update to 2.8.4?
 
 No CVEs have been suppressed in our evaluation. We are seeking a maintained
 update or precise patch evidence, rather than a general VEX exemption.
@@ -49,10 +59,12 @@ update or precise patch evidence, rather than a general VEX exemption.
 - https://security-tracker.debian.org/tracker/CVE-2026-66046
 - https://security-tracker.debian.org/tracker/CVE-2026-76956
 - https://security-tracker.debian.org/tracker/CVE-2026-76957
+- https://security-tracker.debian.org/tracker/CVE-2026-93990
 
 ## Decision local
 
 No se compilan ni reemplazan bibliotecas criticas en produccion por esta
-consulta. Antes de enviar, adjuntar los digests exactos de ambas imagenes base
-de la corrida revisada, tomados del resumen de GitHub Actions. El ID Docker
-de la imagen derivada no sustituye el digest del proveedor.
+consulta. Los digests anteriores se verificaron en el resumen de la corrida
+35686100377, sin publicar su enlace privado en el texto sugerido. El ID Docker
+de la imagen derivada no sustituye el digest del proveedor. Borrador actualizado
+el 2026-09-22; no se ha publicado ni enviado.

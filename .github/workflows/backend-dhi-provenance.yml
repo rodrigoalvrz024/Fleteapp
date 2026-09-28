@@ -1,0 +1,113 @@
+name: DHI provenance evidence (not release approval)
+
+on:
+  push:
+    branches:
+      - codex/mvp-supabase-rls-review
+    paths:
+      - .github/workflows/backend-dhi-provenance.yml
+      - .github/tests/test_dhi_provenance_config.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dhi-provenance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Retrieve signed provenance for the already evaluated bases
+        id: evidence
+        env:
+          DHI_USERNAME: ${{ secrets.DHI_USERNAME }}
+          DHI_TOKEN: ${{ secrets.DHI_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "$DHI_USERNAME" || -z "$DHI_TOKEN" ]]; then
+            printf '::error::Read-only DHI credentials are required; no evidence verified.\n'
+            exit 1
+          fi
+          work="$(mktemp -d "${RUNNER_TEMP}/muvv-provenance.XXXXXX")"
+          export DOCKER_CONFIG="$work/auth"
+          mkdir -p "$DOCKER_CONFIG" "$work/tool" "$work/evidence"
+          trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+          curl --fail --silent --show-error --location --retry 2 --max-time 90 \
+            --proto '=https' --proto-redir '=https' \
+            https://github.com/docker/scout-cli/releases/download/v1.24.0/docker-scout_1.24.0_linux_amd64.tar.gz \
+            --output "$work/scout.tar.gz"
+          printf '%s  %s\n' 'f4e2814bd61040365153d5b964b144cb2dc6ee536a68b5bac4cadf00fc0ec34b' "$work/scout.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$work/scout.tar.gz" --directory "$work/tool" docker-scout
+          curl --fail --silent --show-error --location --retry 2 --max-time 30 \
+            --proto '=https' --proto-redir '=https' \
+            https://registry.scout.docker.com/keyring/dhi/latest.pub --output "$work/dhi.pub"
+          printf '%s  %s\n' '1d02bbccf149283ae6288d96264dcad3fb23ee1911d90324a48eab28e4cb8a5f' "$work/dhi.pub" | sha256sum --check --strict
+          for registry in dhi.io registry.scout.docker.com; do
+            printf '%s' "$DHI_TOKEN" | timeout 30s docker login "$registry" \
+              --username "$DHI_USERNAME" --password-stdin > "$work/login.log" 2>&1 || {
+              printf '::error::Registry authentication failed; credentials and logs withheld.\n'
+              exit 1
+            }
+          done
+          unset DHI_TOKEN DHI_USERNAME
+          failed=0
+          for role in build runtime; do
+            if [[ "$role" = build ]]; then
+              digest='a7bb712353136de87ec96d2c2d15de48852031aeda75be9196f2ca1825a27766'
+            else
+              digest='6258618887b43ee67c5fd867a2d7dc76f21655aef417a4e23115902c5ba05a1e'
+            fi
+            ref="registry://dhi.io/python@sha256:$digest"
+            # DHI documents key verification without Rekor. Never claim tlog verification.
+            if timeout --signal=TERM --kill-after=5s 120s "$work/tool/docker-scout" attest get \
+              "$ref" --platform linux/amd64 --predicate-type https://slsa.dev/provenance/v0.2 \
+              --verify --skip-tlog --key "$work/dhi.pub" --output "$work/$role.json" \
+              > "$work/$role.log" 2>&1; then
+              if python3 - "$work/$role.json" <<'PY'
+          import json, pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          if not path.is_file() or not 0 < path.stat().st_size <= 16 * 1024 * 1024:
+              raise SystemExit(1)
+          try:
+              data = json.loads(path.read_text(encoding="utf-8"))
+              valid = (isinstance(data, dict)
+                       and data.get("predicateType") == "https://slsa.dev/provenance/v0.2"
+                       and isinstance(data.get("subject"), list) and bool(data["subject"])
+                       and isinstance(data.get("predicate"), dict)
+                       and isinstance(data["predicate"].get("materials"), list)
+                       and bool(data["predicate"]["materials"]))
+          except (OSError, ValueError):
+              valid = False
+          raise SystemExit(0 if valid else 1)
+          PY
+              then
+                cp "$work/$role.json" "$work/evidence/$role-provenance.json"
+                printf '%s: Scout signature verification and basic provenance shape passed for sha256:%s.\n' "$role" "$digest" >> "$GITHUB_STEP_SUMMARY"
+              else
+                printf '::error::%s provenance structure is not the expected reviewed format.\n' "$role"
+                failed=1
+              fi
+            else
+              printf '::error::%s provenance verification failed or timed out; no approval.\n' "$role"
+              failed=1
+            fi
+          done
+          printf 'directory=%s\n' "$work/evidence" >> "$GITHUB_OUTPUT"
+          printf '%s\n' \
+            'Evidence only. Docker public key pinned; Rekor transparency log not verified (documented DHI mode).' \
+            'Package provenance, patch-to-binary binding, subject/platform review and CVE regressions remain required.' \
+            'No vulnerability waived, no image rebuilt or deployed, no APK or production data accessed.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"
+
+      - name: Preserve only verified public provenance documents
+        if: ${{ always() && steps.evidence.outputs.directory != '' && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dhi-base-provenance-evidence
+          path: ${{ steps.evidence.outputs.directory }}/*-provenance.json
+          if-no-files-found: warn
+          retention-days: 14
