@@ -92,6 +92,29 @@ jobs:
                 failed=1
               fi
             else
+              verify_status=$?
+              python3 - "$work/$role.log" "$verify_status" <<'DIAGNOSTIC'
+          import pathlib, sys
+          # Never echo tool output: even error messages can contain credential-bearing URLs.
+          status = int(sys.argv[2])
+          with pathlib.Path(sys.argv[1]).open("rb") as stream:
+              message = stream.read(1024 * 1024).decode("utf-8", errors="replace").lower()
+          patterns = {
+              "cli_usage": ("unknown command", "unknown flag", "requires at least", "accepts "),
+              "authentication": ("unauthorized", "authentication required", "please login", "please log in", "not logged in", "docker login"),
+              "authorization": ("forbidden", "access denied", "insufficient_scope"),
+              "missing_evidence": ("no attestation", "manifest unknown", "not found"),
+              "signature": ("no matching signatures", "verification failed", "invalid signature"),
+              "key": ("loading public key", "parsing key", "pem block"),
+              "network": ("connection refused", "no such host", "timeout", "tls handshake"),
+              "docker_daemon": ("cannot connect to the docker daemon",),
+              "plugin_invocation": ("docker cli plugin", "standalone"),
+          }
+          categories = [name for name, terms in patterns.items() if any(term in message for term in terms)]
+          if status in (124, 137):
+              categories.append("process_timeout")
+          print("Verifier diagnostic: exit=" + str(status) + "; categories=" + (",".join(categories) or "unclassified") + "; raw output withheld.")
+          DIAGNOSTIC
               printf '::error::%s provenance verification failed or timed out; no approval.\n' "$role"
               failed=1
             fi

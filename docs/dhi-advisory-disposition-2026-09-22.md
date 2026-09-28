@@ -144,3 +144,16 @@ package-level attestations, backport/source links and regressions must still
 be reviewed. It cannot approve a release or waive findings. See Docker's
 [verification instructions](https://docs.docker.com/dhi/how-to/verify/) and
 [package evidence instructions](https://docs.docker.com/dhi/how-to/hardened-packages/#package-attestations).
+
+### First provenance-only run
+
+- Commit `3ebf75581769ef84ecce59bc18bd35b5d4ee4a90`,
+  [run 36449736627](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36449736627),
+  failed (11 seconds total displayed by GitHub).
+- Tool/key hash checks and registry logins completed. Both Scout invocations
+  returned failure; neither document reached the shape validator. No artifacts
+  or verified signatures resulted. The private tool logs were deliberately not
+  published, so the first run alone does not identify the underlying cause.
+- Follow-up emits only fixed diagnostic categories and the exit status, never
+  raw tool output, URLs or credentials. Tests include secret-bearing synthetic
+  errors and annotation injection. Verification requirements are unchanged.

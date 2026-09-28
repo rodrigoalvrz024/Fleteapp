@@ -82,6 +82,24 @@ class DhiProvenanceConfigurationTests(unittest.TestCase):
                                     capture_output=True, timeout=5)
             self.assertEqual(result.returncode, 1)
 
+    def test_failure_diagnostic_outputs_only_fixed_categories(self):
+        embedded = self.shell.split("<<'DIAGNOSTIC'\n", 1)[1].split("\nDIAGNOSTIC\n", 1)[0]
+        cases = [("unauthorized token=SECRET https://user:SECRET@example.test", "1", "authentication"),
+                 ("unknown flag: --SECRET\n::error::SECRET", "1", "cli_usage"),
+                 ("SECRET", "124", "process_timeout"),
+                 ("SECRET", "1", "unclassified")]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "private.log"
+            for message, status, category in cases:
+                path.write_text(message, encoding="utf-8")
+                result = subprocess.run([sys.executable, "-c", embedded, str(path), status],
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(result.stdout.strip(),
+                                 f"Verifier diagnostic: exit={status}; categories={category}; raw output withheld.")
+                self.assertNotIn("SECRET", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
