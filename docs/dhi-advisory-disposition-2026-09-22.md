@@ -394,3 +394,83 @@ The push also matches the existing Backend Linux candidate workflow. Its checks
 remain independent of the DHI candidate; do not mix their findings or image IDs.
 The unrelated application, mobile and website working-tree changes are excluded
 from this evaluation commit.
+
+### Completed evaluation of the supplied index
+
+Evaluated commit: `e0cf245` on `codex/mvp-supabase-rls-review`.
+
+- [Signed provenance and platform binding](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36466305254): **passed**, 45 seconds.
+- [Exact DHI runtime evaluation](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36466305338): **blocked by vulnerability scan**, 168 seconds. The scan was the ONLY failed step; application tests, Python regressions, permissions, actual HTTP startup/SIGTERM, root rejection, native inventory and post-scan diagnostics passed.
+- Auxiliary [Python 3.14](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36466305633) and [standard Linux](https://github.com/rodrigoalvrz024/Fleteapp/actions/runs/36466305561) workflows also matched this push. They were cancelled to limit unrelated quota use, NOT marked passed and NOT used to approve the DHI candidate.
+
+Verified runtime chain:
+
+| Identity | SHA-256 |
+| --- | --- |
+| Requested runtime index | `9a9fd7ffe996f9042cca4a2c0d167076a55b650cbd45a8bc535d9ab7d8ca2217` |
+| linux/amd64 runtime manifest, matching all signed subject aliases | `ff3abef1d692e743d7ad8dc890dc5919b3c1114da56e39e01baaa12edcb019c9` |
+| Built application image ID, shared by scan/native/runtime evidence | `33e0fed80ca9fdd7999338d8d6511e4ed570e31843d248eab05b182b35eacdf0` |
+| Declared libc6 `2.41-12+deb13u4+dhi1` package material | `50a5fcf7082cde1fc6e9ca8ca05cfa6d20b8a65a0fded9fe488e710b7a1a4bc5` |
+| Declared libexpat1 `2.8.3-1~deb13u1+dhi4` package material | `eb908ffffd24545a4f956f62da50e5d330ac5e5e5175f50a0631273699958c76` |
+
+Package material hashes remain signed declarations, not independently rebuilt
+or regression-tested package evidence. Image signature and platform binding
+are now verified for this trial; that does not close patch-attribution checks.
+
+Grype 0.118.0 scan at `2026-09-28T18:38:32.097360367Z`:
+**0 Critical, 30 High, 38 Medium, 4 Low, 20 Negligible, 0 Unknown**.
+All 92 findings were preserved in diagnostic annotations. The High matches
+represent **12 distinct CVEs and 15 CVE/package/version groups**, not 30
+distinct vulnerabilities. Counts were not deduplicated or waived.
+
+| Package(s) | High matches |
+| --- | ---: |
+| libc6 | 4 |
+| libexpat1 | 8 |
+| libncursesw6, libtinfo6, ncurses-base, ncurses-bin | 8 |
+| libuuid1 | 8 |
+| zlib1g | 2 |
+
+The matcher still uses Debian package advisories. These findings do not alone
+disprove DHI backports, but no exception has been approved. In particular,
+CVE-2026-76957 remains present and unconfirmed. A zero-Critical count is NOT
+release approval and says nothing about uncatalogued embedded code.
+
+Native observations bound to the application image above:
+
+- Python is 3.11.16; pyexpat reports `expat_2.8.3`.
+- pyexpat file hash changed from the prior candidate to
+  `0789b45104c24e5e216d677968c39955846b41b941a73abacb1ac706cf597274`.
+  The runtime mapping hash matches the static ELF inventory hash.
+- ElementTree file hash remains
+  `c764dff2e70d5a20c76eb91da981bc95507925b4e48639896ae7d001cb6ec72e`.
+- Both module ELF entries list only `libc.so.6` in `DT_NEEDED`;
+  separate `libexpat` was not observed in the bounded parsing process.
+- System `libexpat.so.1.12.3` exists separately, hash
+  `b833a88cd2ecffaddc9faba7007cec4eb7746c5ce2ad7600feb00a6beb306eb3`.
+
+These observations are consistent with the vendor's bundled-copy warning.
+They do not prove why pyexpat changed, which CVEs it fixes, or every possible
+loader path. The checker correctly keeps both parser providers undetermined
+and patch attribution unverified. Do not transfer system patches to Python.
+
+Local downloaded evidence in `output/dhi-20260928-e0cf245/` (not committed):
+
+| File | SHA-256 |
+| --- | --- |
+| dhi-base-provenance-evidence.zip | `802c97a66c93bb5427f4225c67f89b1f34c9c2f506852f54c3fc3240886e5724` |
+| dhi-native-symbol-evidence.zip | `1c7f8870c46a54167bfddf3034c02fb963a5f4e2bdd36fba0c67036606be5320` |
+| trial-annotations.json | `3adccbee0832dd7eee2c78ab7bf50b47cad9c64995727c00426c8678de2a5a9c` |
+
+Decision: keep release blocked. The next investigation should bind the changed
+Python module to maintained source and specific Expat regressions, then resolve
+the remaining system-package findings using exact evidence or maintained
+replacements. Repeating the same scan or buying support is not itself a fix.
+No production deployment, app installation, paid subscription or security
+exception occurred. CI time was consumed; job durations are not a verified
+billing charge or the account's remaining monthly quota.
+
+Independent post-run review cross-checked all 92 annotation rows, the 30 High
+identities and runtime file hashes against the native inventory. It confirmed
+the same application image ID and no new evidence discrepancy; it did NOT
+approve a CVE exception or deployment.
