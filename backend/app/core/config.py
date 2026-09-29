@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     PILOT_MODE: bool = False
     PILOT_ALLOWED_EMAILS: str = ""
     CORS_ORIGINS: str = (
+        "https://muvv.cl,https://www.muvv.cl,"
         "https://muvv-dev.web.app,"
         "https://muvv-dev-public.web.app,"
         "http://127.0.0.1:8090,"
@@ -34,6 +36,12 @@ class Settings(BaseSettings):
     GOOGLE_MAPS_KEY: str = ""
     FRONTEND_URL: str = "https://muvv-dev.web.app"
     RESEND_API_KEY: str = ""
+    LAUNCH_CLIENT_IP_SOURCE: Literal["peer", "railway"] = "railway"
+    LAUNCH_SIGNUP_ENABLED: bool = False
+    DRIVER_PREREGISTRATION_ENABLED: bool = False
+    LAUNCH_SHEETS_SYNC_ENABLED: bool = False
+    PREREGISTRATION_SHEETS_ID: str = ""
+    PREREGISTRATION_SHEETS_CREDENTIALS_JSON: str = ""
     EMAIL_FROM: str = "Muvv <onboarding@resend.dev>"
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     TERMS_VERSION: str = "2026-08-26"

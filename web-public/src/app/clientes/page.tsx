@@ -1,4 +1,3 @@
-import { appBaseUrl } from '../site-shell';
 import { ProfilePage } from '../profile-pages';
 import { pageMetadata } from '../seo';
 
@@ -15,14 +14,13 @@ export default function ClientsPage() {
     <ProfilePage
       eyebrow="Clientes"
       title="Pide un flete para mover muebles, compras y carga urbana."
-      lead="Crea una solicitud, revisa el precio y coordina el traslado con respaldo desde tu cuenta."
+      lead="Crea una solicitud, revisa el precio y coordina el traslado con respaldo desde la app Muvv."
       imageClass="clientsHero"
-      primaryAction="Crear cuenta"
-      primaryHref={`${appBaseUrl}/#/auth/register`}
+      guideHref="/como-funciona#clientes"
       sections={[
         {
           title: 'Define la ruta',
-          body: 'Indica origen, destino, tipo de carga y horario para preparar el servicio con informacion suficiente.',
+          body: 'Indica origen, destino, tipo de carga y horario para preparar el servicio con información suficiente.',
         },
         {
           title: 'Confirma con precio visible',
@@ -35,7 +33,7 @@ export default function ClientsPage() {
       ]}
       highlights={[
         'Precio antes de confirmar',
-        'Pago protegido',
+        'Detalles del traslado visibles',
         'Ayudantes opcionales',
         'Historial por flete',
       ]}

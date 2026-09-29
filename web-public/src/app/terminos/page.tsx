@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { termsSections } from '../legal-content';
 import { pageMetadata } from '../seo';
-import { SiteFooter } from '../site-shell';
+import { SiteFooter, SiteNav } from '../site-shell';
 
 export const metadata = pageMetadata({
   title: 'Terminos de uso',
@@ -13,7 +13,10 @@ export const metadata = pageMetadata({
 
 export default function TermsPage() {
   return (
-    <main className="legalPage">
+    <>
+    <SiteNav />
+    <main className="legalPage" id="contenido" tabIndex={-1}>
+      <div className="brandBackdrop">
       <header className="legalHeader">
         <Link className="legalBack" href="/">Volver a muvv</Link>
         <p className="eyebrow darkEyebrow">Legal</p>
@@ -23,6 +26,7 @@ export default function TermsPage() {
           publica y de la app operacional.
         </p>
       </header>
+      </div>
       <section className="legalSummary" aria-label="Resumen legal">
         <strong>Resumen</strong>
         <span>
@@ -39,7 +43,8 @@ export default function TermsPage() {
           </article>
         ))}
       </section>
-      <SiteFooter />
     </main>
+    <SiteFooter />
+    </>
   );
 }

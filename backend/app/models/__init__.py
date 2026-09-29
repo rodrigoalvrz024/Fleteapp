@@ -25,3 +25,6 @@ from app.models.data_privacy_request import (
     DataPrivacyRequestStatus,
     DataPrivacyRequestType,
 )
+
+from app.models.driver_preregistration import DriverPreregistration
+from app.models.launch_signup import LaunchSignup

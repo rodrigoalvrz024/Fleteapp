@@ -12,12 +12,12 @@ type AnalyticsPayload = {
 };
 
 function sendAnalytics(payload: AnalyticsPayload) {
+  if (['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return;
   const body = JSON.stringify({
     ...payload,
     metadata: {
       source: 'web_public',
       path: window.location.pathname,
-      referrer: document.referrer || null,
       title: document.title,
       ...payload.metadata,
     },

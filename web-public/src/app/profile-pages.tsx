@@ -1,12 +1,11 @@
-import { appBaseUrl, SiteFooter, SiteNav } from './site-shell';
+import { SiteFooter, SiteNav } from './site-shell';
 
 type ProfilePageProps = {
   eyebrow: string;
   title: string;
   lead: string;
   imageClass: string;
-  primaryAction: string;
-  primaryHref: string;
+  guideHref: string;
   sections: Array<{
     title: string;
     body: string;
@@ -19,15 +18,15 @@ export function ProfilePage({
   title,
   lead,
   imageClass,
-  primaryAction,
-  primaryHref,
+  guideHref,
   sections,
   highlights,
 }: ProfilePageProps) {
   return (
-    <main>
-      <section className={`profileHero ${imageClass}`}>
-        <SiteNav />
+    <>
+      <SiteNav />
+    <main id="contenido" tabIndex={-1}>
+      <section className={`profileHero brandBackdrop ${imageClass}`}>
         <div className="profileHeroInner">
           <p className="eyebrow">{eyebrow}</p>
           <h1>{title}</h1>
@@ -35,19 +34,19 @@ export function ProfilePage({
           <div className="heroActions">
             <a
               className="primaryAction lightSolid"
-              href={primaryHref}
+              href="/descargar"
               data-analytics-event="public.cta_click"
               data-analytics-entity-id={`${eyebrow.toLowerCase()}_hero_primary`}
             >
-              {primaryAction}
+              Descargar la app
             </a>
             <a
               className="secondaryAction light"
-              href={`${appBaseUrl}/#/auth/login`}
+              href={guideHref}
               data-analytics-event="public.cta_click"
-              data-analytics-entity-id={`${eyebrow.toLowerCase()}_hero_login`}
+              data-analytics-entity-id={`${eyebrow.toLowerCase()}_hero_guide`}
             >
-              Ingresar
+              Ver el paso a paso
             </a>
           </div>
         </div>
@@ -55,13 +54,12 @@ export function ProfilePage({
 
       <section className="audienceIntro">
         <div>
-          <p className="eyebrow darkEyebrow">Operacion</p>
-          <h2>Una experiencia clara antes, durante y despues del flete.</h2>
+          <h2>Claridad antes, durante y después del flete.</h2>
         </div>
         <p>
-          Muvv separa la informacion publica del espacio privado. La web
-          explica; la app registra solicitudes, documentos, evidencia, pagos y
-          seguimiento operativo.
+          {eyebrow === 'Conductores'
+            ? 'Revisa las solicitudes y decide cuáles aceptar. Consulta ruta, carga y pago estimado antes de realizar un servicio.'
+            : 'Prepara tu traslado, revisa sus detalles y consulta el historial del servicio en tu cuenta. La información que necesitas, en un solo lugar.'}
         </p>
       </section>
 
@@ -84,36 +82,36 @@ export function ProfilePage({
         </aside>
       </section>
 
-      <section className="ctaBand">
+      <section className="ctaBand profileCta">
         <div>
-          <p className="eyebrow darkEyebrow">Siguiente paso</p>
-          <h2>Continua en la app privada de Muvv.</h2>
+          <h2>Tu próximo paso empieza en la app.</h2>
           <p>
-            Crea tu cuenta para guardar solicitudes, documentos e historial en
-            un espacio privado.
+            Descarga Muvv en tu celular. El registro, las solicitudes y el
+            historial del servicio se encuentran dentro de la app.
           </p>
         </div>
         <div className="ctaActions">
           <a
             className="primaryAction dark"
-            href={primaryHref}
+            href="/descargar"
             data-analytics-event="public.cta_click"
             data-analytics-entity-id={`${eyebrow.toLowerCase()}_bottom_primary`}
           >
-            {primaryAction}
+            Descargar la app
           </a>
           <a
             className="secondaryAction darkLine"
-            href={`${appBaseUrl}/#/auth/login`}
+            href={guideHref}
             data-analytics-event="public.cta_click"
-            data-analytics-entity-id={`${eyebrow.toLowerCase()}_bottom_login`}
+            data-analytics-entity-id={`${eyebrow.toLowerCase()}_bottom_guide`}
           >
-            Ingresar
+            Ver el paso a paso
           </a>
         </div>
       </section>
 
-      <SiteFooter />
     </main>
+      <SiteFooter />
+    </>
   );
 }
