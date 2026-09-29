@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from app.core.validation_errors import safe_request_validation_error
 from app.services.launch_sync_worker import launch_sync_lifespan
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,7 +45,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.add_exception_handler(RequestValidationError, safe_request_validation_error)
+@app.exception_handler(RequestValidationError)
+async def launch_validation_error(request, exc):
+    if request.url.path in {"/public/driver-preregistrations", "/public/launch-signups"}:
+        return await safe_request_validation_error(request, exc)
+    return await request_validation_exception_handler(request, exc)
 
 app.add_middleware(
     CORSMiddleware,
