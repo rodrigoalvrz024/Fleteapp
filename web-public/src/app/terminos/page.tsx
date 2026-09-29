@@ -22,7 +22,7 @@ export default function TermsPage() {
         <p className="eyebrow darkEyebrow">Legal</p>
         <h1>Terminos de uso muvv</h1>
         <p>
-          Version 2026-05-26. Estos terminos regulan el uso de la plataforma
+          Versión 2026-09-28. Estos términos regulan el uso de la plataforma
           publica y de la app operacional.
         </p>
       </header>
@@ -37,7 +37,7 @@ export default function TermsPage() {
       </section>
       <section className="legalContent" aria-label="Terminos de uso">
         {termsSections.map((section) => (
-          <article className="legalSection" key={section.title}>
+          <article className="legalSection" id={section.id} key={section.title}>
             <h2>{section.title}</h2>
             <p>{section.body}</p>
           </article>

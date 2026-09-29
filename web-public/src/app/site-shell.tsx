@@ -55,6 +55,7 @@ export function SiteFooter() {
           <strong>Muvv</strong>
         </Link>
         <span>Muvv conecta personas con conductores para fletes urbanos y mudanzas.</span>
+        <span className="footerCompany">SOLUCIONES INTEGRALES RA SpA<br />RUT 78.368.247-8</span>
       </div>
       <div className="footerLinks">
       <nav aria-label="Información y enlaces legales">

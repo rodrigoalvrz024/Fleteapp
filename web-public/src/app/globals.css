@@ -223,19 +223,6 @@ details[open] .faqPlus::after { transform: rotate(0); }
 }
 @media (max-width: 760px) {
   .siteNav, .homeHeroInner, .heroAssurances, .section, .audienceIntro, .profileContent, .ctaBand, .footer, .profileHeroInner { width: calc(100% - 40px); }
-  .siteNav { min-height: 72px; }
-  .navLinks { display: none; }
-  .mobileNav { display: block; }
-  .menuToggle { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font-size: 14px; }
-  .menuGlyph { display: grid; gap: 5px; width: 16px; }
-  .menuGlyph i { display: block; height: 1.5px; background: currentColor; transition: transform 160ms var(--ease-out); }
-  .menuGlyph.isOpen i:first-child { transform: translateY(3.25px) rotate(45deg); }
-  .menuGlyph.isOpen i:last-child { transform: translateY(-3.25px) rotate(-45deg); }
-  .mobileMenu { position: absolute; top: calc(100% + 1px); left: 0; right: 0; padding: 16px 20px 24px; background: var(--paper); border-bottom: 1px solid var(--line); box-shadow: 0 16px 24px rgb(10 22 56 / 8%); }
-  .mobileMenu:not([hidden]) { display: grid; gap: 4px; }
-  .mobileMenu > a { display: flex; align-items: center; min-height: 48px; padding-inline: 14px; border-radius: 8px; }
-  .mobileMenu a[aria-current='page'] { background: #e6edfc; color: var(--cyan); }
-  .mobileMenu .navAction { margin-top: 8px; }
   .homeHeroInner { grid-template-columns: 1fr; gap: 30px; padding-block: 36px 24px; }
   .heroCopy { padding: 0; }
   .homeHero h1 { font-size: clamp(2.6rem, 8vw, 3.6rem); max-width: 15ch; }
@@ -406,7 +393,7 @@ details[open] .faqPlus::after { transform: rotate(0); }
   .quickSteps h3 { margin-bottom: 10px; }
   .quickSteps li > span { margin-bottom: 10px; }
   .tourDisclosure { padding-inline: 16px; }
-  .tourCopy { min-height: 390px; }
+  .tourCopy { min-width: 0; }
   .heroNote { font-size: 13px; }
 }
 @media (max-width: 480px) { .useGrid { grid-template-columns: 1fr; gap: 24px; } .useNumber { margin-bottom: 12px; } }
@@ -454,3 +441,96 @@ details[open] .faqPlus::after { transform: rotate(0); }
 .storeBadgeCompact { font-size: 18px; padding: 10px 16px; min-height: 60px; gap: 10px; }
 .storeBadgeCompact small { font-size: 10px; }
 .storeBadgeCompact svg { width: 24px; height: 26px; }
+
+.section.paymentTrust { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; padding-block: 48px; border-bottom: 1px solid var(--line); }
+.paymentTrust h2 { font-size: clamp(1.8rem, 3vw, 2.5rem); line-height: 1.15; letter-spacing: -.035em; margin-bottom: 18px; }
+.paymentTrust h3 { font-size: 22px; letter-spacing: -.02em; }
+.paymentTrust p { color: var(--muted); }
+.paymentTrust .eyebrow { color: var(--cyan); }
+.paymentTrustDetail { border-left: 1px solid var(--line); padding-left: 32px; }
+.paymentTrust .textAction { justify-content: flex-start; }
+.paymentSupport { display: block; min-height: 44px; padding-top: 16px; font-size: 14px; text-decoration: underline; overflow-wrap: anywhere; }
+.footerCompany { font-size: 11px; line-height: 1.65; }
+@media (max-width: 760px) {
+  .section.paymentTrust { grid-template-columns: 1fr; gap: 24px; padding-block: 36px; }
+  .paymentTrustDetail { border-left: 0; border-top: 1px solid var(--line); padding: 24px 0 0; }
+  .paymentTrust .textAction { font-size: 14px; }
+}
+
+/* Phone layouts: preserve readable fields and comfortable touch targets. */
+@media (max-width: 960px) {
+  .siteNav { min-height: 72px; }
+  .navLinks { display: none; }
+  .mobileNav { display: block; }
+  .menuToggle { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font-size: 14px; }
+  .menuGlyph { display: grid; gap: 5px; width: 16px; }
+  .menuGlyph i { display: block; height: 1.5px; background: currentColor; transition: transform 160ms var(--ease-out); }
+  .menuGlyph.isOpen i:first-child { transform: translateY(3.25px) rotate(45deg); }
+  .menuGlyph.isOpen i:last-child { transform: translateY(-3.25px) rotate(-45deg); }
+  .mobileMenu { position: absolute; top: calc(100% + 1px); left: 0; right: 0; padding: 12px 20px max(20px, env(safe-area-inset-bottom)); background: var(--paper); border-bottom: 1px solid var(--line); box-shadow: 0 16px 24px rgb(10 22 56 / 8%); max-height: calc(100dvh - 74px); overflow-y: auto; overscroll-behavior: contain; }
+  .mobileMenu:not([hidden]) { display: grid; gap: 4px; }
+  .mobileMenu > a { display: flex; align-items: center; min-height: 48px; padding-inline: 14px; border-radius: 8px; }
+  .mobileMenu a[aria-current='page'] { background: #e6edfc; color: var(--cyan); }
+  .mobileMenu .navAction { margin-top: 8px; }
+  .section.driverLaunchLayout, .launchSignupLayout { grid-template-columns: 1fr; gap: 28px; }
+  .driverJump { display: inline-flex; }
+  .driverLaunchPhoto { display: none; }
+}
+@media (max-width: 760px) {
+  html { scroll-padding-top: 88px; }
+  .siteNav { min-height: 64px; gap: 16px; }
+  .brand { font-size: 23px; }
+  .brandIcon { width: 34px; height: 34px; }
+  .mobileMenu { max-height: calc(100dvh - 66px); }
+  .section { padding-block: 48px; }
+  .homeHeroInner { padding-top: 28px; gap: 24px; }
+  .homeHero h1 { font-size: clamp(2.15rem, 9vw, 3rem); margin-bottom: 20px; }
+  .heroCopy .eyebrow { font-size: 12px; margin-bottom: 16px; }
+  .heroActions { gap: 8px; margin-top: 24px; }
+  .heroActions > .primaryAction, .heroActions > .secondaryAction { width: 100%; }
+  .heroActions > .textAction { min-height: 48px; }
+  .heroVisual { aspect-ratio: 4 / 3; }
+  .heroVisual figcaption { inset: auto 18px 18px; }
+  .heroVisual figcaption strong { font-size: 23px; }
+  .storeBadgeRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+  .storeBadgeCompact { padding: 10px; font-size: 16px; gap: 8px; }
+  .storeBadgeCompact small { font-size: 10px; }
+  .storeBadgeCompact svg { width: 22px; }
+  .sectionHeader h2, .ctaBand h2, .audienceIntro h2 { font-size: clamp(1.8rem, 7.5vw, 2.25rem); }
+  .driverLaunchCopy h1, .profileHero h1, .downloadSection h1, .guideIntro h1 { font-size: clamp(2rem, 8.5vw, 2.75rem); }
+  .profileHeroInner { padding-block: 36px; }
+  .profileHero p:not(.eyebrow), .guideIntro > p { font-size: 16px; }
+  .downloadNotice { padding: 16px; font-size: 14px; }
+  .storeOptions { margin-block: 24px; gap: 12px; }
+  .storeOption { padding: 20px; }
+  .storeOption h2 { font-size: 22px; margin-bottom: 16px; }
+  .storeOption > p { font-size: 14px; margin-bottom: 6px; }
+  .storeOption .storeBadge { width: 100%; justify-content: center; font-size: 21px; padding-inline: 12px; }
+  .launchSignupCopy { padding-top: 0; }
+  .launchSignupCopy h2 { font-size: clamp(1.8rem, 7.5vw, 2.25rem); }
+  .preregCard { padding: 24px 18px; scroll-margin-top: 88px; }
+  .preregCard h2 { font-size: 26px; }
+  .preregFields { gap: 18px; }
+  .formField input, .formField select { min-height: 52px; scroll-margin-block: 100px; }
+  .formConsent { min-height: 44px; padding-block: 10px; font-size: 14px; line-height: 1.5; }
+  .preregSubmit { min-height: 56px; padding: 12px 16px; text-align: left; }
+  .formHint, .formNotice, .preregPrivacy, .launchPrivacy, .footerContact { overflow-wrap: anywhere; }
+  .tourPanel { gap: 20px; }
+  .tourCopy .tourDisclaimer { margin-top: 20px; padding-top: 16px; }
+  .tourScreen .phoneFrame { width: min(240px, 100%); }
+  .tourSteps button { min-height: 48px; }
+  .ctaActions, .guideNav { display: grid; grid-template-columns: 1fr; width: 100%; gap: 12px; }
+  .ctaActions > a, .guideNav > a { width: 100%; padding-block: 12px; text-align: center; }
+  .footer { padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+  .footerLinks > nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
+  .footerContact a:first-child { grid-column: 1 / -1; }
+  .legalHeader, .legalSummary, .legalContent { width: calc(100% - 40px); }
+  .legalSection { padding: 22px 18px; }
+}
+@media (max-width: 360px) {
+  .storeBadgeRow { grid-template-columns: 1fr; }
+  .storeBadgeCompact { justify-content: center; font-size: 18px; }
+  .storeBadgeCompact small { font-size: 11px; }
+  .preregCard { padding-inline: 16px; }
+  .stepItem { grid-template-columns: 26px 1fr; gap: 14px; }
+}
