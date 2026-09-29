@@ -1,6 +1,9 @@
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from app.core.validation_errors import safe_request_validation_error
+from app.services.launch_sync_worker import launch_sync_lifespan
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -15,6 +18,8 @@ from app.routers import (
     auth,
     chat,
     drivers,
+    driver_preregistrations,
+    launch_signups,
     feedback,
     freights,
     internal_tasks,
@@ -33,10 +38,13 @@ else:
     print("[startup] Skipping automatic DB migrations.")
 
 app = FastAPI(
+    lifespan=launch_sync_lifespan,
     title="Muvv API",
     description="API para app de fletes en Chile",
     version="1.0.0",
 )
+
+app.add_exception_handler(RequestValidationError, safe_request_validation_error)
 
 app.add_middleware(
     CORSMiddleware,
@@ -138,6 +146,8 @@ async def record_backend_errors(request, call_next):
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(drivers.router)
+app.include_router(driver_preregistrations.router)
+app.include_router(launch_signups.router)
 app.include_router(feedback.router)
 app.include_router(freights.router)
 app.include_router(chat.router)
