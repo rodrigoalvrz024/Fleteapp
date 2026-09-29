@@ -19,6 +19,10 @@ export const termsSections = [
     title: 'Seguridad y responsabilidad',
     body: 'Usuarios y conductores deben actuar de buena fe, cuidar la carga y respetar la normativa aplicable. Muvv puede investigar incidentes y limitar el acceso para proteger la operacion.',
   },
+  {
+    title: 'Uso del chat de fletes',
+    body: 'El chat se usa para coordinar el servicio dentro de Muvv. No debe utilizarse para ofrecer o acordar servicios por fuera de la plataforma. Cuando exista una necesidad concreta de seguridad, soporte, fraude o cumplimiento, personal autorizado puede revisar una conversacion de forma limitada, de solo lectura y con registro de la consulta.',
+  },
 ];
 
 export const privacySections = [
@@ -28,7 +32,11 @@ export const privacySections = [
   },
   {
     title: 'Finalidades',
-    body: 'Usamos los datos para crear cuentas, autenticar usuarios, coordinar fletes, calcular rutas y precios, validar conductores, prevenir fraude, entregar soporte y cumplir obligaciones legales.',
+    body: 'Usamos los datos para crear cuentas, autenticar usuarios, coordinar fletes, calcular rutas y precios, validar conductores, prevenir fraude, entregar soporte y cumplir obligaciones legales. Esto puede incluir revisar de forma limitada mensajes y fotos del chat de un flete cuando sea necesario para investigar fraude, incidentes, incumplimientos o intentos de coordinar servicios fuera de Muvv.',
+  },
+  {
+    title: 'Acceso limitado a conversaciones',
+    body: 'Las conversaciones no son publicas ni se usan para publicidad. El acceso excepcional se limita a personal autorizado, es de solo lectura, requiere un motivo y queda registrado. Las fotos compartidas se almacenan de manera privada y se consultan mediante enlaces temporales.',
   },
   {
     title: 'Documentos de conductor',

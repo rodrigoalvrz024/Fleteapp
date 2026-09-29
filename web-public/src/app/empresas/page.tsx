@@ -1,11 +1,10 @@
-import { appBaseUrl } from '../site-shell';
 import { ProfilePage } from '../profile-pages';
 import { pageMetadata } from '../seo';
 
 export const metadata = pageMetadata({
   title: 'Fletes urbanos para empresas',
   description:
-    'Coordina traslados urbanos, inventario y entregas locales con historial operativo, evidencia por servicio y control para soporte.',
+    'Coordina traslados urbanos de productos y compras con historial y evidencia por servicio desde la app Muvv.',
   path: '/empresas',
   keywords: ['fletes empresas', 'logistica urbana', 'traslados para negocios'],
 });
@@ -14,11 +13,10 @@ export default function CompaniesPage() {
   return (
     <ProfilePage
       eyebrow="Empresas"
-      title="Traslados urbanos con historial para tu operacion."
-      lead="Coordina carga local, compras, inventario y entregas con registros utiles para control y soporte."
+      title="Traslados urbanos con historial para tu operación."
+      lead="Coordina traslados de productos, compras y entregas con registros útiles para consultar cada servicio."
       imageClass="teamsHero"
-      primaryAction="Crear cuenta"
-      primaryHref={`${appBaseUrl}/#/auth/register`}
+      guideHref="/como-funciona#clientes"
       sections={[
         {
           title: 'Centraliza solicitudes',
@@ -30,14 +28,14 @@ export default function CompaniesPage() {
         },
         {
           title: 'Reduce coordinaciones',
-          body: 'Menos mensajes sueltos y mas informacion disponible para seguimiento, soporte y analisis.',
+          body: 'Menos mensajes sueltos y más información disponible para seguimiento, soporte y análisis.',
         },
       ]}
       highlights={[
         'Servicios programados',
         'Historial operativo',
-        'Historial por traslado',
-        'Control para admin',
+        'Fotos por servicio',
+        'Precio antes de solicitar',
       ]}
     />
   );
