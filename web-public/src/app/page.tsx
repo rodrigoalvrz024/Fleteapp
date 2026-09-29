@@ -6,6 +6,7 @@ import { SiteFooter, SiteNav } from './site-shell';
 import { pageMetadata } from './seo';
 import { downloadStores } from './download-links';
 import { StoreBadges } from './store-badges';
+import { paymentContent } from './payment-content';
 
 export const metadata = pageMetadata({
   title: 'Fletes urbanos y mudanzas en Chile',
@@ -31,6 +32,8 @@ const quickSteps = [
   ['Sigue tu flete.', 'Consulta el estado en la app y confirma la recepción con tu PIN.'],
 ];
 const questions = [
+  { title: paymentContent.faqTitle, body: paymentContent.faqBody },
+  { title: paymentContent.refundTitle, body: paymentContent.refundBody },
   { title: '¿Puedo pedir un flete desde esta web?', body: 'Esta web te explica cómo funciona Muvv y dónde descargarla. El registro, las solicitudes y el seguimiento se realizan en la app.' },
   { title: '¿Dónde puedo descargar la app?', body: 'Entra a Descargar la app para consultar las opciones de Android y iPhone. Mientras la descarga esté pendiente, puedes dejar tus datos para recibir el aviso de lanzamiento.' },
   { title: '¿Qué puedo mover con Muvv?', body: 'Muebles, compras grandes y carga urbana. Al solicitar tu flete, detalla lo que necesitas trasladar para preparar el servicio.' },
@@ -108,6 +111,10 @@ export default function Home() {
           </div>
         </section>
         <section className="priceWrap" id="precio" aria-labelledby="price-title"><div className="section priceSection"><div className="sectionHeader"><p className="eyebrow">Decide con los detalles a la vista</p><h2 id="price-title">¿Cuánto cuesta<br />un Muvv?</h2></div><div><p>El valor depende de la ruta, la carga, el vehículo y las opciones de tu traslado. Revisa el precio en la app antes de solicitar.</p><p className="priceNote">Comprueba las direcciones, los objetos y la ayuda seleccionada antes de continuar.</p><Link className="textAction" href="/descargar">Ver opciones de descarga <Arrow /></Link></div></div></section>
+        <section className="section paymentTrust" aria-labelledby="payment-title">
+          <div><p className="eyebrow">Pagos y devoluciones</p><h2 id="payment-title">{paymentContent.title}</h2><p>{paymentContent.body}</p></div>
+          <div className="paymentTrustDetail"><h3>Muvv gestiona tu devolución</h3><p>Si corresponde devolver un pago con Webpay, gestionamos la anulación o el reembolso a través de Transbank. Su reflejo en tu cuenta o tarjeta depende del procesamiento y de tu banco.</p><Link className="textAction" href="/terminos#pagos-devoluciones">Ver condiciones de pago y devolución <Arrow /></Link><a className="paymentSupport" href="mailto:soporte@muvv.cl">¿Necesitas ayuda? soporte@muvv.cl</a></div>
+        </section>
         <section className="audienceSection" aria-labelledby="audience-title">
           <div className="section">
             <div className="sectionHeader"><h2 id="audience-title">Hay un Muvv<br />para lo que viene.</h2><p>Elige cómo quieres moverte.</p></div>

@@ -1,4 +1,10 @@
+import { paymentContent } from './payment-content';
+
 export const termsSections = [
+  {
+    title: 'Quién opera Muvv',
+    body: 'Muvv es operada por SOLUCIONES INTEGRALES RA SpA, RUT 78.368.247-8, con domicilio en Santa Victoria 492, departamento 1705, Santiago. El canal de contacto para consultas, pagos y devoluciones es soporte@muvv.cl.',
+  },
   {
     title: 'Uso de la plataforma',
     body: 'Muvv conecta clientes que solicitan fletes con conductores independientes. La plataforma permite crear solicitudes, aceptar servicios, coordinar traslados y revisar el estado de cada flete.',
@@ -13,7 +19,16 @@ export const termsSections = [
   },
   {
     title: 'Servicios y pagos',
-    body: 'Los precios, comisiones, pagos al conductor y cargos al cliente se informan antes o durante la solicitud segun corresponda. Los valores pueden cambiar por distancia, urgencia, ayudantes u otros factores operativos.',
+    body: paymentContent.faqBody + ' Los valores pueden variar según la ruta, la carga, el vehículo y las opciones seleccionadas. Las comisiones y los pagos al conductor se informan en la app según corresponda.',
+  },
+  {
+    id: 'pagos-devoluciones',
+    title: 'Cancelaciones y devoluciones durante el piloto',
+    body: 'Si no se consigue conductor o el servicio no se realiza por una cancelación atribuible al conductor o a Muvv, se devuelve la totalidad del importe cobrado. Durante el piloto, si el cliente cancela antes de comenzar el traslado, la cancelación es gratuita y se devuelve la totalidad del importe cobrado, sin cargo por desplazamiento del conductor. Si el traslado ya comenzó, contacta a soporte para coordinar la situación y la entrega de la carga.',
+  },
+  {
+    title: 'Gestión y plazos de devolución',
+    body: paymentContent.refundBody + ' Solicitar la devolución no significa que el dinero ya esté disponible. No se garantiza un abono inmediato ni un plazo bancario único. Si la operación es rechazada o presenta un error, Muvv gestionará la incidencia y dará seguimiento a la devolución que corresponda. Transbank procesa la operación de pago; la gestión del servicio y la atención de solicitudes corresponden a Muvv.',
   },
   {
     title: 'Seguridad y responsabilidad',
