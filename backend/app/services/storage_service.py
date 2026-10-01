@@ -2,6 +2,7 @@ import io
 import hashlib
 import logging
 import mimetypes
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
@@ -11,6 +12,7 @@ from uuid import uuid4
 import httpx
 from fastapi import HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from jose import JWTError, jwt
 
 from app.core.config import settings
@@ -435,6 +437,26 @@ async def upload_staged_freight_cargo_photo(
         content_type=content_type,
         size_bytes=len(content),
     )
+
+
+def is_user_avatar_ref(reference: str | None, user_id: int) -> bool:
+    return bool(reference and re.fullmatch(
+        rf"avatars/{user_id}/[0-9a-f]{{32}}\.(jpg|png|webp)", reference))
+
+
+async def upload_user_avatar(file: UploadFile, user_id: int) -> str:
+    content = await _read_limited_upload(file, 5 * 1024 * 1024,
+                                         "La foto supera el maximo de 5 MB.")
+    content_type = _detect_upload_type(content, file.content_type or "", file.filename or "")
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Usa una foto JPG, PNG o WEBP.")
+    _validate_file_signature(content_type, content)
+    content = _strip_image_metadata(content_type, content)
+    _validate_file_signature(content_type, content)
+    _ensure_storage_configured()
+    reference = f"avatars/{user_id}/{uuid4().hex}{ALLOWED_UPLOAD_TYPES[content_type]}"
+    await run_in_threadpool(_upload_private_object, reference, content, content_type)
+    return reference
 
 
 def is_valid_staged_freight_cargo_ref(reference: str, client_id: int) -> bool:

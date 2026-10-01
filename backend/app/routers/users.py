@@ -14,7 +14,7 @@ from app.core.security import get_current_user
 from app.services.audit_service import record_audit_event
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
-SENSITIVE_AUDIT_FIELDS = {"fcm_token"}
+SENSITIVE_AUDIT_FIELDS = {"fcm_token", "avatar_url"}
 
 
 def _user_response_with_legal_status(db: Session, user: User) -> UserResponse:

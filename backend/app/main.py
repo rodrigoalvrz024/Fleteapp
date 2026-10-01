@@ -17,6 +17,7 @@ from app.routers import (
     admin,
     analytics,
     auth,
+    avatars,
     chat,
     drivers,
     driver_preregistrations,
@@ -150,6 +151,8 @@ async def record_backend_errors(request, call_next):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(avatars.router)
+app.add_middleware(avatars.AvatarBodyLimitMiddleware)
 app.include_router(drivers.router)
 app.include_router(driver_preregistrations.router)
 app.include_router(launch_signups.router)
