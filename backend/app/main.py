@@ -31,6 +31,7 @@ from app.routers import (
     pricing,
     ratings,
     users,
+    support,
 )
 
 if settings.RUN_STARTUP_MIGRATIONS:
@@ -151,6 +152,7 @@ async def record_backend_errors(request, call_next):
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(support.router)
 app.include_router(avatars.router)
 app.add_middleware(avatars.AvatarBodyLimitMiddleware)
 app.include_router(drivers.router)

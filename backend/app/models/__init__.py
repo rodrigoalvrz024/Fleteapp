@@ -28,3 +28,4 @@ from app.models.data_privacy_request import (
 
 from app.models.driver_preregistration import DriverPreregistration
 from app.models.launch_signup import LaunchSignup
+from app.models.support_faq import SupportFAQ
