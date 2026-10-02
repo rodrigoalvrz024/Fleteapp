@@ -4,7 +4,7 @@ import unittest
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 
@@ -25,7 +25,10 @@ from app.routers.freights import (
     _live_location_window,
     _require_freight_view_access,
     _require_live_location_view_access,
+    get_driver_live_location,
+    update_driver_live_location,
 )
+from app.schemas.freight import DriverLocationUpdate
 
 
 class FreightAccessTests(unittest.TestCase):
@@ -155,7 +158,7 @@ class FreightAccessTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 403)
         self.assertIn("blockers", error.exception.detail)
 
-    def test_scheduled_freight_hides_location_until_the_pre_service_window(self):
+    def test_accepted_freight_hides_location_without_an_early_access_window(self):
         now = datetime.now(timezone.utc)
         freight = FreightRequest(
             id=20,
@@ -173,9 +176,79 @@ class FreightAccessTests(unittest.TestCase):
         response = _live_location_response(freight, now)
 
         self.assertFalse(visible)
-        self.assertIsNotNone(available_from)
+        self.assertIsNone(available_from)
         self.assertFalse(response.visible)
         self.assertIsNone(response.latitude)
+
+    def test_only_started_trips_expose_location_regardless_of_schedule(self):
+        now = datetime.now(timezone.utc)
+        for status in FreightStatus:
+            for urgent in (True, False):
+                for offset in (-120, 0, 10, 120):
+                    with self.subTest(status=status, urgent=urgent, offset=offset):
+                        freight = FreightRequest(
+                            id=23, client_id=3, driver_id=5, status=status,
+                            is_urgent=urgent, scheduled_at=now + timedelta(minutes=offset),
+                            driver_location_lat=-33.45, driver_location_lng=-70.66,
+                            driver_location_accuracy_m=12, driver_location_heading=90,
+                            driver_location_updated_at=now,
+                        )
+                        response = _live_location_response(freight, now)
+                        self.assertEqual(response.visible, status == FreightStatus.in_progress)
+                        self.assertIsNone(response.available_from)
+                        if not response.visible:
+                            for field in ("latitude", "longitude", "accuracy_m", "heading", "updated_at"):
+                                self.assertIsNone(getattr(response, field))
+                        freight.driver_id = None
+                        self.assertFalse(_live_location_response(freight, now).visible)
+
+    def test_endpoint_blocks_legacy_driver_updates_before_start_and_after_close(self):
+        driver = Driver(id=5, user_id=10)
+        freight = FreightRequest(id=24, client_id=3, driver_id=5)
+        db = MagicMock()
+        def query(model):
+            result = MagicMock()
+            result.filter.return_value.first.return_value = freight if model is FreightRequest else driver
+            return result
+        db.query.side_effect = query
+        data = DriverLocationUpdate(latitude=-33.45, longitude=-70.66, accuracy_m=10)
+        for status in (FreightStatus.pending, FreightStatus.accepted,
+                       FreightStatus.completed, FreightStatus.cancelled):
+            freight.status = status
+            with self.subTest(status=status), patch("app.routers.freights.check_rate_limit"):
+                with self.assertRaises(HTTPException) as error:
+                    update_driver_live_location(24, data, MagicMock(), db, User(id=10, role=UserRole.driver))
+                self.assertEqual(error.exception.status_code, 409)
+                self.assertIsNone(freight.driver_location_lat)
+                db.commit.assert_not_called()
+        freight.status = FreightStatus.in_progress
+        with patch("app.routers.freights.check_rate_limit"):
+            response = update_driver_live_location(24, data, MagicMock(), db, User(id=10, role=UserRole.driver))
+        self.assertTrue(response.visible)
+        db.commit.assert_called_once()
+
+    def test_get_hides_old_coordinates_and_keeps_owner_and_role_checks(self):
+        freight = FreightRequest(id=25, client_id=3, driver_id=5,
+            status=FreightStatus.accepted, driver_location_lat=-33.45,
+            driver_location_lng=-70.66, driver_location_updated_at=datetime.now(timezone.utc))
+        db = MagicMock()
+        driver = Driver(id=5, user_id=10)
+        def query(model):
+            result = MagicMock()
+            result.filter.return_value.first.return_value = freight if model is FreightRequest else driver
+            return result
+        db.query.side_effect = query
+        for user in (User(id=3, role=UserRole.client), User(id=10, role=UserRole.driver),
+                     User(id=1, role=UserRole.admin)):
+            with patch("app.routers.freights.record_audit_event"):
+                result = get_driver_live_location(25, MagicMock(), db, user)
+            self.assertFalse(result.visible)
+            self.assertIsNone(result.latitude)
+        for user in (User(id=4, role=UserRole.client), User(id=11, role=UserRole.driver)):
+            driver.id = 6
+            with self.assertRaises(HTTPException) as error:
+                get_driver_live_location(25, MagicMock(), db, user)
+            self.assertEqual(error.exception.status_code, 403)
 
     def test_only_active_assigned_freight_exposes_last_driver_position(self):
         now = datetime.now(timezone.utc)

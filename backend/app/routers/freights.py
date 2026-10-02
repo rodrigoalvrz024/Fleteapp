@@ -164,20 +164,8 @@ def _live_location_window(
     now: datetime,
 ) -> tuple[bool, datetime | None]:
     """Return whether a freight may expose a driver's active-trip location."""
-    if not freight.driver_id or freight.status not in (
-        FreightStatus.accepted,
-        FreightStatus.in_progress,
-    ):
-        return False, None
-
-    scheduled_at = _as_utc(freight.scheduled_at)
-    if scheduled_at and not freight.is_urgent:
-        available_from = scheduled_at - timedelta(
-            minutes=settings.DRIVER_LOCATION_EARLY_ACCESS_MINUTES
-        )
-        if now < available_from:
-            return False, available_from
-    return True, None
+    # Acceptance or the scheduled time never grants live-location visibility.
+    return bool(freight.driver_id and freight.status == FreightStatus.in_progress), None
 
 
 def _live_location_response(
@@ -614,16 +602,11 @@ def update_driver_live_location(
     _require_assigned_driver(freight, db, current_user)
 
     now = datetime.now(timezone.utc)
-    window_open, available_from = _live_location_window(freight, now)
+    window_open, _ = _live_location_window(freight, now)
     if not window_open:
-        if available_from:
-            raise HTTPException(
-                status_code=409,
-                detail="El seguimiento comienza cerca de la hora agendada",
-            )
         raise HTTPException(
             status_code=409,
-            detail="El seguimiento solo esta disponible durante un flete activo",
+            detail="El seguimiento solo esta disponible durante un viaje iniciado",
         )
 
     last_update = _as_utc(freight.driver_location_updated_at)
@@ -1114,6 +1097,8 @@ def update_status(
     transitioned_at = datetime.now(timezone.utc)
     freight.status = data.status
     if data.status == FreightStatus.in_progress:
+        # Discard any position collected by older clients before trip start.
+        _clear_live_location(freight)
         freight.started_at = transitioned_at
         freight.trip_started_at = transitioned_at
     elif data.status == FreightStatus.completed:
