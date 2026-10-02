@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import settings
 from app.core.rate_limit import check_rate_limit
 from app.core.security import get_current_user
 from app.models.user import User
 from app.services.maps_service import autocomplete_chilean_addresses, get_place_address
+from app.services.address_lookup import AddressLookupUnavailable, reverse_address
 
 router = APIRouter(prefix="/places", tags=["Direcciones"])
 
@@ -41,6 +43,30 @@ async def autocomplete_addresses(
         longitude=lng,
     )
     return {"suggestions": suggestions}
+
+
+class ReverseAddressRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
+
+
+@router.post("/reverse-geocode")
+async def reverse_geocode_address(
+    payload: ReverseAddressRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    _require_places_configuration()
+    check_rate_limit(request, scope="places-reverse-user",
+                     identifier=str(current_user.id), max_attempts=12, window_seconds=60)
+    try:
+        address = await reverse_address(payload.lat, payload.lng)
+    except AddressLookupUnavailable:
+        raise HTTPException(503, "No pudimos consultar la direccion. Puedes escribirla manualmente.") from None
+    if address is None:
+        raise HTTPException(404, "No encontramos una direccion para ese punto. Escribela manualmente.")
+    return address
 
 
 @router.get("/{place_id}")

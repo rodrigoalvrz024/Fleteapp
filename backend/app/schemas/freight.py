@@ -1,4 +1,5 @@
 from datetime import datetime
+import unicodedata
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -54,6 +55,18 @@ class FreightCreate(BaseModel):
     def reject_control_characters(cls, value: str) -> str:
         if any(ord(character) < 32 for character in value):
             raise ValueError("El texto contiene caracteres no validos")
+        return value
+
+
+    @field_validator("origin_address", "destination_address")
+    @classmethod
+    def require_actual_address(cls, value: str) -> str:
+        normalized = "".join(c for c in unicodedata.normalize("NFKD", value.lower())
+                             if not unicodedata.combining(c))
+        if normalized in {"mi ubicacion", "mi ubicacion actual",
+                          "ubicacion seleccionada en el mapa", "punto de retiro del cliente",
+                          "direccion no registrada", "direccion por confirmar"}:
+            raise ValueError("Confirma la direccion de retiro y destino antes de solicitar el flete")
         return value
 
 
