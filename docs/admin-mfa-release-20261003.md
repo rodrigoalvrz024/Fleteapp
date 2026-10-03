@@ -6,8 +6,10 @@ Based on deployed commit 932e69ee1a2972d8efb0f56e4eacb340963721da, not the
 main local working tree. Railway was still running deployment
 dd0566e2-23f5-43ca-b4ab-fb0c70ed76b6 when this candidate was prepared.
 
-No payment logic, dependency pins, vehicle catalog, mobile design, splash,
-Dockerfile or Railway startup configuration changed.
+The initial MFA commit f0fe4de did not change payment logic, dependency pins,
+vehicle catalog, mobile design, splash, Dockerfile or Railway startup configuration.
+The dependency follow-up below changes pins and the JWT implementation only;
+payment logic, mobile UI and production configuration remain unchanged.
 
 ## Controls
 
@@ -38,7 +40,7 @@ merging the other local migration history, reconcile its session-version and
 factor-table changes. Do not apply both histories blindly, alter an already
 deployed migration, or downgrade away enrolled authenticators.
 
-## Local evidence
+## Initial local evidence (f0fe4de)
 
 - All 85 deployed requirements match the selected test environment exactly.
 - 164 unit/route tests pass, with no omissions. Includes real OTP generation,
@@ -83,3 +85,38 @@ deployment step. It does not certify the runtime image or resolve open CVEs.
    with firebase.admin.json. The mobile app and public site are out of scope.
 
 No production deployment or live MFA enrollment was performed for this evidence.
+
+## Dependency follow-up (2026-10-03, not deployment approval)
+
+A fresh audit of the original pinned manifest reported affected versions in
+15 packages (81 entries, including repeated advisory identifiers). This was
+not an exploit demonstration and was not a complete transitive-environment audit.
+
+- Updated affected packages and compatible FastAPI/Pydantic pins. Replaced
+  python-jose with PyJWT 2.15.1, removing the vulnerable ecdsa dependency.
+- Access tokens require expiration, issuance, issuer, audience and subject.
+  Private image tokens require expiration and retain existing signing keys and
+  purpose separation. Existing synthetic python-jose access/document fixtures
+  remain valid; malformed/expired/cross-purpose tokens are rejected.
+- Built a separate local environment instead of modifying either existing venv.
+  pip check passes and all 85 application pins match. google-cloud-storage is
+  now explicitly pinned to the tested resolver result, 3.16.0.
+- Pinned build tools separately: pip 26.2.1, setuptools 84.0.0, wheel 0.48.0.
+  CI installs these before application dependencies. Railway's actual build
+  tools/runtime still need independent inspection; this does not change them.
+- 171 unit/route tests pass. Real disposable PostgreSQL migration, RLS,
+  concurrent OTP reuse, persistent lockout and migration repeatability pass.
+- Full installed-environment audit, including transitive packages and build
+  tools, still fails: marshmallow 3.26.1 / PYSEC-2026-1605 (two duplicate
+  entries, one unique identifier). transbank-sdk 6.1.0 requires <=3.26.1;
+  forcing a newer incompatible version is not an acceptable fix.
+
+Raw audit reports remain in the main workspace under
+`.local-tools/dependency-audit/`: `admin-release-before-20261003.json`,
+`admin-release-installed-20261003.json`, `admin-release-after-20261003.json`.
+No advisory is ignored. No clean-scan or runtime-image approval is claimed.
+An explicit user decision is pending for a separate, payment-compatible
+Transbank REST adapter backport. No real payment was made or modified.
+
+The compatibility workflow's success must not be interpreted as a security
+release gate: the dependency finding above and all publication gates remain.

@@ -14,7 +14,7 @@ os.environ.setdefault(
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from fastapi import HTTPException
-from jose import jwt
+import jwt
 from starlette.datastructures import UploadFile
 
 from app.core.config import Settings, settings

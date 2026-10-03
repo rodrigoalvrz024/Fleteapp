@@ -26,8 +26,9 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.11'
-      - name: Install unchanged deployed dependency pins
+      - name: Install and verify candidate dependency pins
         run: |
+          python -m pip install -r backend/requirements-build.txt
           python -m pip install -r backend/requirements.txt
           python -m pip check
           python scripts/check-backend-dependencies.py
