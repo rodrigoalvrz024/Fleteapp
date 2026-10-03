@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import hashlib
+import hmac
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -78,27 +80,50 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
-    from app.models.user import User
-
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Autenticacion requerida",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    payload = decode_token(credentials.credentials)
+    return authenticate_access_token(db, credentials.credentials)
+
+
+def admin_credential_stamp(user) -> str:
+    # A password change invalidates an admin session without exposing its hash.
+    return hmac.new(settings.SECRET_KEY.encode(), user.hashed_password.encode(), hashlib.sha256).hexdigest()
+
+
+def authenticate_access_token(db: Session, token: str):
+    from app.models.user import User, UserRole
+    from app.models.admin_second_factor import AdminSecondFactor
+
+    payload = decode_token(token)
     try:
         user_id = int(payload.get("sub"))
     except (TypeError, ValueError):
         raise _invalid_token()
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.is_active:
+    user = db.query(User).filter(User.id == user_id).populate_existing().first()
+    if not user or not user.is_active or user.deleted_at:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Sesion no disponible",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if user.role == UserRole.admin:
+        now = int(datetime.now(timezone.utc).timestamp())
+        mfa_at, expiry = payload.get("admin_mfa_at"), payload.get("exp")
+        version, stamp = payload.get("session_version"), payload.get("admin_credentials")
+        if (payload.get("admin_mfa") is not True
+                or type(mfa_at) is not int or type(expiry) is not int
+                or not 0 <= now - mfa_at < 1800 or expiry > mfa_at + 1800
+                or type(version) is not int or version != user.session_version
+                or not isinstance(stamp, str) or len(stamp) != 64 or not stamp.isascii()
+                or not hmac.compare_digest(stamp, admin_credential_stamp(user))):
+            raise _invalid_token()
+        if db.get(AdminSecondFactor, user.id) is None:
+            raise _invalid_token()
     return user
 
 

@@ -36,6 +36,7 @@ from app.schemas.user import (
 )
 from app.services.email_service import EmailService
 from app.services.audit_service import record_audit_event
+from app.services.legal_versions import consent_versions
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 email_service = EmailService()
@@ -44,6 +45,7 @@ GOOGLE_TOKEN_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 
 
 def _legal_reacceptance_required(db: Session, user: User) -> bool:
+    terms_version, privacy_version = consent_versions(user.role)
     current_consents = {
         consent_type
         for (consent_type,) in (
@@ -51,8 +53,8 @@ def _legal_reacceptance_required(db: Session, user: User) -> bool:
             .filter(
                 UserConsent.user_id == user.id,
                 (
-                    ((UserConsent.consent_type == "terms") & (UserConsent.version == settings.TERMS_VERSION))
-                    | ((UserConsent.consent_type == "privacy") & (UserConsent.version == settings.PRIVACY_VERSION))
+                    ((UserConsent.consent_type == "terms") & (UserConsent.version == terms_version))
+                    | ((UserConsent.consent_type == "privacy") & (UserConsent.version == privacy_version))
                 ),
             )
             .all()
@@ -307,6 +309,8 @@ def login(data: UserLogin, request: Request, db: Session = Depends(get_db)):
     )
     if not user or not password_is_valid:
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    if user.role == UserRole.admin:
+        raise HTTPException(status_code=403, detail="Usa el portal administrativo con tu autenticador")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Cuenta suspendida")
 
@@ -446,6 +450,8 @@ def login_with_google(
     )
 
     user = db.query(User).filter(User.email == email).first()
+    if user and user.role == UserRole.admin:
+        raise HTTPException(status_code=403, detail="Usa el portal administrativo con tu autenticador")
     if not user:
         raise HTTPException(
             status_code=401,
@@ -482,6 +488,8 @@ def switch_active_role(
 ):
     """Switch the active app mode without creating another identity."""
 
+    if current_user.role == UserRole.admin:
+        raise HTTPException(status_code=403, detail="El portal administrativo no cambia de modo")
     check_rate_limit(
         request,
         scope="auth-switch-role",
@@ -529,12 +537,19 @@ def accept_legal_update(
             detail="Debes aceptar los Terminos y la Politica de Privacidad",
         )
 
+    _record_updated_consents(db, current_user, request)
+    db.commit()
+    return _user_response(db, current_user)
+
+
+def _record_updated_consents(db: Session, current_user: User, request: Request) -> None:
+    terms_version, privacy_version = consent_versions(current_user.role)
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     pending = []
     for consent_type, version in (
-        ("terms", settings.TERMS_VERSION),
-        ("privacy", settings.PRIVACY_VERSION),
+        ("terms", terms_version),
+        ("privacy", privacy_version),
     ):
         exists = (
             db.query(UserConsent.id)
@@ -571,8 +586,6 @@ def accept_legal_update(
                 },
                 request=request,
             )
-        db.commit()
-    return _user_response(db, current_user)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

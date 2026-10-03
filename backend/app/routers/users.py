@@ -18,8 +18,9 @@ SENSITIVE_AUDIT_FIELDS = {"fcm_token", "avatar_url"}
 
 
 def _user_response_with_legal_status(db: Session, user: User) -> UserResponse:
-    from app.core.config import settings
+    from app.services.legal_versions import consent_versions
 
+    terms_version, privacy_version = consent_versions(user.role)
     current_consents = {
         consent_type
         for (consent_type,) in (
@@ -27,8 +28,8 @@ def _user_response_with_legal_status(db: Session, user: User) -> UserResponse:
             .filter(
                 UserConsent.user_id == user.id,
                 (
-                    ((UserConsent.consent_type == "terms") & (UserConsent.version == settings.TERMS_VERSION))
-                    | ((UserConsent.consent_type == "privacy") & (UserConsent.version == settings.PRIVACY_VERSION))
+                    ((UserConsent.consent_type == "terms") & (UserConsent.version == terms_version))
+                    | ((UserConsent.consent_type == "privacy") & (UserConsent.version == privacy_version))
                 ),
             )
             .all()

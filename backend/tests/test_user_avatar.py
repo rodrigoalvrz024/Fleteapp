@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.core import security
+from admin_test_tokens import authenticated_admin_token
 from app.models.user import User, UserRole
 from app.models.audit_event import AuditEvent
 from app.routers import avatars as users
@@ -33,7 +34,7 @@ class AvatarEndpointTests(TestCase):
         engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
         self.addCleanup(engine.dispose)
         Base.metadata.create_all(engine, tables=[Base.metadata.tables[name] for name in (
-            'users', 'user_consents', 'audit_events', 'data_privacy_requests')])
+            'users', 'user_consents', 'audit_events', 'data_privacy_requests', 'admin_second_factors')])
         self.db = Session(engine, autoflush=False)
         self.addCleanup(self.db.close)
         self.user = User(id=1, email='synthetic@example.com', phone='56912345678',
@@ -65,6 +66,8 @@ class AvatarEndpointTests(TestCase):
             with self.subTest(role=role):
                 self.user.role = role
                 self.db.commit()
+                if role == UserRole.admin:
+                    self.headers = {'Authorization': 'Bearer ' + authenticated_admin_token(self.db, self.user)}
                 response = self.send_photo()
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(response.json()['avatar_url'], REFERENCE)

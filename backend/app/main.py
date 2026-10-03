@@ -15,6 +15,7 @@ from app.db_migrations import run_startup_migrations
 from app.models.audit_event import AuditEvent
 from app.routers import (
     admin,
+    admin_auth,
     analytics,
     auth,
     avatars,
@@ -49,7 +50,7 @@ app = FastAPI(
 
 @app.exception_handler(RequestValidationError)
 async def launch_validation_error(request, exc):
-    if request.url.path in {"/public/driver-preregistrations", "/public/launch-signups"}:
+    if request.url.path.startswith("/auth/admin/") or request.url.path in {"/public/driver-preregistrations", "/public/launch-signups"}:
         return await safe_request_validation_error(request, exc)
     return await request_validation_exception_handler(request, exc)
 
@@ -151,6 +152,7 @@ async def record_backend_errors(request, call_next):
 
 
 app.include_router(auth.router)
+app.include_router(admin_auth.router)
 app.include_router(users.router)
 app.include_router(support.router)
 app.include_router(avatars.router)

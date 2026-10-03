@@ -11,6 +11,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from app.services.freight_service import estimate_price, normalize_service_type, recommend_vehicle_type
 from app.services.pricing_history_service import record_pricing_snapshot
+from app.services.pricing_service import PRICING_VERSION
 
 
 class PricingHistoryTests(unittest.TestCase):
@@ -77,7 +78,7 @@ class PricingHistoryTests(unittest.TestCase):
     def test_estimate_exposes_a_reproducible_breakdown(self):
         price = self._price()
 
-        self.assertEqual(price["pricing_version"], "v2")
+        self.assertEqual(price["pricing_version"], PRICING_VERSION)
         self.assertGreater(price["distance_charge"], 0)
         self.assertGreater(price["time_charge"], 0)
         self.assertEqual(price["helper_charge"], 10_000)
@@ -97,7 +98,7 @@ class PricingHistoryTests(unittest.TestCase):
 
         self.assertEqual(snapshot.freight_id, 22)
         self.assertEqual(snapshot.estimated_customer_price, 55_300.0)
-        self.assertEqual(snapshot.pricing_version, "v2")
+        self.assertEqual(snapshot.pricing_version, PRICING_VERSION)
         self.assertEqual(snapshot.service_type, "moving")
         self.assertEqual(snapshot.pickup_commune, "Las Condes")
         self.assertEqual(snapshot.dropoff_commune, "Providencia")
@@ -146,7 +147,7 @@ class PricingHistoryTests(unittest.TestCase):
         self.assertNotEqual(
             original.calculation_metadata["helper_charge"], later["helper_charge"]
         )
-        self.assertEqual(original.pricing_version, "v2")
+        self.assertEqual(original.pricing_version, PRICING_VERSION)
 
     def test_normalizes_service_types_and_recommends_a_vehicle(self):
         self.assertEqual(normalize_service_type("Paqueteria"), "package")

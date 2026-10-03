@@ -1,0 +1,49 @@
+name: Admin MFA release compatibility (no deploy)
+
+on:
+  push:
+    branches: [codex/admin-mfa-release]
+    paths:
+      - backend/**
+      - scripts/**
+      - .github/workflows/admin-mfa-release-tests.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-mfa-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+      - name: Install unchanged deployed dependency pins
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pip check
+          python scripts/check-backend-dependencies.py
+      - name: Compatibility and MFA regression tests with synthetic accounts
+        working-directory: backend
+        env:
+          APP_ENV: test
+          RUN_STARTUP_MIGRATIONS: 'false'
+          DATABASE_URL: postgresql://unused:unused@127.0.0.1:1/synthetic
+          SECRET_KEY: synthetic-ci-only-not-a-real-secret-key
+        run: python -W ignore::ResourceWarning -B -m unittest discover -s tests
+      - name: Migration, RLS and concurrent MFA on disposable PostgreSQL
+        run: |
+          pg_bin="$(pg_config --bindir)"
+          test -x "$pg_bin/initdb"
+          python -B scripts/test-admin-mfa-isolated.py --pg-bin "$pg_bin"
+      - name: Record scope
+        run: |
+          echo 'Compatibility tests only. No deployment, real credentials, image vulnerability approval or production data access.' >> "$GITHUB_STEP_SUMMARY"

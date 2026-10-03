@@ -22,13 +22,15 @@ from app.models.user import User, UserRole
 from app.models.audit_event import AuditEvent
 from app.models.support_faq import SupportFAQ
 from app.routers import support
+from app.models.admin_second_factor import AdminSecondFactor
+from admin_test_tokens import authenticated_admin_token
 
 
 class SupportTests(TestCase):
     def setUp(self):
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         self.addCleanup(self.engine.dispose)
-        Base.metadata.create_all(self.engine, tables=[User.__table__, AuditEvent.__table__, SupportFAQ.__table__])
+        Base.metadata.create_all(self.engine, tables=[User.__table__, AuditEvent.__table__, SupportFAQ.__table__, AdminSecondFactor.__table__])
         self.db = Session(self.engine)
         self.addCleanup(self.db.close)
         self.user = User(id=1, email="synthetic@example.com", phone="56912345678",
@@ -36,8 +38,7 @@ class SupportTests(TestCase):
             account_roles=["admin"], is_active=True)
         self.db.add(self.user)
         self.db.commit()
-        token = (security.create_user_access_token(self.user) if hasattr(security, "create_user_access_token")
-                 else security.create_access_token({"sub": "1", "role": "admin"}))
+        token = authenticated_admin_token(self.db, self.user)
         self.headers = {"Authorization": f"Bearer {token}"}
         app = FastAPI()
         app.include_router(support.router)

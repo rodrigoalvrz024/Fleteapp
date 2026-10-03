@@ -327,6 +327,8 @@ def suspend_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     before_data = {"is_active": user.is_active}
     user.is_active = False
+    if user.role == "admin":
+        user.session_version = User.session_version + 1
     user.last_modified_by = current_admin.id
     record_audit_event(
         db,
@@ -353,6 +355,8 @@ def activate_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     before_data = {"is_active": user.is_active}
     user.is_active = True
+    if user.role == "admin":
+        user.session_version = User.session_version + 1
     user.last_modified_by = current_admin.id
     record_audit_event(
         db,

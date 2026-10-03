@@ -1,4 +1,5 @@
 from app.models.user import User, UserRole
+from app.models.admin_second_factor import AdminSecondFactor
 from app.models.driver import Driver, DriverStatus
 from app.models.vehicle import Vehicle, VehicleApprovalStatus, VehicleType
 from app.models.freight import (

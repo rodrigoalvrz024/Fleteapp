@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.core.rate_limit import check_rate_limit
-from app.core.security import decode_token, get_current_user, require_role
+from app.core.security import authenticate_access_token, get_current_user, require_role
 from app.database import SessionLocal, get_db
 from app.models.freight import FreightRequest
 from app.models.freight_chat import FreightChatMessage
@@ -466,14 +466,15 @@ async def _websocket_user(websocket: WebSocket) -> User | None:
     token = payload.get("token")
     if not isinstance(token, str) or not 20 <= len(token) <= 4096:
         return None
-    try:
-        claims = decode_token(token)
-        user_id = int(claims.get("sub"))
-    except (HTTPException, TypeError, ValueError):
-        return None
     db = SessionLocal()
     try:
-        return db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+        user = authenticate_access_token(db, token)
+        # Admin review uses the audited HTTP endpoint, not a lasting chat socket.
+        if user.role == "admin":
+            return None
+        return user
+    except (HTTPException, TypeError, ValueError):
+        return None
     finally:
         db.close()
 

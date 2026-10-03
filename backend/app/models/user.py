@@ -26,6 +26,7 @@ class User(Base):
         default=lambda: [UserRole.client.value],
     )
     is_active = Column(Boolean, default=True)
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     avatar_url = Column(String, nullable=True)
     fcm_token = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

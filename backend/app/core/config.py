@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = 30
     TERMS_VERSION: str = "2026-08-26"
     PRIVACY_VERSION: str = "2026-08-26"
+    ADMIN_TERMS_VERSION: str = "2026-09-28"
+    ADMIN_PRIVACY_VERSION: str = "2026-05-26"
+    ADMIN_MFA_ENCRYPTION_KEY: str = ""
     DRIVER_DOCUMENTS_BUCKET: str = ""
     SUPABASE_URL: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
